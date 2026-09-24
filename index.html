@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>VR Gamble Fish</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        overflow: hidden;
+        background: #0b1d2a;
+        font: 500 15px/1.4 system-ui, -apple-system, 'Segoe UI', sans-serif;
+        color: #eaf4f8;
+      }
+      #scene-container {
+        position: fixed;
+        inset: 0;
+      }
+      #landing {
+        position: fixed;
+        left: 50%;
+        bottom: 32px;
+        transform: translateX(-50%);
+        width: min(420px, calc(100vw - 32px));
+        box-sizing: border-box;
+        padding: 20px 22px;
+        border-radius: 14px;
+        background: rgba(8, 22, 32, 0.78);
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.35);
+      }
+      body.in-xr #landing {
+        display: none;
+      }
+      h1 {
+        margin: 0 0 2px;
+        font-size: 22px;
+        letter-spacing: 0.06em;
+      }
+      .kicker {
+        margin: 0 0 14px;
+        opacity: 0.75;
+        font-size: 13px;
+      }
+      #bar {
+        height: 4px;
+        border-radius: 2px;
+        background: rgba(255, 255, 255, 0.15);
+        overflow: hidden;
+        margin: 10px 0 14px;
+      }
+      #bar-fill {
+        height: 100%;
+        width: 0;
+        background: #3fd6c6;
+        transition: width 0.15s;
+      }
+      #enter-vr {
+        width: 100%;
+        padding: 12px;
+        border: 0;
+        border-radius: 10px;
+        font: inherit;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        background: #3fd6c6;
+        color: #062028;
+        cursor: pointer;
+      }
+      #enter-vr:disabled {
+        opacity: 0.4;
+        cursor: default;
+      }
+      .controls {
+        margin: 12px 0 0;
+        font-size: 12px;
+        opacity: 0.7;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="scene-container"></div>
+    <div id="landing">
+      <h1>VR GAMBLE FISH</h1>
+      <p class="kicker">How to Fish, in VR — on Tidewater's island.</p>
+      <div id="status">Starting…</div>
+      <div id="bar"><div id="bar-fill"></div></div>
+      <button id="enter-vr" disabled>ENTER VR</button>
+      <p class="controls">
+        Thumbstick forward: aim a teleport, roll the stick to pick your facing, release to go.
+        Flick sideways: snap turn. Flick back: step back.
+      </p>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

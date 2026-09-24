@@ -1,0 +1,127 @@
+/**
+ * VR GAMBLE FISH — How to Fish, in VR, on Tidewater's island.
+ *
+ * Boot: IWSDK world (VR, no built-in locomotion — movement is ff2's club
+ * teleport, see locomotion/TeleportSystem.ts), then the baked island
+ * streams in: sky, terrain, sea, village. The player starts where Tidewater
+ * starts you — on the boardwalk above the pier, looking down it to the sea —
+ * with a rod in hand (fishing/FishingSystem.ts) and a wallet on each wrist.
+ */
+
+import { launchXR, SessionMode, World } from '@iwsdk/core';
+import type { Camera } from 'three';
+import { ensureAudio } from './audio/sfx.ts';
+import { FishingSystem, fishingDeps, fishingView } from './fishing/FishingSystem.ts';
+import { loadProps } from './fishing/props.ts';
+import { createGameState } from './fishing/tidewater.ts';
+import { WristWallet } from './ui/wallet.ts';
+import { locomotion, teleportView, TeleportSystem } from './locomotion/TeleportSystem.ts';
+import { decodeTerrain, type WorldJson } from './world/data.ts';
+import { Heightfield } from './world/heightfield.ts';
+import { Ocean } from './world/ocean.ts';
+import { createSky } from './world/sky.ts';
+import { Surfaces } from './world/surfaces.ts';
+import { buildTerrain } from './world/terrain.ts';
+import { buildVillage } from './world/village.ts';
+
+/** ff2's fixed-foveation level: sharp centre, cheap rim. */
+const FOVEATION = 0.33;
+
+const container = document.getElementById('scene-container') as HTMLDivElement;
+const status = document.getElementById('status') as HTMLElement;
+const enter = document.getElementById('enter-vr') as HTMLButtonElement;
+const bar = document.getElementById('bar-fill') as HTMLElement;
+
+async function fetchBuffer(path: string, onProgress: (f: number) => void): Promise<ArrayBuffer> {
+  const res = await fetch(import.meta.env.BASE_URL + path);
+  if (!res.ok || !res.body) throw new Error(`${path}: HTTP ${res.status}`);
+  const total = Number(res.headers.get('content-length')) || 0;
+  const reader = res.body.getReader();
+  const parts: Uint8Array[] = [];
+  let got = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    parts.push(value);
+    got += value.length;
+    if (total) onProgress(got / total);
+  }
+  const out = new Uint8Array(got);
+  let o = 0;
+  for (const p of parts) {
+    out.set(p, o);
+    o += p.length;
+  }
+  return out.buffer;
+}
+
+World.create(container, {
+  // The Enter VR button calls IWSDK's explicit WebXR launcher from the
+  // user's tap — Quest Browser needs that direct requestSession gesture.
+  xr: { sessionMode: SessionMode.ImmersiveVR, offer: 'none' },
+  features: { locomotion: false, grabbing: false, spatialUI: false },
+  render: {
+    defaultLighting: false,
+    near: 0.05,
+    far: 6000,
+    camera: { position: [0, 1.6, 0] },
+  },
+}).then(async (world) => {
+  world.renderer.xr.setFoveation(FOVEATION);
+
+  status.textContent = 'Loading the island…';
+  const progress = { terrain: 0, village: 0, props: 0 };
+  const show = (): void => {
+    bar.style.width = `${Math.round(((progress.terrain + progress.village + progress.props) / 3) * 100)}%`;
+  };
+  const [json, terrainBuf, villageBuf, propsBuf] = await Promise.all([
+    fetch(import.meta.env.BASE_URL + 'world/world.json').then((r) => r.json() as Promise<WorldJson>),
+    fetchBuffer('world/terrain.bin', (f) => ((progress.terrain = f), show())),
+    fetchBuffer('world/village.bin', (f) => ((progress.village = f), show())),
+    fetchBuffer('props/props.bin', (f) => ((progress.props = f), show())),
+  ]);
+
+  status.textContent = 'Building…';
+  const grid = decodeTerrain(json, terrainBuf);
+  const scene = world.scene;
+  const sky = createSky(scene);
+  scene.add(buildTerrain(grid));
+  scene.add(buildVillage(villageBuf));
+  const ocean = new Ocean(grid, sky.state);
+  scene.add(ocean.mesh);
+  const t0 = performance.now();
+  ocean.mesh.onBeforeRender = (_r, _s, camera: Camera) => ocean.update((performance.now() - t0) / 1000, camera);
+
+  const heightfield = new Heightfield(grid);
+  const surfaces = new Surfaces(heightfield, json.colliders);
+  locomotion.surfaces = surfaces;
+  world.registerSystem(TeleportSystem);
+
+  // the fishing: Tidewater's rules and save, the rod in your hand, the wallet on your wrists
+  const game = createGameState();
+  const wallet = new WristWallet(game, [world.player.raySpaces.left, world.player.raySpaces.right]);
+  Object.assign(fishingDeps, { props: loadProps(propsBuf), state: game, ocean, terrain: heightfield, surfaces, layout: json.layout, wallet });
+  world.registerSystem(FishingSystem);
+
+  // Tidewater's start: the boardwalk up from the pier foot, looking down it.
+  const s = json.layout.start;
+  world.player.position.set(s.x, surfaces.floorYAt(s.x, s.z, 10), s.z);
+  world.player.rotation.set(0, s.yaw, 0);
+
+  // Dev hook: drive the rig without a headset (`__fish.move.to(x, z, yaw)`).
+  (window as unknown as { __fish: unknown }).__fish = { world, surfaces, move: teleportView, json, game, fishing: fishingView };
+
+  if (import.meta.env.DEV) void import('./dev/harness.ts').then((m) => m.installHarness(world));
+
+  status.textContent = navigator.xr ? 'Ready.' : 'WebXR not available in this browser — desktop preview only.';
+  enter.disabled = !navigator.xr;
+  enter.addEventListener('click', () => {
+    ensureAudio();
+    launchXR(world, { sessionMode: SessionMode.ImmersiveVR });
+  });
+  // Hide the landing card once the session is up; bring it back after.
+  // (A timer, not rAF: Quest Browser suspends window rAF while presenting.)
+  window.setInterval(() => {
+    document.body.classList.toggle('in-xr', !!world.session);
+  }, 250);
+});

@@ -1,0 +1,26 @@
+{
+  "name": "vr-gamble-fish",
+  "version": "0.1.0",
+  "description": "A VR adaptation of How to Fish, set on Tidewater's island, built on the Immersive Web SDK.",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "predev": "node tools/bake-world.mjs --if-missing && node tools/bake-props.mjs --if-missing",
+    "dev": "vite",
+    "build": "npm run bake && tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "bake": "node tools/bake-world.mjs && node tools/bake-props.mjs",
+    "check:teleport": "node tools/teleport-check.mjs"
+  },
+  "dependencies": {
+    "@iwsdk/core": "0.4.2",
+    "three": "0.184.0"
+  },
+  "devDependencies": {
+    "@iwsdk/vite-plugin-dev": "0.4.2",
+    "@types/three": "0.184.0",
+    "typescript": "^5.6.0",
+    "vite": "^7.0.0"
+  }
+}
