@@ -10,7 +10,9 @@ import * as BitesJs from '../../vendor/tidewater/src/game/Bites.js';
 import { CatchMinigame as CatchMinigameJs } from '../../vendor/tidewater/src/game/CatchMinigame.js';
 import { GameState as GameStateJs } from '../../vendor/tidewater/src/game/GameState.js';
 import * as GearJs from '../../vendor/tidewater/src/game/Gear.js';
+import { registerGear } from './gear.ts';
 import { biting, registerTimedFish } from './timedFish.ts';
+import { registerTrophyFish, trophyOdds, type Rig } from './trophyFish.ts';
 
 export interface FishInfo {
   name: string;
@@ -28,8 +30,11 @@ export interface FishInfo {
 export type HabitatKey = 'shallows' | 'reef' | 'pier' | 'bay' | 'deep';
 export type Habitat = Record<HabitatKey, number>;
 
-// the fish that keep their own hours join Tidewater's table before anything reads it
+// the fish that keep their own hours, and the trophy fish, join Tidewater's table before anything
+// reads it; the village's gear joins its upgrade tracks before any save is made or loaded
 registerTimedFish(Table.FISH as Record<string, unknown>, Table.FISH_IDS as string[]);
+registerTrophyFish(Table.FISH as Record<string, unknown>, Table.FISH_IDS as string[]);
+registerGear(GearJs.UPGRADES as unknown as Parameters<typeof registerGear>[0]);
 
 export const FISH = Table.FISH as unknown as Record<string, FishInfo>;
 export const FISH_IDS = Table.FISH_IDS as string[];
@@ -40,16 +45,18 @@ export const habitatAt = BitesJs.habitatAt as (w: { depth: number; reefDist: num
 const activity = BitesJs.activity as (pref: string, hour: number) => number;
 /**
  * Tidewater's weighted pick of what bites here (Bites.js pickSpecies), with the timed fish kept
- * to their hours (fishing/timedFish.ts).
+ * to their hours (fishing/timedFish.ts) and the trophy fish to the rigs that can take them
+ * (fishing/trophyFish.ts: no rig, no trophies).
  */
-export function pickSpecies(h: Habitat, hour: number, rng: () => number = Math.random): string | null {
+export function pickSpecies(h: Habitat, hour: number, rng: () => number = Math.random, rig?: Rig): string | null {
   let total = 0;
   const w: number[] = [];
+  const luck = rig ? (gearStats(rig.gear).luck ?? 1) : 1;
   for (const id of FISH_IDS) {
     const f = FISH[id];
     let hw = 0;
     for (const k in f.habitat) hw += (f.habitat[k as HabitatKey] ?? 0) * h[k as HabitatKey];
-    const x = hw * f.rarity * activity(f.time, hour) * biting(id, hour);
+    const x = hw * f.rarity * activity(f.time, hour) * biting(id, hour) * trophyOdds(id, hour, rig, luck);
     w.push(x);
     total += x;
   }
@@ -62,7 +69,11 @@ export function pickSpecies(h: Habitat, hour: number, rng: () => number = Math.r
   return FISH_IDS[FISH_IDS.length - 1];
 }
 export const rollWeight = BitesJs.rollWeight as (id: string, rng?: () => number) => number;
-export const biteDelay = BitesJs.biteDelay as (h: Habitat, hour: number, rng?: () => number) => number;
+const tidewaterBiteDelay = BitesJs.biteDelay as (h: Habitat, hour: number, rng?: () => number) => number;
+/** Tidewater's wait for a bite (Bites.js), shortened by better bait (fishing/gear.ts). */
+export function biteDelay(h: Habitat, hour: number, gear?: Record<string, number>): number {
+  return tidewaterBiteDelay(h, hour) * (gear ? (gearStats(gear).biteMul ?? 1) : 1);
+}
 
 export type FightState = 'fighting' | 'caught' | 'snapped' | 'escaped';
 
@@ -96,6 +107,11 @@ export interface GearStats {
   speedMul: number;
   finder: boolean;
   deckLights: boolean;
+  /** the bait shop's bait (fishing/gear.ts): its tier, and how much sooner the bites come */
+  baitTier: number;
+  biteMul: number;
+  /** the fortune teller's charm: how much more often a trophy fish bites */
+  luck: number;
 }
 
 export interface CaughtFish {
@@ -182,6 +198,9 @@ export function createGameState(): GameState {
   s.load();
   return s;
 }
+
+export const gearStats = GearJs.gearStats as (upgrades: Record<string, number>) => GearStats;
+export const nextLevel = GearJs.nextLevel as (upgrades: Record<string, number>, key: string) => ({ index: number; cost: number; label: string } & Record<string, unknown>) | null;
 
 export const UPGRADES = GearJs.UPGRADES as unknown as Record<
   string,

@@ -36,6 +36,10 @@ const { FISH, FISH_IDS } = await import(url('game/FishTable.js'));
 const { registerTimedFish, registerTimedModels } = await import('../src/fishing/timedFish.ts');
 registerTimedFish(FISH, FISH_IDS);
 registerTimedModels(SPECIES, SKIN);
+// and the trophy fish (src/fishing/trophyFish.ts)
+const { registerTrophyFish, registerTrophyModels } = await import('../src/fishing/trophyFish.ts');
+registerTrophyFish(FISH, FISH_IDS);
+registerTrophyModels(SPECIES, SKIN);
 
 // the rod module, with its builders exported
 const rodSrc = readFileSync(resolve(TW, 'game/FishingRod.js'), 'utf8');

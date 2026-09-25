@@ -182,6 +182,11 @@ export class Ocean {
   readonly mesh: Mesh;
   /** seconds, the clock the waves run on */
   time = 0;
+  /**
+   * The swell's own uniforms (the clock and the four waves), for anything else that lies on the
+   * sea and should ride it (fx/water.ts: the ripples).
+   */
+  readonly swell: { uTime: { value: number }; uWaves: { value: Vector4[] } };
   private readonly material: ShaderMaterial;
   private readonly waves: Vector4[];
 
@@ -205,14 +210,14 @@ export class Ocean {
     });
 
     this.waves = waves;
+    this.swell = { uTime: { value: 0 }, uWaves: { value: waves } };
     this.material = new ShaderMaterial({
       vertexShader,
       fragmentShader,
       transparent: true,
       depthWrite: true,
       uniforms: {
-        uTime: { value: 0 },
-        uWaves: { value: waves },
+        ...this.swell,
         uCenter: { value: new Vector2() },
         uDepth: { value: depth },
         uDepthRange: { value: grid.depthRange },

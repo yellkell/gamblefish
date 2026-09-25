@@ -13,6 +13,7 @@ import { INK, Panel, roundRect } from '../ui/panel.ts';
 import type { LastCatch } from './tidewater.ts';
 import { FISH } from './tidewater.ts';
 import { TIMED } from './timedFish.ts';
+import { TROPHY } from './trophyFish.ts';
 
 export interface GaugeState {
   label: string;
@@ -143,15 +144,17 @@ export class CatchCard {
     c.fillStyle = INK.glass;
     c.fill();
     c.lineWidth = 4;
-    c.strokeStyle = info.record || info.newSpecies ? INK.amber : INK.rim;
+    const trophy = TROPHY[info.species];
+    c.strokeStyle = trophy ? '#ffd45a' : info.record || info.newSpecies ? INK.amber : INK.rim;
+    c.lineWidth = trophy ? 7 : 4;
     c.stroke();
     c.textBaseline = 'alphabetic';
     c.textAlign = 'left';
     let y = 62;
-    if (info.newSpecies || info.record) {
+    if (info.newSpecies || info.record || trophy) {
       c.font = font(700, 28);
       c.fillStyle = INK.amber;
-      c.fillText(info.newSpecies ? 'NEW SPECIES' : 'NEW RECORD', 28, 46);
+      c.fillText([trophy ? '★ TROPHY FISH' : '', info.newSpecies ? 'NEW SPECIES' : info.record ? 'NEW RECORD' : ''].filter(Boolean).join('  ·  '), 28, 46);
       y = 92;
     }
     c.font = font(700, 50);
@@ -159,8 +162,9 @@ export class CatchCard {
     c.fillText(f.name, 28, y, 456);
     c.font = font(500, 24);
     c.fillStyle = INK.dim;
-    // a fish that keeps its own hours says which
-    c.fillText(TIMED[info.species] ? `${f.sci}  ·  ${TIMED[info.species].when}` : f.sci, 28, y + 32, 456);
+    // a fish that keeps its own hours says which, a trophy what it took
+    const when = TIMED[info.species]?.when ?? trophy?.when;
+    c.fillText(when ? `${f.sci}  ·  ${when}` : f.sci, 28, y + 32, 456);
     c.font = font(700, 44);
     c.fillStyle = INK.hot;
     c.fillText(`${info.cm} cm`, 28, y + 100);
@@ -172,7 +176,12 @@ export class CatchCard {
     c.font = font(600, 24);
     c.fillStyle = info.kept ? INK.dim : INK.danger;
     c.fillText('into your backpack…', 28, y + 146);
-    if (info.record && info.prevBestKg > 0) {
+    if (info.newSpecies) {
+      // its page in the backpack's field guide has just filled in
+      c.textAlign = 'right';
+      c.fillStyle = INK.amber;
+      c.fillText('new page in your field guide', 484, y + 146);
+    } else if (info.record && info.prevBestKg > 0) {
       c.textAlign = 'right';
       c.fillStyle = INK.dim;
       c.fillText(`best was ${info.prevBestKg.toFixed(2)} kg`, 484, y + 146);

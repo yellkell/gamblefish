@@ -76,6 +76,9 @@ and the vendors.
   - Teleport closes during the fight.
 - **Sound:** Tidewater's CC0 fishing recordings (`public/audio`) play at
   Tidewater's mix levels, on ff2's SFX bus.
+- **Ripples** (`src/fx/water.ts`) ride the swell: each ring's vertices are raised to
+  the sea's height at that point, from the ocean's own waves, so a passing crest no
+  longer hides them.
 - **Sea:** `src/audio/shore.ts` is ff2's cove soundscape on this island, with the
   same Tidewater recordings. Surf breaks and washes up the beaches around you, timed
   to the foam you see running up the sand, over a distant surf roar. Water laps
@@ -98,6 +101,37 @@ and the vendors.
   Taxidermist and Pawn Shop each sell things for it from a counter and a price
   board (`src/village/homeGoods.ts`). What you buy is delivered to its spot in the
   shack and kept in your save.
+- **Coral's villa:** Villa Mar (L) is furnished the same way. The Jeweller sells a
+  crystal chandelier, a vanity with a jewellery box, pearls on a velvet bust and a
+  ring under a glass dome. The Boutique sells a velvet chaise longue, a gilded mirror,
+  silk drapes and a baby grand. Coral is at home (`src/village/villa.ts`), lit like the
+  room around her rather than by the sky outside, and a board
+  over her sofa counts your gifts in hearts, with a new line from her for each one.
+- **Fishing upgrades** (`src/fishing/gear.ts`, `src/village/gearShop.ts`), on
+  Tidewater's own upgrade tracks:
+  - The **Tackle Shop** sells rods (cast distance), reels (reel speed) and line
+    (breaking strain), each now with a big-game top level.
+  - The **Bait Shop** sells bait. Better bait brings bites sooner.
+  - The **Fortune Teller** sells luck charms, which make trophy fish bite more often.
+  - Each board says which trophy fish a level opens up.
+  - Every shop board shows a picture of each thing it sells: the item's own 3D model,
+    photographed once at load (`src/ui/thumbnail.ts`).
+- **Trophy fish** (`src/fishing/trophyFish.ts`): roosterfish, opah, sailfish,
+  swordfish (night only) and blue marlin. They bite only when you have the gear each one
+  needs and the bobber is over deep enough water (8–13 m, out past the drop-off off the
+  pier head, so the longer rods matter). The marlin needs everything at the top and a
+  charm. Each has its own body, built from a Tidewater anatomy with a bill, a sail or a
+  comb added. `npm run check:fish` checks that none bites without its gear.
+- **The village:** the Rum Shack (I) and the empty Captain's Table (M) are gone, and
+  each spot is now a small garden. Rooms are only drawn when you could see into them
+  (from inside, or from in front of the doorway), so looking back at town from the
+  pier costs about 100 draw calls instead of about 800.
+- **Field guide:** the backpack has a second tab, a book of the island's marine fauna
+  (`src/backpack/fieldGuide.ts`). It has a title page with your progress, two species to
+  a page, and the tarpon and the trophy fish on a page each at the back. A species you
+  haven't caught shows as a shadow with where and when to look. The first one you land
+  fills its entry in: its picture, names, habitat, how many you've caught and your best.
+  Point at the corner arrows to turn the pages.
 - **Wallet:** `src/ui/wallet.ts` puts an odometer-style money counter on both
   wrists. Any change in the balance rings ff2's cash chime, pitched up for
   money in and down for money out.
@@ -161,7 +195,7 @@ same questions as ff2's `TELEPORT_AREAS`, `floorYAt` and `crossesWall`:
 | `tools/bake-world.mjs` | Tidewater → `public/world/` |
 | `tools/bake-props.mjs` | Tidewater's rod, bobber and fish → `public/props/` |
 | `tools/teleport-check.mjs` | headless teleport rules check, including no landing under a house floor |
-| `tools/fish-check.mjs` | headless check that the timed fish keep their hours |
+| `tools/fish-check.mjs` | headless check that the timed fish keep their hours and the trophy fish need their gear |
 
 Dev hook: `__fish.move.to(x, z, yaw)`, `__fish.move.snapTurn(±1)` and
 `__fish.move.stepBack()`.
