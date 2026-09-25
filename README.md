@@ -76,6 +76,10 @@ and the vendors.
   - Teleport closes during the fight.
 - **Sound:** Tidewater's CC0 fishing recordings (`public/audio`) play at
   Tidewater's mix levels, on ff2's SFX bus.
+- **Music:** `src/audio/music.ts` plays a song off ff2's pub jukebox ("Paradise")
+  in the casinos. It's full inside, and it spills out of the nearest casino's door
+  muffled, fading with distance. Drop more `.mp3` / `.m4a` files into
+  `src/audio/songs/` and they join the rotation.
 - **Wallet:** `src/ui/wallet.ts` puts an odometer-style money counter on both
   wrists. Any change in the balance rings ff2's cash chime, pitched up for
   money in and down for money out.
@@ -132,7 +136,7 @@ same questions as ff2's `TELEPORT_AREAS`, `floorYAt` and `crossesWall`:
 | `src/main.ts` | IWSDK boot, load, Enter VR |
 | `src/locomotion/` | ff2 teleport, its tuning, the octagon |
 | `src/world/` | baked data reader, heightfield, surfaces (pure), terrain, ocean, sky, village |
-| `src/audio/` | ff2's synth SFX bus and cash chime; Tidewater's sampled fishing sounds |
+| `src/audio/` | ff2's synth SFX bus and cash chime; Tidewater's sampled fishing sounds; the casino music |
 | `src/fishing/` | the rod, cast, bites, fight, landing, catch card, tension gauge |
 | `src/ui/` | ff2's Rajdhani type kit and coin symbol, canvas panels, the wrist wallet |
 | `src/dev/harness.ts` | dev-only emulator driver |
@@ -148,5 +152,5 @@ Dev hook: `__fish.move.to(x, z, yaw)`, `__fish.move.snapTurn(±1)` and
 - **Island, fishing rules, rod, fish and sounds:** from [Tidewater](https://github.com/dgreenheck/tidewater)
   by Dan Greenheck (MIT). See `vendor/tidewater/LICENSE` and `CREDITS.md`, and
   `public/audio/CREDITS.md` for the CC0 recordings.
-- **Teleport, cash chime, coin symbol and type kit:** from FIRE FIGHT 2. Rajdhani
+- **Teleport, cash chime, coin symbol, type kit and the casino music:** from FIRE FIGHT 2. Rajdhani
   is under the SIL OFL (`src/assets/fonts/OFL-rajdhani.txt`).

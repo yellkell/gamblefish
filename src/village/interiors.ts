@@ -38,7 +38,7 @@ import type { BuildingFrame } from './signs.ts';
 /** storey height (Tidewater Buildings.js) */
 const STOREY = 2.75;
 /** the inner shell sits this far inside the exterior walls */
-const INSET = 0.14;
+const INSET = 0.17;
 const DOOR_W = 1.1;
 const DOOR_H = 2.15;
 

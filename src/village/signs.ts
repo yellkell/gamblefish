@@ -45,6 +45,12 @@ export interface BuildingFrame {
   porch: number;
   floorY: number;
   roofTop: number;
+  /** houses only (tools/bake-world.mjs roofLines): the top of the walls */
+  eaves?: number;
+  /** the main roof's lowest edge over the front wall: y = eave − |x| · pitch, out at local z */
+  roof?: { eave: number; pitch: number; z: number };
+  /** the porch roof's front edge (or a stoop door's hood): top, underside, local z, centre x, width */
+  awning?: { y: number; bottom: number; z: number; x: number; w: number };
 }
 
 const ATLAS = 2048;
@@ -130,6 +136,9 @@ function paintSign(c: CanvasRenderingContext2D, ox: number, oy: number, r: Build
     c.shadowBlur = 0;
   } else {
     const board = r.role === 'home' ? '#9a8a70' : r.role === 'outbuilding' ? '#7a6a58' : '#b89a72';
+    // the batten behind the planks, so the seams read dark, not see-through
+    c.fillStyle = '#2a1e14';
+    c.fillRect(0, 0, w, h);
     plankBoard(c, 0, 0, w, h, board, seed);
     c.textAlign = 'center';
     c.textBaseline = 'middle';
@@ -202,11 +211,15 @@ export class VillageSigns {
     for (const p of placed) {
       const b = p.frame;
       const r = p.role;
-      // size and spot: over the door on the front wall; casinos get a big board across the facade
+      // size and spot, in front of every roof edge that could hide it from the path
       let sw: number;
       let lx = b.doorX;
       let ly: number;
       let lz = b.d / 2 + 0.09;
+      /** the casino board, where it's on the facade: its box, to keep the marquee bulbs off it */
+      let face: { x: number; y0: number; y1: number } | null = null;
+      const roof = b.roof;
+      const awning = b.awning;
       if (b.kind === 'stall') {
         // standing on the stall's roof ridge, facing the path
         sw = 2.6;
@@ -223,25 +236,32 @@ export class VillageSigns {
         lx = 0;
         ly = b.floorY + 1.95;
         lz = 1.05;
+      } else if (r.role === 'casino' && roof && (b.stories > 1 || roof.pitch > 0)) {
+        // a big board across the facade, under the roof's edge (a gable end's rake comes down
+        // toward the corners, so there the board is as wide as fits under it) and clear of the
+        // porch roof or door hood below
+        const bottom = b.floorY + (b.stories > 1 ? STOREY + 0.3 : 2.6);
+        const under = roof.eave - 0.06;
+        sw = Math.min(b.w * 0.92, 5.8, (under - bottom) / (SH / SW + roof.pitch / 2));
+        lx = 0;
+        ly = under - (sw / 2) * roof.pitch - ((sw * SH) / SW) / 2;
+        lz = b.d / 2 + 0.32; // clear of the open shutters (they swing ~0.25 m off the wall)
+        face = { x: sw / 2 + 0.06, y0: ly - ((sw * SH) / SW) / 2 - 0.06, y1: ly + ((sw * SH) / SW) / 2 + 0.06 };
       } else if (r.role === 'casino') {
+        // a one-storey shack's eaves would hide it: a billboard standing up on the roof
         sw = Math.min(b.w * 0.92, 5.8);
         lx = 0;
-        if (b.stories > 1) {
-          // across the upper storey's facade
-          ly = b.floorY + STOREY * b.stories - 0.25;
-          lz = b.d / 2 + 0.12 + b.porch * 0.02;
-        } else {
-          // a one-storey shack's eaves would hide it: a billboard standing up on the roof
-          ly = b.floorY + STOREY + ((sw * SH) / SW) / 2 + 0.45;
-          lz = b.d / 2 - 0.3;
-        }
-      } else if (b.porch > 0) {
-        // hung from the porch's front beam, where you can see it from the path
-        sw = Math.min(b.w * 0.45, 2.3);
-        ly = b.floorY + 2.12;
-        lz = b.d / 2 + b.porch - 0.08;
+        ly = b.floorY + STOREY + ((sw * SH) / SW) / 2 + 0.45;
+        lz = b.d / 2 - 0.3;
+      } else if (awning) {
+        // standing on the front edge of the porch roof (or the door's hood), its foot on the
+        // fascia: out in front of the roofs, where you see it from the path
+        sw = Math.min(b.w * 0.45, 2.3, awning.w + 0.1);
+        lx = awning.x;
+        ly = awning.bottom + ((sw * SH) / SW) / 2;
+        lz = awning.z + 0.03;
       } else {
-        // over the door, clear of its little hood
+        // over the door
         sw = Math.min(b.w * 0.5, 2.4);
         ly = b.floorY + 3.0;
       }
@@ -265,13 +285,21 @@ export class VillageSigns {
         target.nrm.push(n.x, n.y, n.z);
         target.uv.push(u, vv);
       }
-      // marquee bulbs along the casino's front eaves (and down the corners of the facade)
+      // marquee bulbs along the casino's front eaves (and down the corners of the facade), strung
+      // under the roof's front edge where there is one, and never behind the board
       if (r.role === 'casino') {
-        const eave = b.floorY + STOREY * b.stories + 0.05;
+        const flat = roof && roof.pitch === 0;
+        const eave = flat ? roof.eave - 0.05 : (b.eaves ?? b.floorY + STOREY * b.stories) + 0.05;
+        const bz = flat ? roof.z + 0.03 : b.d / 2 + 0.16;
+        const free = (x: number, y: number): boolean => !face || Math.abs(x) > face.x || y < face.y0 || y > face.y1;
         const count = Math.round(b.w / 0.32);
-        for (let i = 0; i <= count; i++) bulbs.push(toWorld(b, -b.w / 2 + (i / count) * b.w, eave, b.d / 2 + 0.16, new Vector3()));
-        const down = Math.round((STOREY * b.stories) / 0.4);
-        for (const side of [-1, 1]) for (let i = 1; i < down; i++) bulbs.push(toWorld(b, side * (b.w / 2 + 0.05), eave - i * 0.4, b.d / 2 + 0.16, new Vector3()));
+        for (let i = 0; i <= count; i++) {
+          const x = -b.w / 2 + (i / count) * b.w;
+          if (free(x, eave)) bulbs.push(toWorld(b, x, eave, bz, new Vector3()));
+        }
+        const top = flat ? Math.min(eave, (b.eaves ?? eave) - 0.1) : eave;
+        const down = Math.round((top - b.floorY) / 0.4);
+        for (const side of [-1, 1]) for (let i = 1; i < down; i++) bulbs.push(toWorld(b, side * (b.w / 2 + 0.05), top - i * 0.4, b.d / 2 + 0.16, new Vector3()));
       }
     }
 

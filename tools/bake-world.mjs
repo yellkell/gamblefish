@@ -54,6 +54,17 @@ const { mulberry32 } = await import(url('util/Noise.js'));
 const { TREE_H, TREE_LOBES, SHRUB_H, SHRUB_LOBES } = await import(url('world/vegetation/PlantGeometry.js'));
 const E = await import(url('engine/index.js'));
 
+// Tidewater's bucket() (world/Props.js) turns its half-ring handle about z, which stands it on
+// edge down the bucket's side, pivoting top and bottom. Tipped back about x as well (what
+// Props.js does for its other half-ring hoops), it arches over the rim, pivoting on the sides.
+// The bucket's is the only half-ring turned about z alone.
+const { Builder } = await import(url('world/village/GeoBuilder.js'));
+const torus = Builder.prototype.torus;
+Builder.prototype.torus = function (key, x, y, z, R, r, o = {}) {
+  if (o.arc === Math.PI && o.rz === Math.PI / 2 && o.rx === undefined && o.ry === undefined) o = { ...o, rx: -Math.PI / 2 };
+  return torus.call(this, key, x, y, z, R, r, o);
+};
+
 const t0 = performance.now();
 const terrain = new TerrainData();
 const colliders = new Colliders();
@@ -314,10 +325,57 @@ ROCK_STYLES.forEach((st, si) => {
   }
 });
 
+/**
+ * Where a house's roofs are, seen from the front, so the signs can go where they're seen
+ * (buildHouse's arithmetic, vendor/tidewater/src/world/village/Buildings.js):
+ *   eaves   top of the walls
+ *   roof    the lowest edge of the main roof over the front wall — its fascia, or the bottom of
+ *           a thatch fringe: at local x it's at y = eave − |x| · pitch (pitch 0 for an eave
+ *           along the front, the rake's slope for a gable end facing the front)
+ *   awning  the front edge of the porch roof (or the little hood over a stoop door): its top,
+ *           its underside (fascia / thatch body), local z, and its span across the facade
+ */
+function roofLines(h, floorY) {
+  const stories = h.stories ?? 1;
+  const storyH = h.storyH ?? (stories > 1 ? 2.75 : 2.95);
+  const yE = floorY + stories * storyH;
+  const type = h.roof ?? 'gable';
+  const thatch = h.roofMat === 'thatch';
+  const a = h.pitch ?? (thatch ? 0.68 : 0.44);
+  const ta = Math.tan(a);
+  const r0 = 0.12;
+  const T = thatch ? 0.28 : 0.06;
+  const ovE = h.ovE ?? (thatch ? 0.6 : 0.45);
+  const ovR = h.ovR ?? (thatch ? 0.45 : 0.32);
+  // metal: a 0.2 m fascia under the edge; thatch: the body and its fringe (up to 0.2 m more)
+  const drop = thatch ? T * 0.95 + 0.2 : 0.2;
+  const roof = type === 'gableFront'
+    ? { eave: r3(yE + r0 + (h.w / 2) * ta - drop), pitch: r3(ta), z: r3(h.d / 2 + ovR) }
+    : { eave: r3(yE + r0 - ovE * ta - drop), pitch: 0, z: r3(h.d / 2 + ovE) };
+  let awning;
+  if (h.porch) {
+    const pd = h.porch.depth;
+    const pw = Math.min(h.w, h.porch.width || h.w);
+    const pp = h.porchPitch ?? 0.26;
+    const Tp = thatch ? 0.24 : 0.06;
+    let yAtt;
+    if (stories > 1) yAtt = floorY + storyH - 0.02;
+    else if (type === 'gableFront') yAtt = yE - 0.03;
+    else yAtt = Math.min(yE - 0.03, yE + r0 - ovE * ta - (thatch ? T / Math.cos(a) + 0.16 : 0.22) - 0.03 + ovE * Math.tan(pp));
+    const zEnd = h.d / 2 + pd + 0.32;
+    const yEnd = yAtt - (zEnd - h.d / 2) * Math.tan(pp);
+    awning = { y: r3(yEnd), bottom: r3(yEnd - (thatch ? Tp : 0.19)), z: r3(zEnd + (thatch ? 0.04 : 0)), x: r3(h.porch.offset ?? 0), w: r3(pw + 0.44) };
+  } else {
+    const hy = floorY + 2.5 - 0.22;
+    awning = { y: r3(hy), bottom: r3(hy - (thatch ? 0.14 : 0.04)), z: r3(h.d / 2 + 0.75), x: r3(h.doorX ?? 0), w: 1.7 };
+  }
+  return { eaves: r3(yE), roof, awning };
+}
+
 const buildings = [
   ...specs.houses.map((h) => {
     const b = village.buildings.find((v) => v.name === h.name);
-    return { name: h.name, kind: h.foundation === 'stilts' ? 'hut' : 'house', x: h.x, z: h.z, yaw: h.yaw, w: h.w, d: h.d, stories: h.stories ?? 1, doorX: h.doorX ?? 0, porch: h.porch?.depth ?? 0, floorY: r3(b.floorY), roofTop: r3(b.roofTop) };
+    return { name: h.name, kind: h.foundation === 'stilts' ? 'hut' : 'house', x: h.x, z: h.z, yaw: h.yaw, w: h.w, d: h.d, stories: h.stories ?? 1, doorX: h.doorX ?? 0, porch: h.porch?.depth ?? 0, floorY: r3(b.floorY), roofTop: r3(b.roofTop), ...roofLines(h, b.floorY) };
   }),
   ...specs.sheds.map((h) => {
     const b = village.buildings.find((v) => v.name === h.name);
