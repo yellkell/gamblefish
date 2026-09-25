@@ -39,9 +39,10 @@ export const MIX = {
   backwash: -23,
   surfFar: -31,
   pierLap: -32,
+  crickets: -33,
 } as const;
 
-const NAMES = ['reel_wind', 'reel_drag', 'line_strain', 'rod_swish', 'bail_click', 'line_out', 'plop', 'line_snap', 'fish_splash', 'fish_flop', 'coins', 'splash', 'emerge', 'big_splash', 'surf_far', 'surf_crash', 'surf_wash', 'surf_backwash', 'pier_lap'];
+const NAMES = ['reel_wind', 'reel_drag', 'line_strain', 'rod_swish', 'bail_click', 'line_out', 'plop', 'line_snap', 'fish_splash', 'fish_flop', 'coins', 'splash', 'emerge', 'big_splash', 'surf_far', 'surf_crash', 'surf_wash', 'surf_backwash', 'pier_lap', 'crickets'];
 
 const dB = (x: number): number => Math.pow(10, x / 20);
 

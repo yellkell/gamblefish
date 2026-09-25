@@ -350,9 +350,22 @@ function vertexColour(kind, tint, data) {
       return mix(tint, RUST, sat(data[1]) * 0.7);
     case 'thatch':
       return THATCH.map((v, i) => v * tint[i]);
+    case 'glass':
+      // a pane by day: dark, a hint of the curtain behind it (at night it glows: glowOf)
+      return mix(GLASS, tint, 0.18);
     default:
       return tint;
   }
+}
+
+/**
+ * How much a vertex glows after dark (0..1): the panes Tidewater lights at night — windows
+ * flagged lit (data[2]) and lantern glass (data[1] = 1) — the runtime fades it in at dusk
+ * (world/village.ts).
+ */
+function glowOf(kind, data) {
+  if (kind !== 'glass') return 0;
+  return data[1] > 0.5 ? 1 : data[2] > 0.5 ? 0.85 : 0;
 }
 
 const groups = {};
@@ -373,6 +386,7 @@ for (const [cls, parts] of Object.entries(groups)) {
   const pos = [];
   const nrm = [];
   const col = [];
+  const glow = [];
   const idx = [];
   const v = new E.Vector3();
   const nm = new E.Matrix3();
@@ -402,6 +416,7 @@ for (const [cls, parts] of Object.entries(groups)) {
         const dt = vd ? [vd[src * 4], vd[src * 4 + 1], vd[src * 4 + 2], vd[src * 4 + 3]] : [0, 0, 0, 0];
         const c = vertexColour(kind, tn, dt);
         col.push(...c.map((x) => Math.round(sat(x) * 255)), 255); // linear: three reads vertex colour as linear
+        glow.push(Math.round(glowOf(kind, dt) * 255));
       }
       idx.push(dst);
     }
@@ -410,6 +425,7 @@ for (const [cls, parts] of Object.entries(groups)) {
   villageArrays[`${cls}.normal`] = new Int8Array(nrm);
   villageArrays[`${cls}.color`] = new Uint8Array(col);
   villageArrays[`${cls}.index`] = pos.length / 3 > 65535 ? new Uint32Array(idx) : new Uint16Array(idx);
+  if (glow.some((g) => g > 0)) villageArrays[`${cls}.glow`] = new Uint8Array(glow);
   villageMeta[cls] = { vertices: pos.length / 3, triangles: idx.length / 3 };
 }
 
@@ -585,6 +601,8 @@ const world = {
   },
   village: villageMeta,
   footprints: village.getFootprints(),
+  // the village's lamps (lanterns, path lights, lamp posts): where it's lit after dark
+  lamps: village.lights.map((l) => [r3(l.position.x), r3(l.position.y), r3(l.position.z), l.kind ?? '']),
   buildings,
   colliders: { boxes, cylinders },
 };

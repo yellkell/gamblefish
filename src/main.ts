@@ -40,6 +40,7 @@ import { buildInteriors, interiorAt, openColliders, type Interior } from './vill
 import { Blink } from './fx/blink.ts';
 import { Vegetation } from './world/vegetation.ts';
 import { buildVillage } from './world/village.ts';
+import { buildLamps } from './world/lamps.ts';
 
 /** ff2's fixed-foveation level: sharp centre, cheap rim. */
 const FOVEATION = 0.33;
@@ -106,7 +107,9 @@ World.create(container, {
   const scene = world.scene;
   const sky = createSky(scene);
   scene.add(buildTerrain(grid));
-  scene.add(buildVillage(villageBuf));
+  scene.add(buildVillage(villageBuf, sky.state.night));
+  const lamps = buildLamps((json as unknown as { lamps?: [number, number, number, string][] }).lamps ?? [], sky.state.night);
+  scene.add(lamps);
   const signs = new VillageSigns((json as unknown as { buildings: BuildingFrame[] }).buildings ?? []);
   scene.add(signs.group);
   const vegetation = new Vegetation(vegBuf);
@@ -119,7 +122,11 @@ World.create(container, {
   let lastT = 0;
   ocean.mesh.onBeforeRender = (_r, _s, camera: Camera) => {
     const t = (performance.now() - t0) / 1000;
-    villageTick(Math.min(0.05, Math.max(0, t - lastT)));
+    const dt = Math.min(0.05, Math.max(0, t - lastT));
+    // the day goes on (sky, sea, lights); the lamps are lit from dusk to dawn
+    sky.update(dt);
+    lamps.visible = sky.state.night.value > 0.01;
+    villageTick(dt);
     lastT = t;
     ocean.update(t, camera);
     vegetation.update(t, camera);
@@ -187,7 +194,7 @@ World.create(container, {
   }
   // the music (ff2's jukebox songs outside, the casinos' own inside) and the sea's sound
   const music = new Music(interiors.filter((i) => i.role.role === 'casino'));
-  const shore = new ShoreSound(heightfield, json.layout.pier, () => interiorAt(interiors, world.player.position.x, world.player.position.z) !== null);
+  const shore = new ShoreSound(heightfield, json.layout.pier, () => interiorAt(interiors, world.player.position.x, world.player.position.z) !== null, () => sky.state.night.value);
   villageTick = (dt) => {
     music.update(world.camera);
     shore.update(ocean.time, dt, world.camera);
@@ -202,7 +209,7 @@ World.create(container, {
   world.player.rotation.set(0, s.yaw, 0);
 
   // Dev hook: drive the rig without a headset (`__fish.move.to(x, z, yaw)`).
-  (window as unknown as { __fish: unknown }).__fish = { world, surfaces, move: teleportView, json, game, fishing: fishingView, vegetation, backpack: backpackView, interiors, tables, music, shore };
+  (window as unknown as { __fish: unknown }).__fish = { world, surfaces, move: teleportView, json, game, fishing: fishingView, vegetation, backpack: backpackView, interiors, tables, music, shore, sky };
 
   if (import.meta.env.DEV) void import('./dev/harness.ts').then((m) => m.installHarness(world));
 

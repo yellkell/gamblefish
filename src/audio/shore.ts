@@ -12,8 +12,9 @@
  *    sin(0.21x + 0.6z − 1.3t). At each station the swash hisses up as that band starts to climb
  *    and drains back after it peaks. A wave breaks a few metres out beforehand, with a set
  *    envelope, so some crash and some just wash.
- *  - BEDS: a low distant-surf roar from the direction of the nearest shore, and the pier's
- *    lapping from the nearest point under the deck.
+ *  - BEDS: a low distant-surf roar from the direction of the nearest shore, the pier's
+ *    lapping from the nearest point under the deck, and after dark ff2's cove crickets, in the
+ *    grass inland.
  *
  * Everything goes through one shore bus, 8 dB under Tidewater's SoundScape.js levels (samples.ts
  * MIX) so the music stays on top. Indoors it's muffled and quieter still.
@@ -71,6 +72,7 @@ export class ShoreSound {
   private muffle: BiquadFilterNode | null = null;
   private far: Loop | null = null;
   private lap: Loop | null = null;
+  private crickets: Loop | null = null;
   private stations: Station[] = [];
   private nearest: { x: number; z: number; d: number } | null = null;
   private scan = 0;
@@ -80,6 +82,8 @@ export class ShoreSound {
     private readonly ground: Heightfield,
     private readonly pier: PierFrame,
     private readonly indoors: () => boolean,
+    /** 0 by day .. 1 after dark (world/sky.ts) */
+    private readonly night: () => number = () => 0,
   ) {}
 
   /** Once a frame: the ocean's clock (s), the camera (your head) and the frame time. */
@@ -151,6 +155,7 @@ export class ShoreSound {
     };
     this.far = placed(40, 0.6);
     this.lap = placed(3, 1);
+    this.crickets = placed(10, 0.5);
   }
 
   /** The looping beds start once their recordings are in; then just follow you around. */
@@ -160,6 +165,8 @@ export class ShoreSound {
     const lap = this.lap!;
     if (!far.src) this.startLoop(ctx, 'surf_far', far);
     if (!lap.src) this.startLoop(ctx, 'pier_lap', lap);
+    const ck = this.crickets!;
+    if (!ck.src) this.startLoop(ctx, 'crickets', ck);
 
     // the distant roar, 40 m out past the nearest shore (Tidewater: falls off slowly inland)
     const n = this.nearest;
@@ -169,6 +176,16 @@ export class ShoreSound {
       const uz = (n.z - p.z) / Math.max(1, n.d);
       setPos(far.pan, p.x + ux * (n.d + 40), -1.5, p.z + uz * (n.d + 40), t);
       far.gain.gain.setTargetAtTime((dB(MIX.surfFar) * 1.25) / (1 + n.d / 200) / dB(fs.lufs), t, 0.5);
+    }
+    // after dark, the crickets: in the grass inland (Tidewater: louder the further from the surf)
+    const cs = sample('crickets');
+    if (cs) {
+      const d = n ? n.d : 60;
+      const ux = n ? (p.x - n.x) / Math.max(1, n.d) : 0;
+      const uz = n ? (p.z - n.z) / Math.max(1, n.d) : 1;
+      const inland = this.ground.heightAt(p.x, p.z) > 0 ? 0.35 + 0.65 * Math.min(1, Math.max(0, (d - 5) / 35)) : 0.1;
+      setPos(ck.pan, p.x + ux * 10, p.y - 1, p.z + uz * 10, t);
+      ck.gain.gain.setTargetAtTime((dB(MIX.crickets) / dB(cs.lufs)) * this.night() * inland, t, 1);
     }
     // the lapping: from under the deck, the nearest point of the walkway or the head
     const lp = sample('pier_lap');

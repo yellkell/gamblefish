@@ -115,6 +115,7 @@ uniform vec3 uSkyHorizon;
 uniform vec3 uShallow;
 uniform vec3 uDeep;
 uniform vec3 uFogColor;
+uniform vec3 uAmbient;
 uniform float uFogNear;
 uniform float uFogFar;
 varying vec3 vWorld;
@@ -144,7 +145,7 @@ void main() {
   float depth = mix(uDepthRange, texture2D(uDepth, uv).r * uDepthRange, inside);
 
   // body colour: clear turquoise over the sand, deep blue past the drop-off
-  vec3 body = mix(uShallow, uDeep, smoothstep(0.5, 18.0, depth));
+  vec3 body = mix(uShallow, uDeep, smoothstep(0.5, 18.0, depth)) * uAmbient; // lit as the day goes
   float clarity = 1.0 - smoothstep(0.2, 6.0, depth);
 
   // sky reflection, Schlick fresnel
@@ -163,7 +164,7 @@ void main() {
   float wave = sin(vWorld.x * 0.21 + vWorld.z * 0.6 - uTime * 1.3) * 0.5 + 0.5;
   float foam = (1.0 - smoothstep(0.05, 0.45 + wave * 0.35, depth)) * inside;
   foam *= 0.55 + 0.45 * sin(dot(vWorld.xz, vec2(3.1, 2.3)) + uTime * 2.0);
-  col = mix(col, vec3(0.93, 0.95, 0.95), clamp(foam, 0.0, 1.0) * 0.85);
+  col = mix(col, vec3(0.93, 0.95, 0.95) * uAmbient, clamp(foam, 0.0, 1.0) * 0.85);
 
   // shallow water lets the seabed through
   float alpha = mix(1.0, 0.35 + 0.65 * fres, clarity);
@@ -224,6 +225,7 @@ export class Ocean {
         uShallow: { value: new Color(0x3fd6c6).convertSRGBToLinear() },
         uDeep: { value: new Color(0x0a3d62).convertSRGBToLinear() },
         uFogColor: { value: sky.fogColor },
+        uAmbient: { value: sky.ambient },
         uFogNear: { value: sky.fogNear },
         uFogFar: { value: sky.fogFar },
       },
