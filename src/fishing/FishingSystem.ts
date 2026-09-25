@@ -321,7 +321,7 @@ export class FishingSystem extends createSystem({}) {
         if (reelIn <= 0.15 && this.onWater()) {
           // let go: it sits where it is, and something may find it
           this.setState('floating');
-          this.bite = { phase: 'wait', t: biteDelay(this.habitat(), hourNow()) };
+          this.bite = { phase: 'wait', t: biteDelay(this.habitat(), hourNow(), fishingDeps.state!.upgrades) };
         }
         break;
       case 'fighting':
@@ -428,10 +428,15 @@ export class FishingSystem extends createSystem({}) {
 
   /* ── bites (Tidewater Game.updateBite, with haptics for the cues) ────── */
 
+  /** metres of water under the bobber */
+  private depth(): number {
+    return Math.max(0, -fishingDeps.terrain!.heightAt(this.bob.x, this.bob.z));
+  }
+
   private habitat(): Habitat {
     const L = fishingDeps.layout!;
     const b = this.bob;
-    const depth = Math.max(0, -fishingDeps.terrain!.heightAt(b.x, b.z));
+    const depth = this.depth();
     const reefDist = Math.hypot(b.x - L.reef.x, b.z - L.reef.z) - L.reef.radius;
     const P = L.pier;
     const rect = (x0: number, x1: number, z0: number, z1: number): number =>
@@ -453,7 +458,7 @@ export class FishingSystem extends createSystem({}) {
     this.buzz(this.hand, 0.18, 35);
     this.rippleT = 1.2;
     const h = this.habitat();
-    this.bite = { phase: 'wait', t: biteDelay(h, hourNow()) };
+    this.bite = { phase: 'wait', t: biteDelay(h, hourNow(), fishingDeps.state!.upgrades) };
     if (!Number.isFinite(this.bite.t)) this.toast.show('Too shallow — nothing lives here', 2, INK.dim);
   }
 
@@ -475,7 +480,8 @@ export class FishingSystem extends createSystem({}) {
     }
     if (b.t > 0) return;
     if (b.phase === 'wait') {
-      const species = pickSpecies(this.habitat(), hourNow());
+      // the rig: what the trophy fish look at (fishing/trophyFish.ts)
+      const species = pickSpecies(this.habitat(), hourNow(), Math.random, { depth: this.depth(), gear: fishingDeps.state!.upgrades });
       if (!species) {
         b.t = 8;
         return;
@@ -505,7 +511,7 @@ export class FishingSystem extends createSystem({}) {
       }
     } else {
       this.toast.show('It took the bait and ran', 1.8, INK.dim);
-      this.bite = { phase: 'wait', t: biteDelay(this.habitat(), hourNow()) };
+      this.bite = { phase: 'wait', t: biteDelay(this.habitat(), hourNow(), fishingDeps.state!.upgrades) };
     }
   }
 

@@ -6,7 +6,14 @@
  *   drip(p, n, spread)    a few drops falling off something wet (the landed fish)
  *
  * Droplets fly ballistically and die where they meet the sea — each leaving a tiny ring — so a
- * splash reads the same from the pier as from the boat. Ripples sit on the moving surface.
+ * splash reads the same from the pier as from the boat.
+ *
+ * Ripples ride the swell. A ring isn't a flat disc at one height: its vertex shader lifts every
+ * point of it to the sea's height right there, from the ocean's own waves and clock (the same
+ * Gerstner sum as world/ocean.ts and its heightAt), so a ring spreading over a passing crest
+ * climbs it and dips into the trough behind instead of vanishing under it. It is drawn pulled a
+ * few centimetres toward the eye in depth, which covers the sea mesh's coarser sampling of the
+ * same surface without lifting the ring visibly off the water.
  */
 
 import {
@@ -19,13 +26,50 @@ import {
   Group,
   InstancedMesh,
   Matrix4,
-  MeshBasicMaterial,
   Points,
   PointsMaterial,
   Quaternion,
   RingGeometry,
+  ShaderMaterial,
   Vector3,
+  Vector4,
 } from 'three';
+
+/** the ocean's swell uniforms (world/ocean.ts Ocean.swell) */
+export interface Swell {
+  uTime: { value: number };
+  uWaves: { value: Vector4[] };
+}
+
+const ringVertex = /* glsl */ `
+uniform float uTime;
+uniform vec4 uWaves[4];
+varying vec3 vFade;
+void main() {
+  vec4 p = modelMatrix * instanceMatrix * vec4(position, 1.0);
+  // the sea's height here, now: the vertical part of the ocean's Gerstner sum (Ocean.heightAt)
+  float y = 0.0;
+  for (int i = 0; i < 4; i++) {
+    float k = 6.2831853 / uWaves[i].z;
+    float c = sqrt(9.8 / k);
+    y += uWaves[i].w * sin(k * (dot(uWaves[i].xy, p.xz) - c * uTime));
+  }
+  vec4 view = viewMatrix * vec4(p.x, y + 0.01, p.z, 1.0);
+  // toward the eye in depth: the sea mesh samples the surface coarser the farther it is
+  float d = length(view.xyz);
+  view.xyz *= 1.0 - min((0.05 + d * 0.004) / max(d, 0.01), 0.5);
+  gl_Position = projectionMatrix * view;
+  vFade = instanceColor;
+}
+`;
+
+const ringFragment = /* glsl */ `
+varying vec3 vFade;
+void main() {
+  gl_FragColor = vec4(vFade, 0.55);
+  #include <colorspace_fragment>
+}
+`;
 
 const DROPS = 700;
 const RINGS = 40;
@@ -66,8 +110,11 @@ export class WaterFx {
   private readonly rings: InstancedMesh;
   private readonly ring: { x: number; z: number; t: number; dur: number; r0: number; r1: number; delay: number; a: number }[] = [];
 
-  /** heightAt: the sea surface under (x, z) now */
-  constructor(private readonly heightAt: (x: number, z: number) => number) {
+  /** heightAt: the sea surface under (x, z) now; swell: the ocean's waves, for the rings to ride */
+  constructor(
+    private readonly heightAt: (x: number, z: number) => number,
+    swell?: Swell,
+  ) {
     this.group.name = 'water-fx';
     const g = new BufferGeometry();
     g.setAttribute('position', new BufferAttribute(this.pos, 3).setUsage(DynamicDrawUsage));
@@ -81,7 +128,14 @@ export class WaterFx {
     this.group.add(this.points);
 
     const rg = new RingGeometry(0.9, 1.0, 48, 1);
-    const mat = new MeshBasicMaterial({ color: 0xffffff, transparent: true, depthWrite: false, blending: AdditiveBlending, opacity: 0.55 });
+    const mat = new ShaderMaterial({
+      vertexShader: ringVertex,
+      fragmentShader: ringFragment,
+      uniforms: { uTime: swell?.uTime ?? { value: 0 }, uWaves: swell?.uWaves ?? { value: [0, 1, 2, 3].map(() => new Vector4(1, 0, 1, 0)) } },
+      transparent: true,
+      depthWrite: false,
+      blending: AdditiveBlending,
+    });
     const rings = new InstancedMesh(rg, mat, RINGS);
     rings.instanceMatrix.setUsage(DynamicDrawUsage);
     rings.count = 0;
@@ -167,7 +221,7 @@ export class WaterFx {
       if (t < 0) continue;
       const e = 1 - Math.pow(1 - t, 2.2); // fast out, slow settle
       const rad = r.r0 + (r.r1 - r.r0) * e;
-      _p.set(r.x, this.heightAt(r.x, r.z) + 0.015, r.z);
+      _p.set(r.x, 0, r.z); // (the shader lays it on the sea)
       _s.set(rad, rad, rad);
       this.rings.setMatrixAt(n, _m.compose(_p, _q, _s));
       const fade = r.a * (1 - t) * (1 - t);

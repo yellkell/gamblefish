@@ -37,7 +37,10 @@ import { SlotMachine } from './casino/SlotMachine.ts';
 import { BlackjackTable } from './casino/BlackjackTable.ts';
 import { PointerSystem } from './ui/pointer.ts';
 import { buildInteriors, interiorAt, openColliders, type Interior } from './village/interiors.ts';
-import { HOME, HOME_SHOPS, HomeShopCounter, Shack } from './village/homeGoods.ts';
+import { HOME, HOME_SHOPS, HomeShopCounter, Shack, VILLA, VILLA_SHOPS } from './village/homeGoods.ts';
+import { GearShopCounter } from './village/gearShop.ts';
+import { GEAR_COUNTERS } from './village/interiors.ts';
+import { Villa } from './village/villa.ts';
 import { Blink } from './fx/blink.ts';
 import { Vegetation } from './world/vegetation.ts';
 import { buildVillage } from './world/village.ts';
@@ -83,7 +86,9 @@ World.create(container, {
   features: { locomotion: false, grabbing: false, spatialUI: false },
   render: {
     defaultLighting: false,
-    near: 0.05,
+    // 10 cm, not 5: the depth buffer's precision everywhere doubles with it, and surfaces laid
+    // close over others (a rug on a floor, a floor on Tidewater's) stop fighting at a distance
+    near: 0.1,
     far: 6000,
     camera: { position: [0, 1.6, 0] },
   },
@@ -152,7 +157,7 @@ World.create(container, {
   // the account: the cloud save first (a new headset takes the account's), then collect anything bought while away
   bankDeps.state = game;
   void bootCloudSave(game).then(() => bootBank());
-  const fx = new WaterFx((x, z) => ocean.heightAt(x, z));
+  const fx = new WaterFx((x, z) => ocean.heightAt(x, z), ocean.swell);
   scene.add(fx.group);
   const wallet = new WristWallet(game, [world.player.raySpaces.left, world.player.raySpaces.right]);
   Object.assign(fishingDeps, { props: loadProps(propsBuf), state: game, ocean, terrain: heightfield, surfaces, layout: json.layout, wallet, fx });
@@ -203,8 +208,18 @@ World.create(container, {
   const kit = { renderer: world.renderer, props: fishingDeps.props! };
   const shack = room(HOME);
   if (shack) new Shack(shack, game, kit, (b) => surfaces.addBox(b));
-  const homeShops = HOME_SHOPS.map((n) => room(n)).filter((r): r is Interior => !!r).map((r) => new HomeShopCounter(r, game, kit));
+  const homeShops = [...HOME_SHOPS, ...VILLA_SHOPS].map((n) => room(n)).filter((r): r is Interior => !!r).map((r) => new HomeShopCounter(r, game, kit));
+  // the fishing upgrades: tackle, bait and luck (fishing/gear.ts)
+  const gearShops = GEAR_COUNTERS.map((n) => room(n)).filter((r): r is Interior => !!r).map((r) => new GearShopCounter(r, game, kit));
+  // Coral at home, and what you've given her
+  const villaRoom = room(VILLA);
+  const villa = villaRoom ? new Villa(villaRoom, game, kit, (b) => surfaces.addBox(b)) : null;
   villageTick = (dt) => {
+    // a room is drawn only when you could see into it: from inside, or through its doorway
+    // (from across the village, its dozens of little draws were most of the frame)
+    const eye = world.camera.matrixWorld.elements;
+    for (const i of interiors) i.group.visible = i.seenFrom(eye[12], eye[14]);
+    villa?.update(dt, world.camera);
     music.update(world.camera);
     shore.update(ocean.time, dt, world.camera);
     market?.update(dt, world.camera);
@@ -218,7 +233,7 @@ World.create(container, {
   world.player.rotation.set(0, s.yaw, 0);
 
   // Dev hook: drive the rig without a headset (`__fish.move.to(x, z, yaw)`).
-  (window as unknown as { __fish: unknown }).__fish = { world, surfaces, move: teleportView, json, game, fishing: fishingView, vegetation, backpack: backpackView, interiors, tables, music, shore, sky, homeShops, props: fishingDeps.props };
+  (window as unknown as { __fish: unknown }).__fish = { world, surfaces, move: teleportView, json, game, fishing: fishingView, vegetation, backpack: backpackView, interiors, tables, music, shore, sky, homeShops, gearShops, villa, fx, props: fishingDeps.props };
 
   if (import.meta.env.DEV) void import('./dev/harness.ts').then((m) => m.installHarness(world));
 

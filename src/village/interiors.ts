@@ -41,6 +41,8 @@ import type { BuildingFrame } from './signs.ts';
 const STOREY = 2.75;
 /** the inner shell sits this far inside the exterior walls */
 const INSET = 0.17;
+/** Tidewater's wall thickness (Buildings.js: the walls are 0.14 m boxes inside the front face) */
+const WALL_T = 0.14;
 /** the gap left in the walls' colliders at the door (a little wider than you see: forgiving aim) */
 const DOOR_W = 1.1;
 /**
@@ -67,7 +69,16 @@ export interface Interior {
   inside(x: number, z: number): boolean;
   /** world position of a point in the room's frame (floor at y = 0) */
   toWorld(lx: number, ly: number, lz: number, out?: Vector3): Vector3;
+  /**
+   * Could an eye at (x, z) see anything of the room? Only from inside it, or through the doorway:
+   * from in front of the house, and not from across the village. (Its windows are Tidewater's
+   * glass over the room's walls, so the doorway is the only way in for the eye.)
+   */
+  seenFrom(x: number, z: number): boolean;
 }
+
+/** how far off you can still make out a room through its doorway (m) */
+const SEEN_WITHIN = 24;
 
 /**
  * Furniture you can't stand in (tables, counters), per building, in the room's floor frame:
@@ -76,14 +87,22 @@ export interface Interior {
 export const FURNITURE: Record<string, [number, number, number, number, number][]> = {
   C: [[0.03, -0.6, 1.72, 0.55, 0.95]], // the roulette table and wheel (casino/RouletteTable TABLE, at z −0.6)
   B: [[0, -1.8, 2.05, 0.33, 1.9]], // three slot machines along the back wall
-  G: [[0, -0.74, 1.06, 0.52, 0.95]],
-  H: [[0, -0.55, 1.74, 0.33, 1.07]], // the teller's counter (village/bank.ts) // the blackjack table (half-round, dealer's edge at z −1.25)
+  G: [[0, -0.74, 1.06, 0.52, 0.95]], // the blackjack table (half-round, dealer's edge at z −1.25)
+  H: [[0, -0.55, 1.74, 0.33, 1.07]], // the teller's counter (village/bank.ts)
+  L: [[0, -2.12, 1.05, 0.42, 0.9]], // Coral's sofa against the back wall (village/villa.ts)
 };
 
 /** the shops that sell things for your shack (village/homeGoods.ts), and your shack */
 export const HOME_SHOPS = ['F', 'D', 'K', 'J'] as const;
-export type HomeShop = (typeof HOME_SHOPS)[number];
+/** the shops that sell things for Coral's villa (village/homeGoods.ts), and the villa */
+export const VILLA_SHOPS = ['A', 'E'] as const;
+export type HomeShop = (typeof HOME_SHOPS)[number] | (typeof VILLA_SHOPS)[number];
 export const HOME = 'S1';
+export const VILLA = 'L';
+/** the shops that sell gear (village/gearShop.ts, fishing/gear.ts GEAR_SHOPS) */
+export const GEAR_COUNTERS = ['S3', 'S2', 'N'] as const;
+/** every shop with a counter across the back and a board behind it */
+export const COUNTER_SHOPS: readonly string[] = [...HOME_SHOPS, ...VILLA_SHOPS, ...GEAR_COUNTERS];
 
 /** a home shop's counter in its room's frame, from the room's inner depth: [x, z, half-w, half-d, height] */
 export function shopCounter(innerD: number): [number, number, number, number, number] {
@@ -137,7 +156,7 @@ export function openColliders(boxes: BoxCollider[], frames: BuildingFrame[]): Bo
     // the floor you land on
     const f = frameToWorld(b, 0, 0, 0);
     const furniture = [...(FURNITURE[b.name] ?? [])];
-    if ((HOME_SHOPS as readonly string[]).includes(b.name)) furniture.push(shopCounter(b.d - INSET * 2));
+    if (COUNTER_SHOPS.includes(b.name)) furniture.push(shopCounter(b.d - INSET * 2));
     for (const [x, z, hx, hz, top] of furniture) {
       const p = frameToWorld(b, x, 0, z);
       out.push({ tag: 'furniture', walkable: false, solid: true, cx: p.x, cz: p.z, hx, hz, rotY: b.yaw, top: b.floorY + top, bottom: b.floorY - 0.2 });
@@ -294,7 +313,9 @@ export function buildInteriors(frames: BuildingFrame[]): Interior[] {
       floorLit,
       512,
     );
-    const floor = new Mesh(new PlaneGeometry(w, d).rotateX(-Math.PI / 2), new MeshBasicMaterial({ map: ftex }));
+    // pulled toward the eye in depth as well as lifted: it lies just over Tidewater's own floor,
+    // and at a glance across the room the two used to fight (the casinos' carpet shimmered)
+    const floor = new Mesh(new PlaneGeometry(w, d).rotateX(-Math.PI / 2), new MeshBasicMaterial({ map: ftex, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }));
     floor.position.y = 0.012;
     const ceil = new Mesh(
       new PlaneGeometry(w, d).rotateX(Math.PI / 2),
@@ -323,21 +344,24 @@ export function buildInteriors(frames: BuildingFrame[]): Interior[] {
     if (l1 > l0) panel(l1 - l0, h, (l0 + l1) / 2, h / 2, d / 2, Math.PI);
     if (r1 > r0) panel(r1 - r0, h, (r0 + r1) / 2, h / 2, d / 2, Math.PI);
     panel(OW, h - OH, dx, OH + (h - OH) / 2, d / 2, Math.PI);
-    // the doorway lined through the wall, from the room's shell out to the house's front face:
-    // jambs and head in the trim's wood, the threshold in the floor's planks
-    const reveal = INSET + 0.005;
-    const rz = d / 2 + reveal / 2;
+    // the doorway lined from the room's shell out to the house's wall: jambs and head in the
+    // trim's wood over the gap between them, the threshold in the floor's planks. Through the
+    // wall itself the bake's cut wall faces are the lining — a plane over them fought them in
+    // depth, and the doorframes flickered.
+    const gap = INSET - WALL_T;
+    const rz = d / 2 + gap / 2;
     const jambMat = new MeshLambertMaterial({ color: 0xd8d0c0, side: DoubleSide });
     for (const [x, ry] of [[l1, Math.PI / 2], [r0, -Math.PI / 2]] as const) {
-      const j = new Mesh(new PlaneGeometry(reveal, OH), jambMat);
+      const j = new Mesh(new PlaneGeometry(gap, OH), jambMat);
       j.position.set(x, OH / 2, rz);
       j.rotation.y = ry;
       group.add(j);
     }
-    const head = new Mesh(new PlaneGeometry(OW, reveal).rotateX(Math.PI / 2), jambMat);
+    const head = new Mesh(new PlaneGeometry(OW, gap).rotateX(Math.PI / 2), jambMat);
     head.position.set(dx, OH, rz);
-    const sill = new Mesh(new PlaneGeometry(OW, reveal).rotateX(-Math.PI / 2), new MeshBasicMaterial({ map: floorTex }));
-    sill.position.set(dx, 0.012, rz);
+    const reveal = INSET + 0.005;
+    const sill = new Mesh(new PlaneGeometry(OW, reveal).rotateX(-Math.PI / 2), new MeshBasicMaterial({ map: floorTex, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }));
+    sill.position.set(dx, 0.012, d / 2 + reveal / 2);
     group.add(head, sill);
     // a lamp: flex, shade, a warm bulb
     const lamp = new Group();
@@ -352,7 +376,7 @@ export function buildInteriors(frames: BuildingFrame[]): Interior[] {
     flex.position.y = 0.25;
     lamp.add(shade, bulb, flex);
     // (in a home shop, toward the door: in the middle it hung in front of the price board)
-    lamp.position.set(0, h - 0.55, (HOME_SHOPS as readonly string[]).includes(b.name) ? d * 0.22 : 0);
+    lamp.position.set(0, h - 0.55, COUNTER_SHOPS.includes(b.name) ? d * 0.22 : 0);
     group.add(lamp);
 
     const c = Math.cos(b.yaw);
@@ -376,6 +400,14 @@ export function buildInteriors(frames: BuildingFrame[]): Interior[] {
         return Math.abs(lx) < w / 2 && Math.abs(lz) < d / 2;
       },
       toWorld: (lx, ly, lz, out = new Vector3()) => frameToWorld(b, lx, b.floorY + ly, lz, out),
+      seenFrom: (x, z) => {
+        const ddx = x - cx.x;
+        const ddz = z - cx.z;
+        const lx = ddx * c - ddz * s;
+        const lz = ddx * s + ddz * c;
+        if (Math.abs(lx) < b.w / 2 + 0.3 && Math.abs(lz) < b.d / 2 + 0.3) return true; // in it (or in the doorway)
+        return lz > b.d / 2 - 0.2 && Math.hypot(lx, lz) < SEEN_WITHIN;
+      },
     });
   }
   return list;

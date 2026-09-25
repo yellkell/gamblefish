@@ -66,6 +66,10 @@ const blockingPost = (B) => {
 // itself — leaf, glass, knob — is left out; its casing, head and sill stay as the doorway's trim.
 // Through it you see into the lit room, and out of it to the island.
 const { hasInterior, DOOR_OPENING } = await import('../src/village/interiors.ts');
+// Houses the village does without (village/roles.ts DEMOLISHED): out of the layout before anything
+// is built, so no house, no pad and no colliders; a little garden goes where each stood.
+const { DEMOLISHED } = await import('../src/village/roles.ts');
+const demolished = new Map();
 let frontWall = false;
 
 // The boatyard's slipway. Tidewater lays each rail as one straight beam from the shed to 6.5 m
@@ -82,7 +86,9 @@ const walkIn = () => house && hasInterior(house.name);
   const layout = V.prototype._layout;
   V.prototype._layout = function (rand) {
     const specs = layout.call(this, rand);
-    for (const h of specs.houses ?? []) houseAt.set(`${h.x},${h.z}`, h);
+    for (const h of specs.houses ?? []) if (DEMOLISHED.includes(h.name)) demolished.set(h.name, h);
+    specs.houses = (specs.houses ?? []).filter((h) => !DEMOLISHED.includes(h.name));
+    for (const h of specs.houses) houseAt.set(`${h.x},${h.z}`, h);
     boathouse = specs.boathouse ?? null;
     return specs;
   };
@@ -518,7 +524,7 @@ const cylinders = colliders.cylinders.map((c) => ({
     ['strelitzias', 'elephantEars'],
     ['heliconias', 'monsteras'],
   ];
-  const CASINOS = new Set(['B', 'C', 'G', 'M']);
+  const CASINOS = new Set(['B', 'C', 'G']);
   village.forEach((h, k) => {
     const { toW } = frame(h);
     const pd = h.porch?.depth ?? 0;
@@ -556,6 +562,19 @@ const cylinders = colliders.cylinders.map((c) => ({
       }
     }
   });
+  // where a demolished house stood: a pocket garden — a tall palm, a ring of flowers round it,
+  // bananas and young palms at the edge
+  for (const h of demolished.values()) {
+    plant('palms', h.x, h.z, 0.5, { s: 0.95, H: 6.5, la: rnd() * Math.PI * 2, l: 0.05 });
+    for (let i = 0; i < 9; i++) {
+      const a = h.yaw + (i / 9) * Math.PI * 2;
+      plant(i % 2 ? 'heliconias' : 'strelitzias', h.x + Math.cos(a) * 1.8, h.z + Math.sin(a) * 1.8, 0.35, { s: 0.9 + rnd() * 0.2 });
+    }
+    for (let i = 0; i < 4; i++) {
+      const a = h.yaw + ((i + 0.5) / 4) * Math.PI * 2;
+      plant(i % 2 ? 'bananas' : 'youngPalms', h.x + Math.cos(a) * 3.4, h.z + Math.sin(a) * 3.4, 0.5, { s: 1 + rnd() * 0.15 });
+    }
+  }
   // an avenue of palms up the boardwalk from the pier to the plaza: pairs, every 9 m, 2.4 m out
   const walk = [[54.6, -72], [52.4, -82], [48.4, -92], [44.8, -100.5], [42.6, -107.2]];
   let along = 0;
