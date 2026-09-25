@@ -122,7 +122,7 @@ r = play('5 6 6 10 K 2', 10, ['double']);
 check('double: twice the bet, exactly one card', r.hands[0].bet === 20 && r.hands[0].cards.length === 3 && r.settle()[0].returned === 40);
 r = play('8 6 8 10 3 10 5 K', 10, ['split', 'double', 'stand']);
 check('split 8s: two hands, double after split, each settled on its own', r.hands.length === 2 && r.hands[0].bet === 20 && r.settle().every((s) => s.outcome === 'win') && r.settle().reduce((a, s) => a + s.returned, 0) === 60, r.hands.map((h) => h.cards.map((c) => c.rank).join('-')).join(' / '));
-r = play('A 6 A 10 K 9', 10, ['split']);
+r = play('A 6 A 10 K 9 K', 10, ['split']); // the dealer's 16 draws the last K and busts (an empty shoe would reshuffle: a random card)
 check('split aces take one card each and a 21 there is not a blackjack', r.hands.every((h) => h.cards.length === 2 && h.done) && r.settle()[0].outcome === 'win' && r.settle()[0].returned === 20);
 check('no second split', (() => { const q = new Round(stacked('8 6 8 10 8 3')); q.start(10); q.act('split'); return !q.can('split'); })());
 
