@@ -159,6 +159,12 @@ export function uiClick(): void {
   tone({ freq: 110, type: 'sine', dur: 0.04, gain: 0.08 });
 }
 
+/** UI: the pointer landing on a button — the same relay snap as a click, but softer (ff2). */
+export function uiHover(): void {
+  clank(1500, 0.024, 0.035);
+  tone({ freq: 110, type: 'sine', dur: 0.035, gain: 0.038 });
+}
+
 /**
  * The catch: a bright rising chime over a low thump, in the kit's struck-steel voice — longer
  * and higher when it's a new species or a record.

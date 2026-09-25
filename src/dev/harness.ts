@@ -13,6 +13,9 @@
  *   __harness.snapshot(camPos, lookAt)       render the live scene from a spectator camera into
  *                                            an <img> over the page (the emulator's XR canvas
  *                                            can't be screenshotted)
+ *   await __harness.eye()                    the LEFT EYE of the emulated headset, read straight from
+ *                                            the XR framebuffer inside an XR frame (what the headset
+ *                                            really drew), into the same <img>
  *   __harness.hide()                         remove that image
  *
  * IWER's devui rewrites the controller pose every frame from its panel, so `aim` pins it by
@@ -98,6 +101,57 @@ export function installHarness(world: World): void {
     return state();
   };
 
+  const show = (c: HTMLCanvasElement): void => {
+    let el = document.getElementById('harness-snap') as HTMLImageElement | null;
+    if (!el) {
+      el = document.createElement('img');
+      el.id = 'harness-snap';
+      el.style.cssText = 'position:fixed;left:0;top:0;width:100vw;z-index:99999;';
+      document.body.appendChild(el);
+    }
+    el.src = c.toDataURL();
+    el.style.display = 'block';
+  };
+
+  /** Read the headset's own framebuffer inside an XR frame (after the app has drawn it). */
+  const eye = async (): Promise<boolean> => {
+    const r = world.renderer;
+    const s = r.xr.getSession();
+    const layer = s?.renderState.baseLayer;
+    if (!s || !layer) return false;
+    const gl = r.getContext();
+    await new Promise<void>((res) => s.requestAnimationFrame(() => res()));
+    const { w, h, px } = await new Promise<{ w: number; h: number; px: Uint8Array }>((resolve) =>
+      s.requestAnimationFrame(() => {
+        const w = layer.framebufferWidth;
+        const h = layer.framebufferHeight;
+        gl.bindFramebuffer(gl.FRAMEBUFFER, layer.framebuffer);
+        const px = new Uint8Array(w * h * 4);
+        gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, px);
+        resolve({ w, h, px });
+      }),
+    );
+    const ew = Math.floor(w / 2);
+    const c = document.createElement('canvas');
+    c.width = ew;
+    c.height = h;
+    const ctx = c.getContext('2d')!;
+    const img = ctx.createImageData(ew, h);
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < ew; x++) {
+        const si = ((h - 1 - y) * w + x) * 4;
+        const di = (y * ew + x) * 4;
+        img.data[di] = px[si];
+        img.data[di + 1] = px[si + 1];
+        img.data[di + 2] = px[si + 2];
+        img.data[di + 3] = 255;
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+    show(c);
+    return true;
+  };
+
   const snapshot = (camPos: [number, number, number], look: [number, number, number], w = 900, h = 640): void => {
     const r = world.renderer;
     const cam = new PerspectiveCamera(55, w / h, 0.05, 6000);
@@ -137,6 +191,7 @@ export function installHarness(world: World): void {
   (window as unknown as { __harness: unknown }).__harness = {
     state,
     snapshot,
+    eye,
     aimHand,
     /** press and release a button on a controller ('trigger', 'squeeze', 'a-button', ...) */
     async press(hand: 'left' | 'right', id: string, ms = 90): Promise<void> {

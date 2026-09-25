@@ -26,6 +26,8 @@ import { Surfaces } from './world/surfaces.ts';
 import { buildTerrain } from './world/terrain.ts';
 import { Grass } from './world/grass.ts';
 import { VillageSigns, type BuildingFrame } from './village/signs.ts';
+import { FishMarket } from './village/market.ts';
+import { PointerSystem } from './ui/pointer.ts';
 import { Vegetation } from './world/vegetation.ts';
 import { buildVillage } from './world/village.ts';
 
@@ -33,6 +35,8 @@ import { buildVillage } from './world/village.ts';
 const FOVEATION = 0.33;
 
 const container = document.getElementById('scene-container') as HTMLDivElement;
+/** per-frame work for the village's people and counters (set once they're built) */
+let villageTick: (dt: number) => void = () => {};
 const status = document.getElementById('status') as HTMLElement;
 const enter = document.getElementById('enter-vr') as HTMLButtonElement;
 const bar = document.getElementById('bar-fill') as HTMLElement;
@@ -102,8 +106,11 @@ World.create(container, {
   const ocean = new Ocean(grid, sky.state);
   scene.add(ocean.mesh);
   const t0 = performance.now();
+  let lastT = 0;
   ocean.mesh.onBeforeRender = (_r, _s, camera: Camera) => {
     const t = (performance.now() - t0) / 1000;
+    villageTick(Math.min(0.05, Math.max(0, t - lastT)));
+    lastT = t;
     ocean.update(t, camera);
     vegetation.update(t, camera);
     grass?.update(t, camera);
@@ -123,10 +130,18 @@ World.create(container, {
   scene.add(fx.group);
   const wallet = new WristWallet(game, [world.player.raySpaces.left, world.player.raySpaces.right]);
   Object.assign(fishingDeps, { props: loadProps(propsBuf), state: game, ocean, terrain: heightfield, surfaces, layout: json.layout, wallet, fx });
+  // point-and-click panels first: a hand on a button claims its trigger before fishing sees it
+  world.registerSystem(PointerSystem);
   world.registerSystem(FishingSystem);
   backpackDeps.state = game;
   backpackDeps.props = fishingDeps.props;
   world.registerSystem(BackpackSystem);
+
+  // the village's people and counters
+  const frames = (json as unknown as { buildings: BuildingFrame[] }).buildings ?? [];
+  const stall = frames.find((b) => b.name === 'stall');
+  const market = stall ? new FishMarket(scene, stall, game) : null;
+  villageTick = (dt) => market?.update(dt, world.camera);
 
   // Tidewater's start: the boardwalk up from the pier foot, looking down it.
   const s = json.layout.start;

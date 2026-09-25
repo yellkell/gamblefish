@@ -252,7 +252,9 @@ export class Ocean {
     const u = this.material.uniforms;
     this.time = time;
     u.uTime.value = time;
-    const p = camera.getWorldPosition(_cam);
+    // read the eye's world matrix as three set it (getWorldPosition would recompute it and, on a
+    // parentless XR eye camera, drop the rig — everything after would draw from the origin)
+    const p = _cam.setFromMatrixPosition(camera.matrixWorld);
     (u.uCenter.value as Vector2).set(Math.round(p.x / SNAP) * SNAP, Math.round(p.z / SNAP) * SNAP);
   }
 }

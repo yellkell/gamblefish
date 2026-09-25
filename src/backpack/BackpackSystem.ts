@@ -19,6 +19,10 @@
  *  Also: grip a fish in the tray to lift it back into your hand; drop one in the RELEASE net at
  *  the tray's side to let it go. Close the tray (A) with a fish in hand and you keep holding it.
  *
+ *  DROP TARGETS: other places in the world can take a fish from your hand — Joe's scale at the
+ *  market, a shop counter, Coral's hands. Hold the fish over one (tray open or not) and a ghost
+ *  settles on it with what it's worth there; click to hand it over.
+ *
  * The rules (shapes, fitting, merging, value) are backpack/logic.ts; the pieces live on the
  * save's own fish entries, so layout and tiers persist and the market sells at tier value.
  */
@@ -46,6 +50,7 @@ import { mergeChime, uiClick, uiDeny } from '../audio/sfx.ts';
 import type { FishUniforms, Props } from '../fishing/props.ts';
 import { FISH, type GameState } from '../fishing/tidewater.ts';
 import { pulseHand } from '../input/haptics.ts';
+import { pointerView } from '../ui/pointer.ts';
 import { locomotion } from '../locomotion/TeleportSystem.ts';
 import { font } from '../ui/fonts.ts';
 import { INK, Panel, roundRect } from '../ui/panel.ts';
@@ -62,17 +67,31 @@ const TIER_GLOW = [0x000000, 0x1c2228, 0x3a2400, 0x2a0a22];
 /** What the backpack needs from the game; set by main before registration. */
 export const backpackDeps: { state: GameState | null; props: Props | null } = { state: null, props: null };
 
+/** Somewhere in the world that takes a fish from your hand (Joe's scale, a counter...). */
+export interface DropTarget {
+  /** world-space centre, and how close the fish must come (m) */
+  position: Vector3;
+  radius: number;
+  /** what the ghost's tag says for this fish, or null if this target won't take it */
+  label(p: Piece): string | null;
+  /** it's yours now: the target animates the fish (already in the scene) and does the deal */
+  accept(p: Piece, fish: Mesh): void;
+  colour: number;
+}
+
 /** Anyone can ask: is the tray open / is a fish in hand (fishing and teleport defer to it). */
 export const backpackView: {
   open: boolean;
   holding: boolean;
   /** which hand has a fish in it (fishing keeps that hand off the reel) */
   hand: Hand | null;
+  /** drop targets around the world (they add and remove themselves) */
+  targets: Set<DropTarget>;
   /** a caught fish goes into `hand` (its save entry id) */
   takeInHand?: (id: number, hand: Hand) => void;
   toggle?: () => void;
   system?: BackpackSystem;
-} = { open: false, holding: false, hand: null };
+} = { open: false, holding: false, hand: null, targets: new Set() };
 
 interface FishModel {
   mesh: Mesh;
@@ -100,6 +119,11 @@ const UP = new Vector3(0, 1, 0);
 /** the fish in your palm: snout along where you point, lying on its side */
 const IN_PALM = new Quaternion().setFromEuler(new Euler(0, Math.PI, Math.PI / 2));
 const HEADS = [new Vector3(1, 0, 0), new Vector3(0, 0, 1), new Vector3(-1, 0, 0), new Vector3(0, 0, -1)];
+
+/** The tag over a drop target ("SELL · $95"). */
+function makeTag(text: string, colour: string): Sprite {
+  return label(text, colour, 46, 512);
+}
 
 function label(text: string, colour: string, px = 44, w = 512): Sprite {
   const c = document.createElement('canvas');
@@ -181,6 +205,12 @@ export class BackpackSystem extends createSystem({}) {
   private overTray = 0; // 0 in hand .. 1 over the tray (smoothed)
   private drop: { x: number; y: number; ok: boolean; partners: Piece[] } | null = null;
   private infoKey = '';
+  /** the drop target the fish in hand is over, its ghost and its tag */
+  private target: DropTarget | null = null;
+  private targetGhost: Mesh | null = null;
+  private targetTag: Sprite | null = null;
+  private targetTagText = '';
+  private targetTrig = false;
 
   init(): void {
     this.tray = new Tray();
@@ -390,6 +420,7 @@ export class BackpackSystem extends createSystem({}) {
       }
     }
     locomotion.enabled = locomotion.enabled && !backpackView.open;
+    this.trackTargets(time);
     if (backpackView.open) {
       this.track(dt);
       this.handleInput();
@@ -407,7 +438,7 @@ export class BackpackSystem extends createSystem({}) {
     const h = this.held;
     let over = 0;
     this.drop = null;
-    if (h) {
+    if (h && !this.target) {
       this.player.gripSpaces[h.hand].getWorldPosition(_v);
       this.tray.group.worldToLocal(_loc.copy(_v));
       const inX = Math.abs(_loc.x) < this.tray.width / 2 + 0.08;
@@ -454,7 +485,7 @@ export class BackpackSystem extends createSystem({}) {
           if (this.held) this.turn(ax.x > 0 ? 1 : 3);
         }
       }
-      if (this.held && this.held.hand === h && tDown) this.place();
+      if (this.held && this.held.hand === h && tDown && !this.target) this.place();
       else if (!this.held && (gDown || tDown)) this.lift(h);
     }
   }
@@ -514,6 +545,73 @@ export class BackpackSystem extends createSystem({}) {
       },
     });
     this.state.save();
+  }
+
+  /** The fish in hand over a drop target: a ghost settles on it with its tag; click hands it over. */
+  private trackTargets(time: number): void {
+    const h = this.held;
+    let best: DropTarget | null = null;
+    let label: string | null = null;
+    if (h) {
+      this.player.gripSpaces[h.hand].getWorldPosition(_v);
+      let bd = Infinity;
+      for (const t of backpackView.targets) {
+        const d = t.position.distanceTo(_v);
+        if (d < t.radius && d < bd) {
+          const l = t.label(h.piece);
+          if (l === null) continue;
+          bd = d;
+          best = t;
+          label = l;
+        }
+      }
+    }
+    this.target = best;
+    if (!h || !best) {
+      if (this.targetGhost) this.targetGhost.visible = false;
+      if (this.targetTag) this.targetTag.visible = false;
+      this.targetTrig = false;
+      return;
+    }
+    // the ghost lies on the target, turned the way the fish in your hand is
+    if (!this.targetGhost || this.targetGhost.geometry !== h.model.mesh.geometry) {
+      if (this.targetGhost) this.scene.remove(this.targetGhost);
+      this.targetGhost = new Mesh(h.model.mesh.geometry, new MeshBasicMaterial({ color: best.colour, transparent: true, opacity: 0.4, depthWrite: false, toneMapped: false }));
+      this.targetGhost.renderOrder = 4;
+      this.scene.add(this.targetGhost);
+    }
+    const g = this.targetGhost;
+    (g.material as MeshBasicMaterial).color.setHex(best.colour);
+    (g.material as MeshBasicMaterial).opacity = 0.32 + 0.12 * Math.sin(time * 6);
+    const len = Math.min(0.9, h.piece.cm / 100) * 0.8;
+    g.position.copy(best.position).y += 0.04 + 0.01 * Math.sin(time * 5);
+    h.model.mesh.getWorldQuaternion(g.quaternion);
+    g.scale.setScalar(len);
+    g.visible = true;
+    if (label !== this.targetTagText || !this.targetTag) {
+      if (this.targetTag) this.scene.remove(this.targetTag);
+      this.targetTag = label ? makeTag(label, `#${best.colour.toString(16).padStart(6, '0')}`) : null;
+      if (this.targetTag) this.scene.add(this.targetTag);
+      this.targetTagText = label ?? '';
+    }
+    if (this.targetTag) {
+      this.targetTag.position.copy(best.position).y += 0.22;
+      this.targetTag.visible = true;
+    }
+    // click hands it over
+    const t = this.input.xr.gamepads[h.hand]?.getButtonValue(InputComponent.Trigger) ?? 0;
+    const down = !this.targetTrig && t > 0.6;
+    if (t > 0.6) this.targetTrig = true;
+    else if (t < 0.3) this.targetTrig = false;
+    if (down && !pointerView.claimed[h.hand]) {
+      const fish = h.model.mesh;
+      this.held = null;
+      g.visible = false;
+      if (this.targetTag) this.targetTag.visible = false;
+      this.target = null;
+      this.buzz(h.hand, 0.5, 50);
+      best.accept(h.piece, fish);
+    }
   }
 
   /** Grip (or click) a fish in the tray to lift it back into your hand. */

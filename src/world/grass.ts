@@ -141,7 +141,7 @@ export class Grass {
 
   update(time: number, camera: Camera): void {
     this.uniforms.uTime.value = time;
-    camera.getWorldPosition(_p);
+    _p.setFromMatrixPosition(camera.matrixWorld); // read-only (see world/ocean.ts update)
     const cx = _p.x;
     const cz = _p.z;
     if ((cx - this.last.x) ** 2 + (cz - this.last.z) ** 2 < 4) return;

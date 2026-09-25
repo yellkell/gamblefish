@@ -97,7 +97,9 @@ export function createSky(scene: Scene): { state: SkyState; dome: Mesh } {
   dome.renderOrder = -1;
   // ride with the viewer so the horizon never gets closer
   dome.onBeforeRender = (_r, _s, camera) => {
-    camera.getWorldPosition(dome.position);
+    // read, never recompute: in XR this is a per-eye camera with no parent, whose world matrix
+    // three set from the rig — getWorldPosition() would rebuild it from the local pose alone
+    dome.position.setFromMatrixPosition(camera.matrixWorld);
     dome.updateMatrixWorld();
   };
   scene.add(dome);

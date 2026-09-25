@@ -33,6 +33,7 @@ import { Bed, loadSamples, MIX, setListener, shot, surfaceThrash, waterEntrySmal
 import { catchSting } from '../audio/sfx.ts';
 import type { WaterFx } from '../fx/water.ts';
 import { backpackView } from '../backpack/BackpackSystem.ts';
+import { pointerView } from '../ui/pointer.ts';
 import { fill, GRID_SIZES, type Piece } from '../backpack/logic.ts';
 import { pulseHand } from '../input/haptics.ts';
 import { locomotion } from '../locomotion/TeleportSystem.ts';
@@ -271,7 +272,7 @@ export class FishingSystem extends createSystem({}) {
     }
 
     // the backpack has the trigger while it's open
-    const held = backpackView.open ? 0 : this.trigger(this.hand);
+    const held = backpackView.open || pointerView.claimed[this.hand] ? 0 : this.trigger(this.hand);
     const down = !this.triggerHeld && held > FISHING.triggerOn;
     const up = this.triggerHeld && held < FISHING.triggerOff;
     if (down) this.triggerHeld = true;

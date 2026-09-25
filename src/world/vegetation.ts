@@ -617,7 +617,7 @@ export class Vegetation {
 
   update(time: number, camera: Camera): void {
     for (const m of this.swayMats) m.uniforms.uTime.value = time;
-    camera.getWorldPosition(_p);
+    _p.setFromMatrixPosition(camera.matrixWorld); // read-only (see world/ocean.ts update)
     if (_p.distanceToSquared(this.last) < 9) return; // re-pick only after you've moved 3 m
     this.last.copy(_p);
     const x = _p.x;
