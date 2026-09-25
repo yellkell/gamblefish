@@ -37,6 +37,7 @@ import { SlotMachine } from './casino/SlotMachine.ts';
 import { BlackjackTable } from './casino/BlackjackTable.ts';
 import { PointerSystem } from './ui/pointer.ts';
 import { buildInteriors, interiorAt, openColliders, type Interior } from './village/interiors.ts';
+import { HOME, HOME_SHOPS, HomeShopCounter, Shack } from './village/homeGoods.ts';
 import { Blink } from './fx/blink.ts';
 import { Vegetation } from './world/vegetation.ts';
 import { buildVillage } from './world/village.ts';
@@ -195,6 +196,11 @@ World.create(container, {
   // the music (ff2's jukebox songs outside, the casinos' own inside) and the sea's sound
   const music = new Music(interiors.filter((i) => i.role.role === 'casino'));
   const shore = new ShoreSound(heightfield, json.layout.pier, () => interiorAt(interiors, world.player.position.x, world.player.position.z) !== null, () => sky.state.night.value);
+  // your shack, and the shops that furnish it
+  const kit = { renderer: world.renderer, props: fishingDeps.props! };
+  const shack = room(HOME);
+  if (shack) new Shack(shack, game, kit, (b) => surfaces.addBox(b));
+  const homeShops = HOME_SHOPS.map((n) => room(n)).filter((r): r is Interior => !!r).map((r) => new HomeShopCounter(r, game, kit));
   villageTick = (dt) => {
     music.update(world.camera);
     shore.update(ocean.time, dt, world.camera);
@@ -209,7 +215,7 @@ World.create(container, {
   world.player.rotation.set(0, s.yaw, 0);
 
   // Dev hook: drive the rig without a headset (`__fish.move.to(x, z, yaw)`).
-  (window as unknown as { __fish: unknown }).__fish = { world, surfaces, move: teleportView, json, game, fishing: fishingView, vegetation, backpack: backpackView, interiors, tables, music, shore, sky };
+  (window as unknown as { __fish: unknown }).__fish = { world, surfaces, move: teleportView, json, game, fishing: fishingView, vegetation, backpack: backpackView, interiors, tables, music, shore, sky, homeShops };
 
   if (import.meta.env.DEV) void import('./dev/harness.ts').then((m) => m.installHarness(world));
 

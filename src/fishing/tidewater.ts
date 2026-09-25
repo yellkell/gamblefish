@@ -99,6 +99,8 @@ export interface GameState {
   log: Record<string, { count: number; bestKg: number; bestCm?: number }>;
   lastCatch: LastCatch | null;
   upgrades: Record<string, number>;
+  /** what you've bought for your shack (village/homeGoods.ts ids), in the order you bought it */
+  home: string[];
   readonly stats: GearStats;
   readonly holdKg: number;
   readonly holdValue: number;
@@ -133,6 +135,23 @@ function prefixedStorage(): Pick<Storage, 'getItem' | 'setItem'> | null {
 
 export function createGameState(): GameState {
   const s = new (GameStateJs as unknown as new (storage: unknown) => GameState)(prefixedStorage());
+  // our own field on Tidewater's save: the shack's things ride along in the same JSON (local and
+  // cloud), and a save from before them just has none
+  s.home = [];
+  const toJSON = s.toJSON.bind(s);
+  const fromJSON = s.fromJSON.bind(s);
+  const reset = s.reset.bind(s);
+  s.toJSON = () => ({ ...(toJSON() as object), home: s.home });
+  s.fromJSON = (d: unknown) => {
+    if (!fromJSON(d)) return false;
+    const home = (d as { home?: unknown }).home;
+    s.home = Array.isArray(home) ? home.filter((x): x is string => typeof x === 'string') : [];
+    return true;
+  };
+  s.reset = () => {
+    s.home = []; // first: Tidewater's reset saves and emits
+    reset();
+  };
   s.load();
   return s;
 }

@@ -77,27 +77,33 @@ export class Surfaces {
 
   constructor(terrain: Heightfield, colliders: { boxes: BoxCollider[]; cylinders: CylinderCollider[] }) {
     this.terrain = terrain;
-    for (const b of colliders.boxes) {
-      const cos = Math.cos(b.rotY);
-      const sin = Math.sin(b.rotY);
-      if (b.walkable) {
-        if (NOT_A_FLOOR.has(b.tag)) continue;
-        const toGround = b.solid && b.bottom <= terrain.heightAt(b.cx, b.cz) + 0.05;
-        this.decks.push({ cx: b.cx, cz: b.cz, hx: b.hx, hz: b.hz, cos, sin, r: Math.hypot(b.hx, b.hz), top: b.top, tag: b.tag, toGround });
-      } else if (b.solid) {
-        // Tidewater's local frame: local = R(rotY)·(world − centre), with
-        // lx = dx·cos − dz·sin, lz = dx·sin + dz·cos; invert for the corners.
-        const pts: [number, number][] = [
-          [-b.hx, -b.hz],
-          [b.hx, -b.hz],
-          [b.hx, b.hz],
-          [-b.hx, b.hz],
-        ].map(([lx, lz]) => [b.cx + lx * cos + lz * sin, b.cz - lx * sin + lz * cos]);
-        this.walls.push({ pts, x: 0, z: 0, r: 0, sill: b.top, bottom: b.bottom, bx: b.cx, bz: b.cz, br: Math.hypot(b.hx, b.hz) });
-      }
-    }
+    for (const b of colliders.boxes) this.addBox(b);
     for (const c of colliders.cylinders) {
       this.walls.push({ pts: null, x: c.x, z: c.z, r: c.r, sill: c.top, bottom: c.bottom, bx: c.x, bz: c.z, br: c.r });
+    }
+  }
+
+  /**
+   * One of Tidewater's box colliders: a walkable one becomes a floor area, a solid one a wall.
+   * (Also for things that arrive later: the furniture you buy for your shack.)
+   */
+  addBox(b: BoxCollider): void {
+    const cos = Math.cos(b.rotY);
+    const sin = Math.sin(b.rotY);
+    if (b.walkable) {
+      if (NOT_A_FLOOR.has(b.tag)) return;
+      const toGround = b.solid && b.bottom <= this.terrain.heightAt(b.cx, b.cz) + 0.05;
+      this.decks.push({ cx: b.cx, cz: b.cz, hx: b.hx, hz: b.hz, cos, sin, r: Math.hypot(b.hx, b.hz), top: b.top, tag: b.tag, toGround });
+    } else if (b.solid) {
+      // Tidewater's local frame: local = R(rotY)·(world − centre), with
+      // lx = dx·cos − dz·sin, lz = dx·sin + dz·cos; invert for the corners.
+      const pts: [number, number][] = [
+        [-b.hx, -b.hz],
+        [b.hx, -b.hz],
+        [b.hx, b.hz],
+        [-b.hx, b.hz],
+      ].map(([lx, lz]) => [b.cx + lx * cos + lz * sin, b.cz - lx * sin + lz * cos]);
+      this.walls.push({ pts, x: 0, z: 0, r: 0, sill: b.top, bottom: b.bottom, bx: b.cx, bz: b.cz, br: Math.hypot(b.hx, b.hz) });
     }
   }
 

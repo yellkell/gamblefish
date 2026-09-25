@@ -80,6 +80,16 @@ export const FURNITURE: Record<string, [number, number, number, number, number][
   H: [[0, -0.55, 1.74, 0.33, 1.07]], // the teller's counter (village/bank.ts) // the blackjack table (half-round, dealer's edge at z −1.25)
 };
 
+/** the shops that sell things for your shack (village/homeGoods.ts), and your shack */
+export const HOME_SHOPS = ['F', 'D', 'K', 'J'] as const;
+export type HomeShop = (typeof HOME_SHOPS)[number];
+export const HOME = 'S1';
+
+/** a home shop's counter in its room's frame, from the room's inner depth: [x, z, half-w, half-d, height] */
+export function shopCounter(innerD: number): [number, number, number, number, number] {
+  return [0, -innerD / 2 + 0.75, 1.2, 0.3, 0.95];
+}
+
 /** Roles you go inside. */
 export function hasInterior(name: string): boolean {
   const r = ROLES[name];
@@ -126,7 +136,9 @@ export function openColliders(boxes: BoxCollider[], frames: BuildingFrame[]): Bo
     if (d1 < hw) wall((d1 + hw) / 2, hd, (hw - d1) / 2, t);
     // the floor you land on
     const f = frameToWorld(b, 0, 0, 0);
-    for (const [x, z, hx, hz, top] of FURNITURE[b.name] ?? []) {
+    const furniture = [...(FURNITURE[b.name] ?? [])];
+    if ((HOME_SHOPS as readonly string[]).includes(b.name)) furniture.push(shopCounter(b.d - INSET * 2));
+    for (const [x, z, hx, hz, top] of furniture) {
       const p = frameToWorld(b, x, 0, z);
       out.push({ tag: 'furniture', walkable: false, solid: true, cx: p.x, cz: p.z, hx, hz, rotY: b.yaw, top: b.floorY + top, bottom: b.floorY - 0.2 });
     }
@@ -339,7 +351,8 @@ export function buildInteriors(frames: BuildingFrame[]): Interior[] {
     const flex = new Mesh(new BoxGeometry(0.01, 0.5, 0.01), new MeshLambertMaterial({ color: 0x111111 }));
     flex.position.y = 0.25;
     lamp.add(shade, bulb, flex);
-    lamp.position.set(0, h - 0.55, 0);
+    // (in a home shop, toward the door: in the middle it hung in front of the price board)
+    lamp.position.set(0, h - 0.55, (HOME_SHOPS as readonly string[]).includes(b.name) ? d * 0.22 : 0);
     group.add(lamp);
 
     const c = Math.cos(b.yaw);
