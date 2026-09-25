@@ -275,7 +275,7 @@ export class IslandBank {
     c.lineWidth = 6;
     c.strokeRect(14, 14, W - 28, H - 28);
     text('ISLAND BANK', 44, 88, 64, BRASS, 'left', 700);
-    text(`wallet $${Math.floor(this.state.money).toLocaleString('en-GB')}`, W - 44, 84, 40, INK.amber, 'right', 700);
+    text(`wallet $${Math.floor(this.state.money).toLocaleString('en-US')}`, W - 44, 84, 40, INK.amber, 'right', 700);
     const badge = bank.mode === 'test' ? 'TEST MODE · no real money' : bank.mode === 'dev' ? 'DEV BANK · no real money' : bank.mode === 'live' ? '' : '';
     if (badge) text(badge, 470, 84, 30, '#3fd6c6', 'left', 700);
 
@@ -304,7 +304,7 @@ export class IslandBank {
           for (let k = 0; k < stack; k++) {
             if (img) c.drawImage(img, x + 168 - 50 + (k - (stack - 1) / 2) * 34, y + 40 - k * 4, 100, 100);
           }
-          text(p.coins.toLocaleString('en-GB'), x + 168, y + 200, 72, INK.hot, 'center', 700);
+          text(p.coins.toLocaleString('en-US'), x + 168, y + 200, 72, INK.hot, 'center', 700);
           text('coins', x + 168, y + 236, 28, INK.dim, 'center');
           text(priceLabel(p.minor), x + 168, y + 300, 46, open ? INK.amber : INK.dim, 'center', 700);
           if (p.best) {
@@ -329,7 +329,7 @@ export class IslandBank {
       }
       case 'confirm': {
         const p = this.chosen!;
-        text(`${p.coins.toLocaleString('en-GB')} coins for ${priceLabel(p.minor)}`, W / 2, 230, 72, INK.hot, 'center', 700);
+        text(`${p.coins.toLocaleString('en-US')} coins for ${priceLabel(p.minor)}`, W / 2, 230, 72, INK.hot, 'center', 700);
         text('Before you buy:', 120, 340, 36, BRASS, 'left', 700);
         const lines = [
           '• You are 18 or over.',
@@ -355,7 +355,7 @@ export class IslandBank {
           c.fill();
           drawQr(c, co.short, 90, 160, 500);
           text('Scan with your phone', 680, 200, 54, INK.hot, 'left', 700);
-          text(`to pay ${priceLabel(co.pack.minor)} for ${co.pack.coins.toLocaleString('en-GB')} coins`, 680, 256, 36, INK.dim);
+          text(`to pay ${priceLabel(co.pack.minor)} for ${co.pack.coins.toLocaleString('en-US')} coins`, 680, 256, 36, INK.dim);
           text('Point your phone camera at the code through the', 680, 330, 30, INK.dim);
           text("headset's passthrough, or open it here instead.", 680, 368, 30, INK.dim);
           const dots = '.'.repeat(1 + (Math.floor(performance.now() / 500) % 3));
@@ -368,7 +368,7 @@ export class IslandBank {
       }
       case 'paid': {
         const got = co?.paid ?? 0;
-        text(`+${got.toLocaleString('en-GB')}`, W / 2, 300, 150, '#ffd24a', 'center', 700);
+        text(`+${got.toLocaleString('en-US')}`, W / 2, 300, 150, '#ffd24a', 'center', 700);
         text('coins landed in your wallet', W / 2, 370, 44, INK.hot, 'center');
         const a = bank.account;
         if (a.protected) {

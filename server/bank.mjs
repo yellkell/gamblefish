@@ -46,7 +46,7 @@
  *   STRIPE_SECRET_KEY        sk_test_… / sk_live_…
  *   STRIPE_WEBHOOK_SECRET    whsec_… for this server's /webhook
  *   FIREBASE_SERVICE_ACCOUNT the service-account JSON (raw or base64)
- *   BANK_CURRENCY            ISO code, default gbp
+ *   BANK_CURRENCY            ISO code, default usd
  *   PUBLIC_URL               where paid.html lives (default https://gamblefish.web.app)
  *   BANK_DEV=1               force dev mode (never on a public host)
  */
@@ -55,7 +55,7 @@ import { createServer } from 'node:http';
 import { randomBytes } from 'node:crypto';
 
 const PORT = Number(process.env.PORT || 8792);
-const CURRENCY = (process.env.BANK_CURRENCY || 'gbp').toLowerCase();
+const CURRENCY = (process.env.BANK_CURRENCY || 'usd').toLowerCase();
 const PUBLIC_URL = (process.env.PUBLIC_URL || 'https://gamblefish.web.app').replace(/\/$/, '');
 const STRIPE_KEY = process.env.STRIPE_SECRET_KEY || '';
 const WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET || '';
@@ -78,7 +78,7 @@ export const PACKS = [
   { id: 'vault', coins: 7000, minor: 1799 },
 ];
 
-const packName = (pack) => `${pack.coins.toLocaleString('en-GB')} Gamble Fish coins`;
+const packName = (pack) => `${pack.coins.toLocaleString('en-US')} Gamble Fish coins`;
 
 /* ── the ledger ──────────────────────────────────────────────────────── */
 

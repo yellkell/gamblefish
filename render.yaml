@@ -27,6 +27,6 @@ services:
       - key: FIREBASE_SERVICE_ACCOUNT
         sync: false
       - key: BANK_CURRENCY
-        value: gbp
+        value: usd
       - key: PUBLIC_URL
         value: https://gamblefish.web.app

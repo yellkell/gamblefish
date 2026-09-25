@@ -65,7 +65,7 @@ export type RecoveryStage = 'idle' | 'sending' | 'sent' | 'redeeming' | 'done' |
 export const bank = {
   status: 'idle' as 'idle' | 'loading' | 'ready' | 'off',
   mode: '' as BankMode,
-  currency: 'gbp',
+  currency: 'usd',
   packs: FALLBACK_PACKS,
   checkout: null as Checkout | null,
   note: '',
@@ -159,7 +159,7 @@ export function loadPacks(): Promise<void> {
       if (!Array.isArray(cat.packs) || !cat.packs.length) throw new Error('no packs');
       bank.packs = cat.packs;
       bank.mode = cat.mode;
-      bank.currency = cat.currency || 'gbp';
+      bank.currency = cat.currency || 'usd';
       bank.status = 'ready';
       bank.note = '';
     } catch (err) {
