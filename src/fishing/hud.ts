@@ -12,6 +12,7 @@ import { font } from '../ui/fonts.ts';
 import { INK, Panel, roundRect } from '../ui/panel.ts';
 import type { LastCatch } from './tidewater.ts';
 import { FISH } from './tidewater.ts';
+import { TIMED } from './timedFish.ts';
 
 export interface GaugeState {
   label: string;
@@ -158,7 +159,8 @@ export class CatchCard {
     c.fillText(f.name, 28, y, 456);
     c.font = font(500, 24);
     c.fillStyle = INK.dim;
-    c.fillText(f.sci, 28, y + 32, 456);
+    // a fish that keeps its own hours says which
+    c.fillText(TIMED[info.species] ? `${f.sci}  ·  ${TIMED[info.species].when}` : f.sci, 28, y + 32, 456);
     c.font = font(700, 44);
     c.fillStyle = INK.hot;
     c.fillText(`${info.cm} cm`, 28, y + 100);

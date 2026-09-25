@@ -85,6 +85,19 @@ and the vendors.
   (`src/audio/songs/`, in filename order). Inside the casinos it's Give It To Me
   (`src/audio/casino/`), which spills muffled out of their doors as you walk up.
   The backpack's **MUSIC** button mutes it all.
+- **The day:** `src/world/sky.ts` runs a whole day in about 40 minutes, with the
+  night going faster. Sun and moon move across the sky; dawn, midday, golden hour,
+  sunset, dusk and a moonlit night each have their own sky, fog, sea and light.
+  After dark the windows glow, the lamps light up (`src/world/lamps.ts`), the stars
+  come out and the crickets start.
+- **Fish that keep their own hours:** `src/fishing/timedFish.ts` adds five species,
+  each biting only in its window: bonefish at dawn, queen triggerfish at midday,
+  permit at sunset, lookdown at night under the pier lamps, and glasseye snapper after
+  midnight. `npm run check:fish` checks the windows.
+- **Your shack:** the hut on the beach (HOME) is yours. The Builder, Florist,
+  Taxidermist and Pawn Shop each sell things for it from a counter and a price
+  board (`src/village/homeGoods.ts`). What you buy is delivered to its spot in the
+  shack and kept in your save.
 - **Wallet:** `src/ui/wallet.ts` puts an odometer-style money counter on both
   wrists. Any change in the balance rings ff2's cash chime, pitched up for
   money in and down for money out.
@@ -147,7 +160,8 @@ same questions as ff2's `TELEPORT_AREAS`, `floorYAt` and `crossesWall`:
 | `src/dev/harness.ts` | dev-only emulator driver |
 | `tools/bake-world.mjs` | Tidewater → `public/world/` |
 | `tools/bake-props.mjs` | Tidewater's rod, bobber and fish → `public/props/` |
-| `tools/teleport-check.mjs` | headless teleport rules check (24 checks) |
+| `tools/teleport-check.mjs` | headless teleport rules check, including no landing under a house floor |
+| `tools/fish-check.mjs` | headless check that the timed fish keep their hours |
 
 Dev hook: `__fish.move.to(x, z, yaw)`, `__fish.move.snapTurn(±1)` and
 `__fish.move.stepBack()`.

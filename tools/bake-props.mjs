@@ -32,6 +32,10 @@ if (process.argv.includes('--if-missing') && existsSync(resolve(OUT, 'props.bin'
 const { SPECIES, SKIN } = await import(url('world/fish/FishSpecies.js'));
 const { fishGeometry, PART } = await import(url('world/fish/FishGeometry.js'));
 const { FISH, FISH_IDS } = await import(url('game/FishTable.js'));
+// the fish that keep their own hours (src/fishing/timedFish.ts): into the table, with bodies
+const { registerTimedFish, registerTimedModels } = await import('../src/fishing/timedFish.ts');
+registerTimedFish(FISH, FISH_IDS);
+registerTimedModels(SPECIES, SKIN);
 
 // the rod module, with its builders exported
 const rodSrc = readFileSync(resolve(TW, 'game/FishingRod.js'), 'utf8');

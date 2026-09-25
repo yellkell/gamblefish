@@ -10,6 +10,7 @@ import * as BitesJs from '../../vendor/tidewater/src/game/Bites.js';
 import { CatchMinigame as CatchMinigameJs } from '../../vendor/tidewater/src/game/CatchMinigame.js';
 import { GameState as GameStateJs } from '../../vendor/tidewater/src/game/GameState.js';
 import * as GearJs from '../../vendor/tidewater/src/game/Gear.js';
+import { biting, registerTimedFish } from './timedFish.ts';
 
 export interface FishInfo {
   name: string;
@@ -27,13 +28,39 @@ export interface FishInfo {
 export type HabitatKey = 'shallows' | 'reef' | 'pier' | 'bay' | 'deep';
 export type Habitat = Record<HabitatKey, number>;
 
+// the fish that keep their own hours join Tidewater's table before anything reads it
+registerTimedFish(Table.FISH as Record<string, unknown>, Table.FISH_IDS as string[]);
+
 export const FISH = Table.FISH as unknown as Record<string, FishInfo>;
 export const FISH_IDS = Table.FISH_IDS as string[];
 export const fishValue = Table.fishValue as (id: string, kg: number) => number;
 export const fishLengthCm = Table.fishLengthCm as (id: string, kg: number) => number;
 
 export const habitatAt = BitesJs.habitatAt as (w: { depth: number; reefDist: number; pierDist: number }) => Habitat;
-export const pickSpecies = BitesJs.pickSpecies as (h: Habitat, hour: number, rng?: () => number) => string | null;
+const activity = BitesJs.activity as (pref: string, hour: number) => number;
+/**
+ * Tidewater's weighted pick of what bites here (Bites.js pickSpecies), with the timed fish kept
+ * to their hours (fishing/timedFish.ts).
+ */
+export function pickSpecies(h: Habitat, hour: number, rng: () => number = Math.random): string | null {
+  let total = 0;
+  const w: number[] = [];
+  for (const id of FISH_IDS) {
+    const f = FISH[id];
+    let hw = 0;
+    for (const k in f.habitat) hw += (f.habitat[k as HabitatKey] ?? 0) * h[k as HabitatKey];
+    const x = hw * f.rarity * activity(f.time, hour) * biting(id, hour);
+    w.push(x);
+    total += x;
+  }
+  if (total < 1e-4) return null;
+  let r = rng() * total;
+  for (let i = 0; i < w.length; i++) {
+    r -= w[i];
+    if (r <= 0) return FISH_IDS[i];
+  }
+  return FISH_IDS[FISH_IDS.length - 1];
+}
 export const rollWeight = BitesJs.rollWeight as (id: string, rng?: () => number) => number;
 export const biteDelay = BitesJs.biteDelay as (h: Habitat, hour: number, rng?: () => number) => number;
 

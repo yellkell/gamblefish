@@ -62,7 +62,7 @@ type RodState = 'stowed' | 'idle' | 'windup' | 'flying' | 'floating' | 'retrievi
 
 /** VR tuning (everything else is Tidewater's). */
 export const FISHING = {
-  /** time of day for the bites (the sky is a fixed late afternoon) */
+  /** time of day for the bites when there's no island clock (fishingDeps.hour) */
   hour: 16,
   /** trigger past this holds the line / reels; below `triggerOff` lets go */
   triggerOn: 0.55,
@@ -102,7 +102,12 @@ export const fishingDeps: {
   fx: WaterFx | null;
   /** is the player standing inside a building? (the rod goes away indoors and comes back out) */
   indoors: (() => boolean) | null;
-} = { props: null, state: null, ocean: null, terrain: null, surfaces: null, layout: null, wallet: null, fx: null, indoors: null };
+  /** the island's hour (world/sky.ts): what bites, and when */
+  hour: (() => number) | null;
+} = { props: null, state: null, ocean: null, terrain: null, surfaces: null, layout: null, wallet: null, fx: null, indoors: null, hour: null };
+
+/** the hour the fish go by: the island's clock, or FISHING.hour without one */
+const hourNow = (): number => fishingDeps.hour?.() ?? FISHING.hour;
 
 /** Dev window (`__fish.fishing`). */
 export const fishingView: { state?: () => RodState; bite?: () => unknown; fight?: () => unknown; system?: FishingSystem } = {};
@@ -316,7 +321,7 @@ export class FishingSystem extends createSystem({}) {
         if (reelIn <= 0.15 && this.onWater()) {
           // let go: it sits where it is, and something may find it
           this.setState('floating');
-          this.bite = { phase: 'wait', t: biteDelay(this.habitat(), FISHING.hour) };
+          this.bite = { phase: 'wait', t: biteDelay(this.habitat(), hourNow()) };
         }
         break;
       case 'fighting':
@@ -448,7 +453,7 @@ export class FishingSystem extends createSystem({}) {
     this.buzz(this.hand, 0.18, 35);
     this.rippleT = 1.2;
     const h = this.habitat();
-    this.bite = { phase: 'wait', t: biteDelay(h, FISHING.hour) };
+    this.bite = { phase: 'wait', t: biteDelay(h, hourNow()) };
     if (!Number.isFinite(this.bite.t)) this.toast.show('Too shallow — nothing lives here', 2, INK.dim);
   }
 
@@ -470,7 +475,7 @@ export class FishingSystem extends createSystem({}) {
     }
     if (b.t > 0) return;
     if (b.phase === 'wait') {
-      const species = pickSpecies(this.habitat(), FISHING.hour);
+      const species = pickSpecies(this.habitat(), hourNow());
       if (!species) {
         b.t = 8;
         return;
@@ -500,7 +505,7 @@ export class FishingSystem extends createSystem({}) {
       }
     } else {
       this.toast.show('It took the bait and ran', 1.8, INK.dim);
-      this.bite = { phase: 'wait', t: biteDelay(this.habitat(), FISHING.hour) };
+      this.bite = { phase: 'wait', t: biteDelay(this.habitat(), hourNow()) };
     }
   }
 
@@ -558,7 +563,7 @@ export class FishingSystem extends createSystem({}) {
     const name = FISH[f.species].name;
     if (st === 'caught') {
       const state = fishingDeps.state!;
-      this.caughtId = state.addFish(f.species, f.kg, FISHING.hour)?.id ?? null;
+      this.caughtId = state.addFish(f.species, f.kg, hourNow())?.id ?? null;
       waterExitFish(this.bob, f.kg);
       fishingDeps.fx?.splash(this.bob, 0.7 + Math.min(1, f.kg / 8) * 0.6);
       shot('fish_flop', MIX.fishFlop, { rate: 0.9 + Math.random() * 0.2, delay: 0.35 });

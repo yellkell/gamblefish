@@ -89,6 +89,9 @@ export class Grass {
   private readonly terrain: Heightfield;
   private readonly grid: TerrainGrid;
 
+  /** the highest floor over (x, z) with its footprint grown by `margin` (Surfaces.deckOver), once the island's floors are known */
+  floorOver: ((x: number, z: number, margin: number) => number) | null = null;
+
   constructor(atlas: CanvasTexture, mask: Uint8Array, res: number, terrain: Heightfield, grid: TerrainGrid) {
     this.mask = mask;
     this.res = res;
@@ -114,6 +117,10 @@ export class Grass {
     mat.customProgramCacheKey = () => 'grass';
     this.mesh = new InstancedMesh(tuftGeometry(), mat, CAPACITY);
     this.mesh.instanceMatrix.setUsage(DynamicDrawUsage);
+    // the per-tuft tint exists from the start (made lazily, instanced plants drew black in the
+    // headset: see world/vegetation.ts)
+    for (let i = 0; i < CAPACITY; i++) this.mesh.setColorAt(i, _c.setRGB(1, 1, 1));
+    this.mesh.instanceColor!.setUsage(DynamicDrawUsage);
     this.mesh.count = 0;
     this.mesh.frustumCulled = false;
     this.mesh.name = 'grass';
@@ -164,6 +171,10 @@ export class Grass {
         const want = Math.max(dune, meadow) * (1 - far * 0.75);
         if (want < 0.05 || hash2(i, j, 3) > want) continue;
         const y = this.terrain.heightAt(x, z);
+        // nothing grows up through a raised path, deck, porch or stair: a floor over the tuft
+        // (its footprint grown by the blades' spread) low enough for the tallest blades to reach
+        const over = this.floorOver ? this.floorOver(x, z, 0.4) : -Infinity;
+        if (over > y - 0.5 && over < y + 1.4) continue;
         const edge = 1 - far * far;
         const tall = dune > meadow ? 0.45 + hash2(i, j, 4) * 0.3 : 0.26 + hash2(i, j, 4) * 0.24;
         // thin toward the edge by density; never shrink to specks

@@ -142,6 +142,7 @@ World.create(container, {
   for (const i of interiors) scene.add(i.group);
   const surfaces = new Surfaces(heightfield, { boxes: openColliders(json.colliders.boxes, frames), cylinders: json.colliders.cylinders });
   locomotion.surfaces = surfaces;
+  if (grass) grass.floorOver = (x, z, m) => surfaces.deckOver(x, z, m);
   world.registerSystem(TeleportSystem);
 
   // the fishing: Tidewater's rules and save, the rod in your hand, the wallet on your wrists
@@ -168,6 +169,8 @@ World.create(container, {
     if (interiorAt(interiors, from.x, from.z) !== interiorAt(interiors, to.x, to.z)) blink.fire();
   });
 
+  // what bites, and when, follows the island's day
+  fishingDeps.hour = () => sky.state.hour;
   fishingDeps.indoors = () => interiorAt(interiors, world.player.position.x, world.player.position.z) !== null;
 
   // the village's people and counters
@@ -215,7 +218,7 @@ World.create(container, {
   world.player.rotation.set(0, s.yaw, 0);
 
   // Dev hook: drive the rig without a headset (`__fish.move.to(x, z, yaw)`).
-  (window as unknown as { __fish: unknown }).__fish = { world, surfaces, move: teleportView, json, game, fishing: fishingView, vegetation, backpack: backpackView, interiors, tables, music, shore, sky, homeShops };
+  (window as unknown as { __fish: unknown }).__fish = { world, surfaces, move: teleportView, json, game, fishing: fishingView, vegetation, backpack: backpackView, interiors, tables, music, shore, sky, homeShops, props: fishingDeps.props };
 
   if (import.meta.env.DEV) void import('./dev/harness.ts').then((m) => m.installHarness(world));
 

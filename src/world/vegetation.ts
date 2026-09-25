@@ -477,14 +477,15 @@ export class Vegetation {
 
     /* understory: near only */
     const nearTypes: [string, BufferGeometry, Material, number, number][] = [
-      ['shrubs', shrub(meta), crownMat, 55, 220],
+      // (the caps leave room for the village's planted beds and hedges: tools/bake-world.mjs)
+      ['shrubs', shrub(meta), crownMat, 55, 480],
       ['ferns', fern(), leaf, 28, 260],
       ['youngPalms', youngPalm(), leaf, 45, 90],
       ['bananas', banana(), leaf, 50, 60],
-      ['monsteras', broadleaf(0x2f6a2a, null, 6, 0.9, 0.35), leaf, 40, 120],
-      ['elephantEars', broadleaf(0x3d7a36, null, 5, 1.3, 0.6), leaf, 40, 20],
-      ['heliconias', broadleaf(0x2f7034, 0xd8402a, 5, 1.0, 0.8), leaf, 40, 40],
-      ['strelitzias', broadleaf(0x3a6e40, 0xf08a1e, 5, 0.9, 0.7), leaf, 40, 16],
+      ['monsteras', broadleaf(0x2f6a2a, null, 6, 0.9, 0.35), leaf, 40, 160],
+      ['elephantEars', broadleaf(0x3d7a36, null, 5, 1.3, 0.6), leaf, 40, 80],
+      ['heliconias', broadleaf(0x2f7034, 0xd8402a, 5, 1.0, 0.8), leaf, 40, 160],
+      ['strelitzias', broadleaf(0x3a6e40, 0xf08a1e, 5, 0.9, 0.7), leaf, 40, 120],
     ];
     for (const [type, geo, mat, radius, max] of nearTypes) {
       const p = plants(type);

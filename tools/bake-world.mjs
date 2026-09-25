@@ -455,6 +455,126 @@ const cylinders = colliders.cylinders.map((c) => ({
 
 /* ── vegetation + rocks ─────────────────────────────────────────────────── */
 
+/*
+ * The village's planting, done on purpose. Tidewater's land-cover scatter is right for the hills
+ * and the bay, but between the houses its odd fern, lone bush and stray palm read as accident.
+ * Round each village house the scatter is cleared, and the plot is planted:
+ *   - a flower bed along the front, either side of the steps (each house its own mix)
+ *   - a clipped hedge down each side
+ *   - an accent at the back corners (banana, young palm)
+ *   - the casinos: a matched pair of big bananas flanking the entrance
+ *   - the boardwalk up from the pier: an avenue of palms
+ * Nothing goes where a collider is (walls, porches, stairs, paths, decks) or on the sand.
+ */
+{
+  const village = specs.houses.filter((h) => !h.harbor);
+  const frame = (h) => {
+    const c = Math.cos(h.yaw);
+    const s = Math.sin(h.yaw);
+    return { toW: (lx, lz) => ({ x: h.x + lx * c + lz * s, z: h.z - lx * s + lz * c }), toL: (x, z) => ({ lx: (x - h.x) * c - (z - h.z) * s, lz: (x - h.x) * s + (z - h.z) * c }) };
+  };
+  const plot = (h, x, z, pad) => {
+    const { lx, lz } = frame(h).toL(x, z);
+    const pd = h.porch?.depth ?? 0;
+    return Math.abs(lx) < h.w / 2 + pad && lz > -h.d / 2 - (h.annex ? (h.annex.d ?? 2.2) : 0) - pad && lz < h.d / 2 + pd + pad;
+  };
+  // clear the scatter round the houses
+  let cleared = 0;
+  for (const type of ['palms', 'shrubs', 'youngPalms', 'ferns', 'bananas', 'monsteras', 'elephantEars', 'heliconias', 'strelitzias', 'trees']) {
+    const list = veg[type];
+    if (!Array.isArray(list)) continue;
+    // round each house, and (not the forest's trees) anywhere in the village's middle
+    const core = (p) => type !== 'trees' && Math.hypot(p.x - WORLD.village.center.x, p.z - WORLD.village.center.z) < 46;
+    const keep = list.filter((p) => !core(p) && !village.some((h) => plot(h, p.x, p.z, 7)));
+    cleared += list.length - keep.length;
+    veg[type] = keep;
+  }
+  // a spot is free if it's dry land and clear of every collider (grown by r)
+  const free = (x, z, r) => {
+    if (terrain.heightAt(x, z) < 0.6) return false;
+    for (const b of colliders.boxes) {
+      const dx = x - b.center.x;
+      const dz = z - b.center.z;
+      if (Math.abs(dx) > b.radius + r + 1 || Math.abs(dz) > b.radius + r + 1) continue;
+      const lx = dx * b.cos - dz * b.sin;
+      const lz = dx * b.sin + dz * b.cos;
+      if (Math.abs(lx) < b.half.x + r && Math.abs(lz) < b.half.z + r) return false;
+    }
+    for (const c of colliders.cylinders) if (Math.hypot(x - c.x, z - c.z) < c.radius + r) return false;
+    return true;
+  };
+  let seed = 0.123;
+  const rnd = () => (seed = (seed * 9301 + 49297) % 233280) / 233280;
+  let planted = 0;
+  const plant = (type, x, z, r, o = {}) => {
+    if (!free(x, z, r)) return false;
+    (veg[type] ??= []).push({ x, y: terrain.heightAt(x, z), z, s: 1, sy: 1, yaw: rnd() * Math.PI * 2, la: 0, l: 0, H: 0, ...o });
+    planted++;
+    return true;
+  };
+  const MIXES = [
+    ['heliconias', 'strelitzias'],
+    ['monsteras', 'heliconias'],
+    ['strelitzias', 'elephantEars'],
+    ['heliconias', 'monsteras'],
+  ];
+  const CASINOS = new Set(['B', 'C', 'G', 'M']);
+  village.forEach((h, k) => {
+    const { toW } = frame(h);
+    const pd = h.porch?.depth ?? 0;
+    const pw = h.porch ? Math.min(h.w, h.porch.width || h.w) : h.w;
+    const pcx = h.porch?.offset ?? 0;
+    const door = h.porch?.stairX ?? h.doorX ?? 0;
+    const mix = MIXES[k % MIXES.length];
+    // the front bed, either side of the steps
+    const bedZ = h.d / 2 + pd + 0.75;
+    const gap = pd ? 1.15 : 1.35;
+    let i = 0;
+    for (let lx = pcx - pw / 2 + 0.35; lx <= pcx + pw / 2 - 0.35; lx += 0.85) {
+      if (Math.abs(lx - door) < gap) continue;
+      const p = toW(lx, bedZ + (i % 2) * 0.25);
+      plant(mix[i++ % 2], p.x, p.z, 0.35, { s: 0.85 + rnd() * 0.2 });
+    }
+    // clipped hedges down the sides
+    const back = -h.d / 2 + 0.3;
+    for (const side of [-1, 1]) {
+      for (let lz = back; lz <= h.d / 2 + pd - 0.2; lz += 0.62) {
+        const p = toW(side * (h.w / 2 + 1.05), lz);
+        plant('shrubs', p.x, p.z, 0.3, { s: 0.5, sy: 0.8, yaw: h.yaw });
+      }
+      // an accent at the back corner
+      const c = toW(side * (h.w / 2 + 0.9), -h.d / 2 - 0.9);
+      if (side < 0) plant('bananas', c.x, c.z, 0.5, { s: 0.9 + rnd() * 0.2 });
+      else plant('youngPalms', c.x, c.z, 0.5, { s: 1.1 });
+    }
+    // the casinos: a matched pair of big bananas either side of the way in (a palm's crown is
+    // ~4 m across whatever its height, and hid the porch and the board)
+    if (CASINOS.has(h.name)) {
+      for (const side of [-1, 1]) {
+        const p = toW(pcx + side * (pw / 2 + 0.9), h.d / 2 + pd + 0.9);
+        plant('bananas', p.x, p.z, 0.5, { s: 1.25, yaw: h.yaw + (side > 0 ? 0 : Math.PI) });
+      }
+    }
+  });
+  // an avenue of palms up the boardwalk from the pier to the plaza: pairs, every 9 m, 2.4 m out
+  const walk = [[54.6, -72], [52.4, -82], [48.4, -92], [44.8, -100.5], [42.6, -107.2]];
+  let along = 0;
+  for (let i = 0; i < walk.length - 1; i++) {
+    const [ax, az] = walk[i];
+    const [bx, bz] = walk[i + 1];
+    const L = Math.hypot(bx - ax, bz - az);
+    const nx = -(bz - az) / L;
+    const nz = (bx - ax) / L;
+    for (; along < L; along += 9) {
+      const x = ax + ((bx - ax) * along) / L;
+      const z = az + ((bz - az) * along) / L;
+      for (const side of [-1, 1]) plant('palms', x + nx * side * 2.4, z + nz * side * 2.4, 0.5, { s: 0.85, H: 6 + rnd() * 0.8, la: rnd() * Math.PI * 2, l: 0.04 });
+    }
+    along -= L;
+  }
+  console.log(`village planting: ${cleared} scattered plants cleared round the houses, ${planted} planted`);
+}
+
 // per plant: x, y, z, scale, vertical scale, yaw, lean azimuth, lean, stem height
 const VEG_STRIDE = 9;
 const vegArrays = {};

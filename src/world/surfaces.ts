@@ -94,6 +94,7 @@ export class Surfaces {
       if (NOT_A_FLOOR.has(b.tag)) return;
       const toGround = b.solid && b.bottom <= this.terrain.heightAt(b.cx, b.cz) + 0.05;
       this.decks.push({ cx: b.cx, cz: b.cz, hx: b.hx, hz: b.hz, cos, sin, r: Math.hypot(b.hx, b.hz), top: b.top, tag: b.tag, toGround });
+      this.deckGrid = null;
     } else if (b.solid) {
       // Tidewater's local frame: local = R(rotY)·(world − centre), with
       // lx = dx·cos − dz·sin, lz = dx·sin + dz·cos; invert for the corners.
@@ -105,6 +106,41 @@ export class Surfaces {
       ].map(([lx, lz]) => [b.cx + lx * cos + lz * sin, b.cz - lx * sin + lz * cos]);
       this.walls.push({ pts, x: 0, z: 0, r: 0, sill: b.top, bottom: b.bottom, bx: b.cx, bz: b.cz, br: Math.hypot(b.hx, b.hz) });
     }
+  }
+
+  /** decks by 4 m cell (for deckOver: the grass asks thousands of times per re-grow) */
+  private deckGrid: Map<number, Deck[]> | null = null;
+
+  /**
+   * The highest floor (deck, path, porch, stair, room) over (x, z), its footprint grown by
+   * `margin` m — or −Infinity if there's none. The grass keeps out from under the raised paths.
+   */
+  deckOver(x: number, z: number, margin = 0): number {
+    const C = 4;
+    if (!this.deckGrid) {
+      const g = new Map<number, Deck[]>();
+      for (const d of this.decks) {
+        const r = d.r + 1;
+        for (let i = Math.floor((d.cx - r) / C); i <= Math.floor((d.cx + r) / C); i++) {
+          for (let j = Math.floor((d.cz - r) / C); j <= Math.floor((d.cz + r) / C); j++) {
+            const k = i * 100003 + j;
+            let list = g.get(k);
+            if (!list) g.set(k, (list = []));
+            list.push(d);
+          }
+        }
+      }
+      this.deckGrid = g;
+    }
+    let top = -Infinity;
+    for (const d of this.deckGrid.get(Math.floor(x / C) * 100003 + Math.floor(z / C)) ?? []) {
+      const dx = x - d.cx;
+      const dz = z - d.cz;
+      const lx = dx * d.cos - dz * d.sin;
+      const lz = dx * d.sin + dz * d.cos;
+      if (Math.abs(lx) <= d.hx + margin && Math.abs(lz) <= d.hz + margin && d.top > top) top = d.top;
+    }
+    return top;
   }
 
   /** The natural surface at (x, z): the ground, or the sea over it. */
