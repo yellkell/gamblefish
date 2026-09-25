@@ -22,6 +22,7 @@ import { TROPHY } from '../fishing/trophyFish.ts';
 import { font } from '../ui/fonts.ts';
 import { INK, roundRect } from '../ui/panel.ts';
 import { InteractivePanel, register } from '../ui/pointer.ts';
+import { drawThumb, thumbnail } from '../ui/thumbnail.ts';
 import { ball, box, cyl, glass, mat, type Kit } from './homeGoods.ts';
 import { shopCounter, type Interior } from './interiors.ts';
 import { mergeStatic } from './merge.ts';
@@ -155,6 +156,107 @@ function fortuneDecor(k: Kit, room: Interior, top: number, cz: number): Group {
   return g;
 }
 
+/* ── pictures for the board: each level of each track ────────────────── */
+
+/** a little fish: a silver body with a dark back, and a tail fin */
+function baitfish(k: Kit, colour: string, len: number): Group {
+  const g = new Group();
+  g.add(new Mesh(new SphereGeometry(len * 0.5, 12, 8).scale(1, 0.32, 0.18), mat(k, 'satin', colour)));
+  const back = new Mesh(new SphereGeometry(len * 0.47, 12, 8).scale(1, 0.18, 0.19), mat(k, 'satin', '#1e3a5a'));
+  back.position.y = len * 0.07;
+  g.add(back);
+  const tail = new Mesh(new ConeGeometry(len * 0.16, len * 0.28, 4).rotateZ(-Math.PI / 2).scale(1, 1, 0.2), mat(k, 'gloss', colour));
+  tail.position.x = -len * 0.58;
+  g.add(tail);
+  g.add(ball(k, '#101014', len * 0.04, len * 0.36, len * 0.04, len * 0.07, 'gloss'));
+  return g;
+}
+
+/** a squid: mantle, fins, tentacles */
+function squid(k: Kit, colour: string): Group {
+  const g = new Group();
+  g.add(new Mesh(new ConeGeometry(0.05, 0.22, 12).rotateZ(Math.PI / 2), mat(k, 'gloss', colour)).translateX(0.1));
+  g.add(new Mesh(new BoxGeometry(0.07, 0.004, 0.12), mat(k, 'gloss', colour)).translateX(0.19));
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2;
+    const t = cyl(k, colour, 0.006, 0.003, 0.16, -0.08, Math.cos(a) * 0.02, Math.sin(a) * 0.02, 5).rotateZ(Math.PI / 2 + Math.cos(a) * 0.15);
+    g.add(t);
+  }
+  return g;
+}
+
+const ROD_LOOK: [string, number][] = [['#8a6a48', 1.9], ['#2a3a2a', 2.1], ['#c23b2e', 2.4], ['#101a3a', 2.3]];
+const REEL_LOOK = ['#4a4e56', '#c8a040', '#101a3a', '#c23b2e'];
+const LINE_LOOK = ['#e8e0c0', '#f4f4f0', '#3fd66a', '#ff8a3a', '#3fa0ff'];
+
+/** the thing a level of a track is, for its picture on the board */
+function gearIcon(k: Kit, track: string, level: number): Group {
+  const g = new Group();
+  switch (track) {
+    case 'rod': {
+      const [c, L] = ROD_LOOK[Math.min(level, ROD_LOOK.length - 1)];
+      const r = rod(k, c, L);
+      const rl = reel(k, REEL_LOOK[Math.min(level, REEL_LOOK.length - 1)]);
+      rl.position.set(0, 0.34, 0.03);
+      rl.rotation.set(Math.PI, 0, 0);
+      r.add(rl);
+      r.rotation.z = -0.95;
+      g.add(r);
+      break;
+    }
+    case 'reel': {
+      const r = reel(k, REEL_LOOK[Math.min(level, REEL_LOOK.length - 1)]);
+      r.scale.setScalar(1 + level * 0.12);
+      r.rotation.y = 0.6;
+      g.add(r);
+      break;
+    }
+    case 'line': {
+      const c = LINE_LOOK[Math.min(level, LINE_LOOK.length - 1)];
+      const spool = new Group();
+      spool.add(cyl(k, '#2a2a2e', 0.075, 0.075, 0.012, 0, 0.044, 0, 20, 'gloss'));
+      spool.add(cyl(k, '#2a2a2e', 0.075, 0.075, 0.012, 0, -0.044, 0, 20, 'gloss'));
+      spool.add(cyl(k, c, 0.06 + level * 0.003, 0.06 + level * 0.003, 0.078, 0, 0, 0, 20, 'gloss'));
+      spool.rotation.x = 1.1;
+      g.add(spool);
+      break;
+    }
+    case 'bait': {
+      if (level === 0) {
+        // a frozen shrimp, curled
+        for (let i = 0; i < 6; i++) g.add(ball(k, '#f0a890', 0.035 - i * 0.004, Math.cos(i * 0.5) * 0.06, Math.sin(i * 0.5) * 0.06, 0, 'gloss'));
+      } else if (level === 1) {
+        for (let i = 0; i < 3; i++) g.add(baitfish(k, '#8a9cac', 0.2).translateY(i * 0.05).translateX(i * 0.03));
+      } else {
+        g.add(squid(k, level === 3 ? '#e8d0e8' : '#f0d8d0'));
+        if (level === 3) {
+          const glow = new Mesh(new BoxGeometry(0.012, 0.012, 0.1), new MeshBasicMaterial({ color: 0x5aff9a, toneMapped: false }));
+          glow.position.set(0.02, 0.06, 0);
+          glow.rotation.y = 1.2;
+          g.add(glow);
+        }
+      }
+      break;
+    }
+    case 'charm': {
+      if (level === 1) {
+        g.add(new Mesh(new TorusGeometry(0.08, 0.004, 4, 24), mat(k, 'satin', '#6a4a2a')));
+        g.add(new Mesh(new ConeGeometry(0.02, 0.07, 3).rotateX(Math.PI), mat(k, 'gloss', '#f4f0e0')).translateY(-0.1));
+      } else if (level === 2) {
+        g.add(ball(k, '#14141c', 0.05, 0, 0, 0, 'gloss'));
+        g.add(new Mesh(new TorusGeometry(0.052, 0.006, 6, 24).rotateX(Math.PI / 2), mat(k, 'gold', '')));
+        g.add(new Mesh(new TorusGeometry(0.012, 0.004, 6, 12), mat(k, 'gold', '')).translateY(0.062));
+      } else if (level === 3) {
+        g.add(box(k, '', 0.16, 0.03, 0.01, 0, 0.06, 0, 'gold'));
+        for (let i = 0; i < 9; i++) g.add(box(k, '', 0.006, 0.06, 0.006, -0.07 + i * 0.0175, 0.02, 0, 'gold'));
+        g.add(ball(k, '#e8f6ff', 0.01, 0, 0.078, 0.006, 'gloss'));
+      }
+      break;
+    }
+  }
+  return g;
+}
+
 const DECOR: Record<string, (k: Kit, room: Interior, top: number, cz: number) => Group> = { S3: tackleDecor, S2: baitDecor, N: fortuneDecor };
 
 /* ── the counter and the board ─────────────────────────────────────────── */
@@ -169,6 +271,8 @@ export class GearShopCounter {
   private readonly tracks: string[];
   private note = '';
   private noteColour: string = INK.dim;
+  /** a picture of every level of every track this shop sells */
+  private readonly pics = new Map<string, HTMLCanvasElement>();
 
   constructor(
     private readonly room: Interior,
@@ -182,6 +286,7 @@ export class GearShopCounter {
     display.add(box(kit, '#4a2e1a', hx * 2 + 0.08, 0.05, hz * 2 + 0.08, cx, top + 0.025, cz, 'gloss'));
     display.add(DECOR[room.name]?.(kit, room, top + 0.05, cz) ?? new Group());
     room.contents.add(mergeStatic(display));
+    for (const t of this.tracks) UPGRADES[t].levels.forEach((_, lv) => lv > 0 && this.pics.set(`${t}:${lv}`, thumbnail(kit.renderer, gearIcon(kit, t, lv))));
 
     this.board = new InteractivePanel([BW, BH], [1.6, (1.6 * BH) / BW]);
     this.board.mesh.position.set(cx, top + 1.05, -room.d / 2 + 0.02);
@@ -262,18 +367,21 @@ export class GearShopCounter {
       const owned = have >= level;
       const next = have + 1 === level;
       const maxed = !single && have >= UPGRADES[track].levels.length - 1;
+      const pic = Math.min(rowH - 12, 124);
+      drawThumb(c, this.pics.get(`${track}:${level}`), 36, y + 4, pic, !owned && !next && !maxed);
+      const tx = 36 + pic + 20;
       c.textAlign = 'left';
       c.font = font(600, 24);
       c.fillStyle = role?.colour ?? INK.dim;
-      if (!single) c.fillText(UPGRADES[track].name.toUpperCase(), 40, y + 22);
+      if (!single) c.fillText(UPGRADES[track].name.toUpperCase(), tx, y + 22);
       c.font = font(700, 38);
       c.fillStyle = owned || maxed ? INK.dim : next ? INK.hot : 'rgba(234, 244, 248, 0.4)';
-      c.fillText(lv.label, 40, y + (single ? 40 : 60), 640);
+      c.fillText(lv.label, tx, y + (single ? 44 : 60), 700 - tx);
       c.font = font(500, 24);
       c.fillStyle = INK.dim;
       const fish = opens(track, level);
       const blurb = [GEAR_BLURB[track]?.[level], fish.length ? `opens: ${fish.join(', ')}` : ''].filter(Boolean).join('  ·  ');
-      c.fillText(maxed ? 'the best there is' : blurb, 40, y + (single ? 76 : 94), 660);
+      c.fillText(maxed ? 'the best there is' : blurb, tx, y + (single ? 80 : 94), 700 - tx);
       c.textAlign = 'right';
       c.font = font(700, 40);
       c.fillStyle = owned || maxed ? INK.dim : INK.amber;

@@ -1,6 +1,7 @@
 /**
  * VILLA MAR: Coral's house (L). She's at home — Tidewater's Rocketbox character Marta
- * (public/models/characters) stands in for her, waving when you come in — among her own few
+ * (public/models/characters) stands in for her, lit like the room rather than by the sky
+ * outside (village/characters.ts), waving when you come in — among her own few
  * things: a sofa under the window, a rug, a sideboard, palms in pots. Everything you buy her at
  * the JEWELLER and the BOUTIQUE (village/homeGoods.ts) is delivered to its own spot here, and
  * the board over the sofa keeps count in hearts, with a word from her for each new one.
@@ -100,7 +101,7 @@ export class Villa {
 
     // Coral herself, by the sofa, facing the door
     const at = room.toWorld(-1.35, 0, -0.95);
-    this.coral = new Character(`${import.meta.env.BASE_URL}models/characters/marta.glb`, at.x, at.y, at.z, room.frame.yaw);
+    this.coral = new Character(`${import.meta.env.BASE_URL}models/characters/marta.glb`, at.x, at.y, at.z, room.frame.yaw, kit.renderer);
     room.group.parent?.add(this.coral.group);
 
     // the hearts, over the sofa

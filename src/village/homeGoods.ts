@@ -29,6 +29,7 @@ import {
   Group,
   Matrix4,
   Mesh,
+  MeshBasicMaterial,
   MeshStandardMaterial,
   PlaneGeometry,
   SphereGeometry,
@@ -40,12 +41,13 @@ import {
   type WebGLRenderer,
 } from 'three';
 import { uiDeny, winFanfare } from '../audio/sfx.ts';
-import { look } from '../casino/look.ts';
+import { casinoEnv, look } from '../casino/look.ts';
 import type { Props } from '../fishing/props.ts';
 import type { GameState } from '../fishing/tidewater.ts';
 import { font } from '../ui/fonts.ts';
 import { INK, roundRect } from '../ui/panel.ts';
 import { InteractivePanel, register } from '../ui/pointer.ts';
+import { drawThumb, thumbnail } from '../ui/thumbnail.ts';
 import type { BoxCollider } from '../world/data.ts';
 import { ROLES } from './roles.ts';
 import { HOME_SHOPS as HOME_SHOP_LIST, shopCounter, VILLA_SHOPS, type HomeShop, type Interior } from './interiors.ts';
@@ -104,26 +106,28 @@ export function ball(k: Kit, colour: string, r: number, x: number, y: number, z:
   return m;
 }
 
-function painted(w: number, h: number, paint: (g: CanvasRenderingContext2D, w: number, h: number) => void): MeshStandardMaterial {
+function canvasTexture(w: number, h: number, paint: (g: CanvasRenderingContext2D, w: number, h: number) => void): CanvasTexture {
   const c = document.createElement('canvas');
   c.width = w;
   c.height = h;
   paint(c.getContext('2d')!, w, h);
   const t = new CanvasTexture(c);
   t.colorSpace = SRGBColorSpace;
-  return new MeshStandardMaterial({ map: t, roughness: 0.8, metalness: 0 });
+  return t;
+}
+
+/** a painted surface, lit like the rest of the room's things (the studio environment) */
+function painted(k: Kit, w: number, h: number, paint: (g: CanvasRenderingContext2D, w: number, h: number) => void): MeshStandardMaterial {
+  return new MeshStandardMaterial({ map: canvasTexture(w, h, paint), roughness: 0.8, metalness: 0, envMap: casinoEnv(k.renderer), envMapIntensity: 0.8 });
 }
 
 /**
- * A rug's paint: lifted clear of the floor and pulled toward the eye in depth too, so it never
- * fights the room's floor (or Tidewater's under it) at a glance across the room.
+ * A rug's paint. Lit like the room's floor (its light is in its colours: unlit, so the sky
+ * outside doesn't turn it navy at night), lifted clear of the floor and pulled toward the eye
+ * in depth too, so it never fights the floor (or Tidewater's under it) at a glance.
  */
-export function rugPaint(w: number, h: number, paint: (g: CanvasRenderingContext2D, w: number, h: number) => void): MeshStandardMaterial {
-  const m = painted(w, h, paint);
-  m.polygonOffset = true;
-  m.polygonOffsetFactor = -4;
-  m.polygonOffsetUnits = -4;
-  return m;
+export function rugPaint(w: number, h: number, paint: (g: CanvasRenderingContext2D, w: number, h: number) => void): MeshBasicMaterial {
+  return new MeshBasicMaterial({ map: canvasTexture(w, h, paint), color: 0xe8e8e8, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 });
 }
 
 /** a glass dome, a jewellery case's glass: clear, catching the light */
@@ -407,7 +411,7 @@ export const GOODS: HomeItem[] = [
       g.add(cyl(k, DARK, 0.025, 0.03, 0.75, 0, 0.4, 0, 8));
       const sphere = new Mesh(
         new SphereGeometry(0.2, 24, 16),
-        painted(512, 256, (c, w, h) => {
+        painted(k, 512, 256, (c, w, h) => {
           c.fillStyle = '#c8b27a';
           c.fillRect(0, 0, w, h);
           c.fillStyle = '#7a8a4a';
@@ -443,7 +447,7 @@ export const GOODS: HomeItem[] = [
       g.add(box(k, '#c8a040', 0.86, 0.62, 0.04, 0, 0, 0.02, 'gloss'));
       const canvas = new Mesh(
         new PlaneGeometry(0.76, 0.52),
-        painted(512, 350, (c, w, h) => {
+        painted(k, 512, 350, (c, w, h) => {
           const sky = c.createLinearGradient(0, 0, 0, h * 0.55);
           sky.addColorStop(0, '#f28a5a');
           sky.addColorStop(1, '#ffd08a');
@@ -482,7 +486,9 @@ export const GOODS: HomeItem[] = [
     hangs: true,
     build(k) {
       const g = new Group();
-      g.add(cyl(k, '', 0.012, 0.012, 1.4, 0, 1.0, 0, 6, 'gold')); // the chain up to the ceiling
+      const chain = cyl(k, '', 0.012, 0.012, 1.4, 0, 1.0, 0, 6, 'gold'); // up to the ceiling
+      chain.userData.noThumb = true;
+      g.add(chain);
       g.add(cyl(k, '', 0.05, 0.03, 0.25, 0, 0.18, 0, 12, 'gold'));
       for (const [r, y, n] of [[0.55, 0, 10], [0.36, 0.2, 7]] as const) {
         g.add(new Mesh(new TorusGeometry(r, 0.018, 6, 32).rotateX(Math.PI / 2), mat(k, 'gold', '')).translateY(y));
@@ -733,6 +739,8 @@ export class HomeShopCounter {
   private noteColour: string = INK.dim;
   /** does this shop deliver to Coral's villa (not your shack)? */
   private villa = false;
+  /** a picture of each thing, for its row on the board */
+  private readonly pics = new Map<string, HTMLCanvasElement>();
 
   constructor(
     room: Interior,
@@ -767,6 +775,7 @@ export class HomeShopCounter {
     });
     room.contents.add(mergeStatic(display));
     this.villa = forVilla(shop);
+    for (const g of this.goods) this.pics.set(g.id, thumbnail(kit.renderer, g.build(kit)));
 
     // the board behind: what they sell, what it costs, BUY
     this.board = new InteractivePanel([BW, BH], [1.6, (1.6 * BH) / BW]);
@@ -831,13 +840,14 @@ export class HomeShopCounter {
     this.goods.forEach((g, i) => {
       const y = 146 + i * rowH;
       const owned = this.state.home.includes(g.id);
+      drawThumb(c, this.pics.get(g.id), 36, y + 4, rowH - 10);
       c.textAlign = 'left';
       c.font = font(700, 40);
       c.fillStyle = owned ? INK.dim : INK.hot;
-      c.fillText(g.name, 40, y + 44, 640);
+      c.fillText(g.name, 160, y + 44, 530);
       c.font = font(500, 26);
       c.fillStyle = INK.dim;
-      c.fillText(g.blurb, 40, y + 82, 640);
+      c.fillText(g.blurb, 160, y + 82, 530);
       c.textAlign = 'right';
       c.font = font(700, 40);
       c.fillStyle = owned ? INK.dim : INK.amber;

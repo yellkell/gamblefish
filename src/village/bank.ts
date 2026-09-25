@@ -44,7 +44,6 @@ const W = 1500;
 const H = 900;
 const BRASS = '#d8b060';
 /** on the board, every visit */
-const FOR_FUN = '(This game is for fun: microtransactions exist to support further development, rather than to further the gameplay experience.)';
 
 interface Btn {
   id: string;
@@ -327,7 +326,6 @@ export class IslandBank {
           btn('save-type', 'SAVE MY PURCHASES', 44, 720, 520, 80, BRASS, true, 34);
           btn('login', 'LOG IN (new headset)', 590, 720, 520, 80, '#3fd6c6', true, 34);
         }
-        text(FOR_FUN, 44, 836, 26, INK.hot, 'left', 600, W - 88);
         text('18+ only. Coins are for play in Gamble Fish: no cash value, never withdrawn or exchanged. Payments by Stripe.', 44, 872, 22, INK.dim, 'left', 500, W - 88);
         break;
       }
@@ -341,8 +339,6 @@ export class IslandBank {
           '   can never be withdrawn, sold or exchanged for money or prizes.',
           '• You pay on your phone through Stripe; this headset never sees your card.',
         ];
-        text('(This game is for fun: microtransactions exist to support further development,', W / 2, 600, 30, INK.dim, 'center', 500);
-        text('rather than to further the gameplay experience.)', W / 2, 638, 30, INK.dim, 'center', 500);
         lines.forEach((l, i) => text(l, 120, 400 + i * 50, 34, INK.hot));
         btn('agree', `I AGREE: PAY ${priceLabel(p.minor)}`, 120, 680, 760, 110, '#ffb000', true, 44);
         btn('back', 'BACK', 910, 680, 470, 110, 'rgba(255,255,255,0.3)', true, 40);

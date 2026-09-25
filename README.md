@@ -104,7 +104,8 @@ and the vendors.
 - **Coral's villa:** Villa Mar (L) is furnished the same way. The Jeweller sells a
   crystal chandelier, a vanity with a jewellery box, pearls on a velvet bust and a
   ring under a glass dome. The Boutique sells a velvet chaise longue, a gilded mirror,
-  silk drapes and a baby grand. Coral is at home (`src/village/villa.ts`), and a board
+  silk drapes and a baby grand. Coral is at home (`src/village/villa.ts`), lit like the
+  room around her rather than by the sky outside, and a board
   over her sofa counts your gifts in hearts, with a new line from her for each one.
 - **Fishing upgrades** (`src/fishing/gear.ts`, `src/village/gearShop.ts`), on
   Tidewater's own upgrade tracks:
@@ -113,6 +114,8 @@ and the vendors.
   - The **Bait Shop** sells bait. Better bait brings bites sooner.
   - The **Fortune Teller** sells luck charms, which make trophy fish bite more often.
   - Each board says which trophy fish a level opens up.
+  - Every shop board shows a picture of each thing it sells: the item's own 3D model,
+    photographed once at load (`src/ui/thumbnail.ts`).
 - **Trophy fish** (`src/fishing/trophyFish.ts`): roosterfish, opah, sailfish,
   swordfish (night only) and blue marlin. They bite only when you have the gear each one
   needs and the bobber is over deep enough water (8–13 m, out past the drop-off off the
