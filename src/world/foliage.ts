@@ -158,7 +158,7 @@ function paintGrass(c: CanvasRenderingContext2D, x0: number, y0: number, w: numb
     // near-white (the tuft is tinted by the ground's own colour), a little darker at the root
     const l = 78 + rnd() * 18;
     const g = c.createLinearGradient(0, base, 0, base - hgt);
-    g.addColorStop(0, `hsl(80, 10%, ${l * 0.72}%)`);
+    g.addColorStop(0, `hsl(80, 10%, ${l * 0.86}%)`);
     g.addColorStop(1, `hsl(${70 + rnd() * 20}, ${10 + rnd() * 15}%, ${l}%)`);
     c.fillStyle = g;
     c.beginPath();

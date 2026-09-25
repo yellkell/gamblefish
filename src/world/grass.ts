@@ -165,13 +165,14 @@ export class Grass {
         if (want < 0.05 || hash2(i, j, 3) > want) continue;
         const y = this.terrain.heightAt(x, z);
         const edge = 1 - far * far;
-        const tall = dune > meadow ? 0.7 + hash2(i, j, 4) * 0.4 : 0.28 + hash2(i, j, 4) * 0.26;
-        const s = (0.7 + hash2(i, j, 5) * 0.6) * edge;
+        const tall = dune > meadow ? 0.45 + hash2(i, j, 4) * 0.3 : 0.26 + hash2(i, j, 4) * 0.24;
+        // thin toward the edge by density; never shrink to specks
+        const s = (0.7 + hash2(i, j, 5) * 0.6) * (0.55 + 0.45 * edge);
         _q.setFromAxisAngle(_up, hash2(i, j, 6) * Math.PI * 2);
         m.setMatrixAt(n, _m.compose(_p.set(x, y - 0.03, z), _q, _s.set(s, s * tall, s)));
         // the ground's own colour, a shade lighter; beach grass paler and straw-toned
         this.ground(x, z, _c).multiplyScalar(0.95 + hash2(i, j, 7) * 0.3);
-        if (dune > meadow) _c.lerp(new Color(0.55, 0.52, 0.3), 0.45);
+        if (dune > meadow) _c.lerp(new Color(0.42, 0.44, 0.24), 0.25);
         m.setColorAt(n, _c);
         n++;
       }

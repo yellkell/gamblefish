@@ -25,6 +25,7 @@ import { createSky } from './world/sky.ts';
 import { Surfaces } from './world/surfaces.ts';
 import { buildTerrain } from './world/terrain.ts';
 import { Grass } from './world/grass.ts';
+import { VillageSigns, type BuildingFrame } from './village/signs.ts';
 import { Vegetation } from './world/vegetation.ts';
 import { buildVillage } from './world/village.ts';
 
@@ -92,6 +93,8 @@ World.create(container, {
   const sky = createSky(scene);
   scene.add(buildTerrain(grid));
   scene.add(buildVillage(villageBuf));
+  const signs = new VillageSigns((json as unknown as { buildings: BuildingFrame[] }).buildings ?? []);
+  scene.add(signs.group);
   const vegetation = new Vegetation(vegBuf);
   scene.add(vegetation.group);
   const grass = vegetation.grassMask ? new Grass(vegetation.atlas, vegetation.grassMask, vegetation.grassRes, new Heightfield(grid), grid) : null;
@@ -104,6 +107,7 @@ World.create(container, {
     ocean.update(t, camera);
     vegetation.update(t, camera);
     grass?.update(t, camera);
+    signs.update(1 / 72);
   };
 
   const heightfield = new Heightfield(grid);
