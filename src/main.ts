@@ -27,7 +27,10 @@ import { buildTerrain } from './world/terrain.ts';
 import { Grass } from './world/grass.ts';
 import { VillageSigns, type BuildingFrame } from './village/signs.ts';
 import { FishMarket } from './village/market.ts';
+import { RouletteTable } from './casino/RouletteTable.ts';
 import { PointerSystem } from './ui/pointer.ts';
+import { buildInteriors, interiorAt, openColliders } from './village/interiors.ts';
+import { Blink } from './fx/blink.ts';
 import { Vegetation } from './world/vegetation.ts';
 import { buildVillage } from './world/village.ts';
 
@@ -118,7 +121,11 @@ World.create(container, {
   };
 
   const heightfield = new Heightfield(grid);
-  const surfaces = new Surfaces(heightfield, json.colliders);
+  // the walk-in buildings: their bodies open up (walls, a door gap, a floor) and get a room inside
+  const frames = (json as unknown as { buildings: BuildingFrame[] }).buildings ?? [];
+  const interiors = buildInteriors(frames);
+  for (const i of interiors) scene.add(i.group);
+  const surfaces = new Surfaces(heightfield, { boxes: openColliders(json.colliders.boxes, frames), cylinders: json.colliders.cylinders });
   locomotion.surfaces = surfaces;
   world.registerSystem(TeleportSystem);
 
@@ -137,11 +144,26 @@ World.create(container, {
   backpackDeps.props = fishingDeps.props;
   world.registerSystem(BackpackSystem);
 
+  // stepping through a doorway: a blink hides the door you can't see open
+  const blink = new Blink(world.camera);
+  locomotion.onTeleport.push((from, to) => {
+    if (interiorAt(interiors, from.x, from.z) !== interiorAt(interiors, to.x, to.z)) blink.fire();
+  });
+
+  fishingDeps.indoors = () => interiorAt(interiors, world.player.position.x, world.player.position.z) !== null;
+
   // the village's people and counters
-  const frames = (json as unknown as { buildings: BuildingFrame[] }).buildings ?? [];
   const stall = frames.find((b) => b.name === 'stall');
   const market = stall ? new FishMarket(scene, stall, game) : null;
-  villageTick = (dt) => market?.update(dt, world.camera);
+  // the casinos' tables
+  const tables: RouletteTable[] = [];
+  const lure = interiors.find((i) => i.name === 'C');
+  if (lure) tables.push(new RouletteTable(lure, game, { chips: [1, 5, 25, 100], maxBet: 500, at: [0, -0.6] }));
+  villageTick = (dt) => {
+    market?.update(dt, world.camera);
+    for (const t of tables) t.update(dt, world.camera);
+    blink.update(dt);
+  };
 
   // Tidewater's start: the boardwalk up from the pier foot, looking down it.
   const s = json.layout.start;
@@ -149,7 +171,7 @@ World.create(container, {
   world.player.rotation.set(0, s.yaw, 0);
 
   // Dev hook: drive the rig without a headset (`__fish.move.to(x, z, yaw)`).
-  (window as unknown as { __fish: unknown }).__fish = { world, surfaces, move: teleportView, json, game, fishing: fishingView, vegetation, backpack: backpackView };
+  (window as unknown as { __fish: unknown }).__fish = { world, surfaces, move: teleportView, json, game, fishing: fishingView, vegetation, backpack: backpackView, interiors, tables };
 
   if (import.meta.env.DEV) void import('./dev/harness.ts').then((m) => m.installHarness(world));
 

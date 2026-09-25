@@ -109,6 +109,7 @@ export interface GameState {
   spend(amount: number): boolean;
   buy(key: string): unknown;
   onChange(fn: (s: GameState) => void): () => void;
+  emit(): void;
   load(): boolean;
   save(): void;
   reset(): void;

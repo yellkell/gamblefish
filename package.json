@@ -12,7 +12,8 @@
     "typecheck": "tsc --noEmit",
     "bake": "node tools/bake-world.mjs && node tools/bake-props.mjs",
     "check:teleport": "node tools/teleport-check.mjs",
-    "check:backpack": "node tools/backpack-check.mjs"
+    "check:backpack": "node tools/backpack-check.mjs",
+    "check:casino": "node tools/casino-check.mjs"
   },
   "dependencies": {
     "@iwsdk/core": "0.4.2",

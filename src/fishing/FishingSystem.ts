@@ -100,7 +100,9 @@ export const fishingDeps: {
   layout: WorldJson['layout'] | null;
   wallet: WristWallet | null;
   fx: WaterFx | null;
-} = { props: null, state: null, ocean: null, terrain: null, surfaces: null, layout: null, wallet: null, fx: null };
+  /** is the player standing inside a building? (the rod goes away indoors and comes back out) */
+  indoors: (() => boolean) | null;
+} = { props: null, state: null, ocean: null, terrain: null, surfaces: null, layout: null, wallet: null, fx: null, indoors: null };
 
 /** Dev window (`__fish.fishing`). */
 export const fishingView: { state?: () => RodState; bite?: () => unknown; fight?: () => unknown; system?: FishingSystem } = {};
@@ -264,6 +266,14 @@ export class FishingSystem extends createSystem({}) {
       else this.equip(h);
     }
 
+    // through a door the rod goes over your shoulder; back outside it's in your hand again
+    const inside = deps.indoors?.() ?? false;
+    if (inside && !this.wasInside && this.state !== 'landing' && this.state !== 'fighting') {
+      this.rodWasOut = this.state !== 'stowed';
+      if (this.rodWasOut) this.stow();
+    } else if (!inside && this.wasInside && this.rodWasOut && this.state === 'stowed') this.equip(this.hand);
+    this.wasInside = inside;
+
     // a teleport with the line out brings it in
     const moved = this.player.position.distanceTo(this.lastRig);
     this.lastRig.copy(this.player.position);
@@ -348,6 +358,9 @@ export class FishingSystem extends createSystem({}) {
     this.buzz(h, 0.3, 40);
     shot('bail_click', MIX.bail, { rate: 0.95 });
   }
+
+  private wasInside = false;
+  private rodWasOut = false;
 
   private stow(): void {
     this.reelInNow();

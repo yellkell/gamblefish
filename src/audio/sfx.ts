@@ -200,3 +200,59 @@ export function mergeChime(tier: number, chain = 1): void {
   clank(1800 + tier * 400, 0.06, 0.5, steps.length * 0.055);
   tone({ freq: 70, to: 45, type: 'sine', dur: 0.35, gain: 0.3 });
 }
+
+/** A clay chip set down on felt (or on another chip): a short, dull double knock. */
+export function chipClack(): void {
+  clank(2600 + Math.random() * 500, 0.035, 0.035);
+  clank(3300 + Math.random() * 400, 0.02, 0.03, 0.018);
+}
+
+/** The ball bouncing over a fret. */
+export function ballTick(strength = 1): void {
+  clank(3000 + Math.random() * 900, 0.03 * strength, 0.035);
+}
+
+/** A little fanfare for a win: bigger wins climb higher. */
+export function winFanfare(size: number): void {
+  const notes = size > 20 ? [523, 659, 784, 1047, 1319] : size > 3 ? [587, 740, 880, 1175] : [659, 880];
+  notes.forEach((f, i) => tone({ freq: f, type: 'triangle', dur: 0.28, gain: 0.12, delay: i * 0.09 }));
+  if (size > 20) clank(2400, 0.07, 0.8, notes.length * 0.09);
+}
+
+/**
+ * The roulette ball rolling round the track: bandpassed noise whose level and pitch follow the
+ * ball's speed (a hollow rumble that drops as it slows). `set(0)` silences it.
+ */
+export class RollBed {
+  private src: AudioBufferSourceNode | null = null;
+  private gain: GainNode | null = null;
+  private filter: BiquadFilterNode | null = null;
+
+  set(level: number, speed: number): void {
+    const c = ready();
+    if (!c) return;
+    if (level <= 0.001) {
+      if (this.gain) this.gain.gain.setTargetAtTime(0, c.currentTime, 0.05);
+      return;
+    }
+    if (!this.src) {
+      const len = c.sampleRate * 2;
+      const buf = c.createBuffer(1, len, c.sampleRate);
+      const d = buf.getChannelData(0);
+      for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (0.6 + 0.4 * Math.sin(i * 0.0021));
+      this.src = c.createBufferSource();
+      this.src.buffer = buf;
+      this.src.loop = true;
+      this.filter = c.createBiquadFilter();
+      this.filter.type = 'bandpass';
+      this.filter.Q.value = 3;
+      this.gain = c.createGain();
+      this.gain.gain.value = 0;
+      this.src.connect(this.filter).connect(this.gain).connect(c._master!);
+      this.src.start();
+    }
+    const t = c.currentTime;
+    this.gain!.gain.setTargetAtTime(level * 0.5, t, 0.08);
+    this.filter!.frequency.setTargetAtTime(500 + speed * 900, t, 0.1);
+  }
+}

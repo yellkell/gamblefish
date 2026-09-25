@@ -98,11 +98,24 @@ export function snapTurn(player: XROrigin, deltaYaw: number): void {
   player.position.z = hz - (-offX * sin + offZ * cos);
 }
 
-/** The island's walkable model; set once the world has loaded. */
-export const locomotion: { surfaces: Surfaces | null; enabled: boolean } = {
+/** The island's walkable model; set once the world has loaded. `onTeleport` hears every move
+ *  the system makes (head positions before and after), e.g. to blink through a doorway. */
+export const locomotion: {
+  surfaces: Surfaces | null;
+  enabled: boolean;
+  onTeleport: ((from: Vector3, to: Vector3) => void)[];
+} = {
   surfaces: null,
   enabled: true,
+  onTeleport: [],
 };
+
+/** Tell the listeners the head moved from `from` to wherever it is now. */
+function moved(player: XROrigin, from: Vector3): void {
+  if (!locomotion.onTeleport.length) return;
+  const to = player.head.getWorldPosition(new Vector3());
+  for (const fn of locomotion.onTeleport) fn(from, to);
+}
 
 /** Dev window on the moves that resolve without an arc — no thumbstick
  *  exists off-device, so this is the only way to exercise them headlessly.
@@ -258,8 +271,10 @@ export class TeleportSystem extends createSystem({}) {
     if (mag < TELEPORT.release) {
       // Stick sprung back — go (if the marker was on valid ground).
       if (this.valid) {
+        const from = this.player.head.getWorldPosition(new Vector3());
         teleportPlayer(this.player, this.landing.x, this.landing.z, this.landingYaw, this.landingArea?.y ?? 0);
         sfx.uiClick();
+        moved(this.player, from);
       }
       this.hide();
       return;
@@ -398,8 +413,10 @@ export class TeleportSystem extends createSystem({}) {
       const tolerance = from.kind === 'ground' && area.kind === 'ground' ? GROUND.groundLevelTolerance : 0.05;
       if (Math.abs(area.y - from.y) > tolerance) continue; // your level, or nothing
       if (surfaces.crossesWall(_head.x, _head.z, x, z, Math.max(from.y, area.y))) continue;
+      const was = this.player.head.getWorldPosition(new Vector3());
       teleportPlayer(this.player, x, z, Math.atan2(-_dir.x, -_dir.z), area.y);
       sfx.uiClick();
+      moved(this.player, was);
       return;
     }
   }

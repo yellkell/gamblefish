@@ -26,6 +26,7 @@ import { decodeTerrain } from '../src/world/data.ts';
 import { Heightfield } from '../src/world/heightfield.ts';
 import { Surfaces, simulateArc } from '../src/world/surfaces.ts';
 import { TELEPORT, TELEPORT_COLOURS } from '../src/locomotion/config.ts';
+import { openColliders } from '../src/village/interiors.ts';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const json = JSON.parse(readFileSync(resolve(ROOT, 'public/world/world.json'), 'utf8'));
@@ -133,6 +134,25 @@ for (let x = -140; x <= 160; x += 3) {
 check('there is dry, standable ground around the bay', dry > 50, `${dry} samples`);
 check('the swash line is refused', swash > 0, `${swash} samples`);
 check('slopes steeper than 38° are refused', steepSeen === 0 || steepRefused === steepSeen, `${steepRefused}/${steepSeen}`);
+
+console.log('\n7. walk-in buildings');
+{
+  const b = json.buildings.find((x) => x.name === 'C'); // The Lucky Lure
+  const open = new Surfaces(hf, { boxes: openColliders(json.colliders.boxes, json.buildings), cylinders: json.colliders.cylinders });
+  const fw = (lx, lz) => ({ x: b.x + lx * Math.cos(b.yaw) + lz * Math.sin(b.yaw), z: b.z - lx * Math.sin(b.yaw) + lz * Math.cos(b.yaw) });
+  const porch = fw(b.doorX, b.d / 2 + Math.max(1.0, b.porch * 0.6));
+  const inside = fw(b.doorX, 0);
+  const side = fw(b.w / 2 + 1.5, 0);
+  const floor = open.areaNear(inside.x, inside.z, b.floorY);
+  check('the Lucky Lure has a floor inside at its floor height', floor.kind === 'deck' && Math.abs(floor.y - b.floorY) < 0.1, `${floor.tag} @ ${f2(floor.y)} (house floor ${f2(b.floorY)})`);
+  const porchY = open.floorYAt(porch.x, porch.z, b.floorY);
+  check('porch → through the door → inside: not blocked', !open.crossesWall(porch.x, porch.z, inside.x, inside.z, Math.max(porchY, b.floorY)));
+  const sideY = open.floorYAt(side.x, side.z, b.floorY);
+  check('beside the house → through the side wall: blocked', open.crossesWall(side.x, side.z, inside.x, inside.z, Math.max(sideY, b.floorY)));
+  check('inside → back out through the door: not blocked', !open.crossesWall(inside.x, inside.z, porch.x, porch.z, Math.max(porchY, b.floorY)));
+  const closed = S.crossesWall(porch.x, porch.z, inside.x, inside.z, Math.max(porchY, b.floorY));
+  check('(before opening, the house was solid)', closed);
+}
 
 const failed = results.filter((r) => !r).length;
 console.log(`\n${results.length - failed}/${results.length} passed`);

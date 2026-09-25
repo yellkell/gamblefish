@@ -30,6 +30,7 @@ jobs:
       - run: npm run build # bake (Tidewater → public/world, public/props) + tsc + vite build
       - run: npm run check:teleport
       - run: npm run check:backpack
+      - run: npm run check:casino
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist

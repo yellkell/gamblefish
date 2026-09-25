@@ -19,6 +19,10 @@ import { coinImage } from './coinIcon.ts';
 import { font } from './fonts.ts';
 import { INK, Panel, roundRect } from './panel.ts';
 
+/** Set `next` before a money change that shouldn't ring the chime (a chip on the felt): the
+ *  counters still roll, silently. */
+export const walletQuiet = { next: false };
+
 /** The chime's pitch for money in (a sale) and money out (a purchase). */
 const CASH_IN_RATE = 1.12;
 const CASH_OUT_RATE = 0.84;
@@ -134,9 +138,11 @@ export class WristWallet {
     }
     state.onChange((s) => {
       if (s.money === this.target) return;
-      playCash(s.money > this.target ? CASH_IN_RATE : CASH_OUT_RATE);
+      const quiet = walletQuiet.next;
+      walletQuiet.next = false;
+      if (!quiet) playCash(s.money > this.target ? CASH_IN_RATE : CASH_OUT_RATE);
       this.target = s.money;
-      this.flash = 1;
+      this.flash = quiet ? 0.35 : 1;
       this.dirty = true;
     });
     preloadCash();
