@@ -70,7 +70,7 @@ export class IslandBank {
     renderer: WebGLRenderer,
   ) {
     room.contents.add(this.group);
-    // the lamp hangs over the customers' side, not in front of the board
+    // the ceiling light over the customers' side, not in front of the board
     room.lamp.position.z = 0.85;
     this.build(renderer);
     this.board.paint = () => this.paint();

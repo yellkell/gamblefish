@@ -6,11 +6,11 @@
  *    front door, and a walkable floor inside at the house's floor height. The ff2 teleport rules
  *    don't change — you arc through the doorway onto the floor like onto any deck.
  *  - THE ROOM: a lit shell just inside the exterior walls — plank floor (a patterned carpet in
- *    the casinos), painted walls, ceiling, a hanging lamp — so from inside you see the room, not
+ *    the casinos), painted walls, ceiling, a light flush on the ceiling — so from inside you see the room, not
  *    the backs of Tidewater's walls. Its front wall has the doorway, and through it you see the
  *    island. The light is baked into the room's own textures (a warm pool under the lamp, the
- *    walls glowing toward the middle and falling off to the corners): unlit materials, so a
- *    lamp costs nothing on the headset.
+ *    walls glowing toward the middle and falling off to the corners): unlit materials, so the
+ *    ceiling light costs nothing on the headset.
  *  - THE DOORWAY is real: the bake cuts it in the house's front wall and leaves the door out
  *    (tools/bake-world.mjs), and the room lines it through the wall. From outside you see into
  *    the lit room; from inside, out to the island.
@@ -20,8 +20,9 @@
  */
 
 import {
-  BoxGeometry,
   CanvasTexture,
+  CircleGeometry,
+  CylinderGeometry,
   DoubleSide,
   Group,
   Mesh,
@@ -59,7 +60,7 @@ export interface Interior {
   /** world-placed group at the building (rotated with it); `contents` is on its floor */
   group: Group;
   contents: Group;
-  /** the hanging lamp (a room's fittings may move it out of the way) */
+  /** the ceiling light (a room's fittings may move it out of the way) */
   lamp: Group;
   /** inner size (m): across the facade, front to back, floor to ceiling */
   w: number;
@@ -230,6 +231,24 @@ function surface(paint: (g: CanvasRenderingContext2D, w: number, h: number) => v
   return t;
 }
 
+/** A soft round glow, bright in the middle and gone at the edge (shared by every ceiling light). */
+let glowTex: CanvasTexture | null = null;
+function glowTexture(): CanvasTexture {
+  if (glowTex) return glowTex;
+  const c = document.createElement('canvas');
+  c.width = c.height = 64;
+  const g = c.getContext('2d')!;
+  const grad = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  grad.addColorStop(0, 'rgba(255,255,255,1)');
+  grad.addColorStop(0.35, 'rgba(255,255,255,0.55)');
+  grad.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 64, 64);
+  glowTex = new CanvasTexture(c);
+  glowTex.colorSpace = SRGBColorSpace;
+  return glowTex;
+}
+
 /** Casino carpet: a deep ground with a repeating gold lattice and little diamonds. */
 function carpet(g: CanvasRenderingContext2D, w: number, h: number, ground: string): void {
   g.fillStyle = ground;
@@ -363,20 +382,21 @@ export function buildInteriors(frames: BuildingFrame[]): Interior[] {
     const sill = new Mesh(new PlaneGeometry(OW, reveal).rotateX(-Math.PI / 2), new MeshBasicMaterial({ map: floorTex, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }));
     sill.position.set(dx, 0.012, d / 2 + reveal / 2);
     group.add(head, sill);
-    // a lamp: flex, shade, a warm bulb
+    // the light: flush on the ceiling — a frosted dome in a brass rim, a warm glow on the ceiling
+    // round it. (It used to hang on a flex, and its glow came down to eye height in the middle
+    // of every room.)
     const lamp = new Group();
-    const shade = new Mesh(new SphereGeometry(0.22, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2), new MeshLambertMaterial({ color: 0x2a2a2a, side: DoubleSide }));
-    const bulb = new Mesh(new SphereGeometry(0.07, 10, 8), new MeshBasicMaterial({ color: 0xfff0c8, toneMapped: false }));
-    // a soft halo round the bulb
-    const halo = new Mesh(new SphereGeometry(0.28, 12, 8), new MeshBasicMaterial({ color: 0xffd9a0, transparent: true, opacity: 0.12, depthWrite: false, toneMapped: false }));
-    halo.position.y = -0.1;
-    lamp.add(halo);
-    bulb.position.y = -0.04;
-    const flex = new Mesh(new BoxGeometry(0.01, 0.5, 0.01), new MeshLambertMaterial({ color: 0x111111 }));
-    flex.position.y = 0.25;
-    lamp.add(shade, bulb, flex);
-    // (in a home shop, toward the door: in the middle it hung in front of the price board)
-    lamp.position.set(0, h - 0.55, COUNTER_SHOPS.includes(b.name) ? d * 0.22 : 0);
+    const dome = new Mesh(new SphereGeometry(0.2, 16, 6, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2).scale(1, 0.35, 1), new MeshBasicMaterial({ color: 0xfff0c8, toneMapped: false }));
+    const rim = new Mesh(new CylinderGeometry(0.215, 0.215, 0.025, 20, 1, true), new MeshLambertMaterial({ color: 0xb08d4a, side: DoubleSide }));
+    rim.position.y = -0.012;
+    const glow = new Mesh(
+      new CircleGeometry(0.6, 24).rotateX(Math.PI / 2),
+      new MeshBasicMaterial({ map: glowTexture(), color: 0xffd9a0, transparent: true, opacity: 0.4, depthWrite: false, toneMapped: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }),
+    );
+    glow.position.y = -0.004;
+    lamp.add(glow, rim, dome);
+    // (in a counter shop, toward the door: in the middle it was in front of the price board)
+    lamp.position.set(0, h - 0.005, COUNTER_SHOPS.includes(b.name) ? d * 0.22 : 0);
     group.add(lamp);
 
     const c = Math.cos(b.yaw);

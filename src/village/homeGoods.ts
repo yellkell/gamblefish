@@ -318,7 +318,7 @@ export const GOODS: HomeItem[] = [
     name: 'Hanging fern',
     blurb: 'loves the sea air',
     price: 55,
-    at: [-0.95, 1.95, 1.25, 0],
+    at: [-0.95, 2.2, 1.25, 0], // up out of your eyeline: its leaves hang to about 1.85 m
     build(k) {
       const g = new Group();
       g.add(cyl(k, '#c8a878', 0.01, 0.01, 0.6, 0, 0.35, 0, 4)); // the cord

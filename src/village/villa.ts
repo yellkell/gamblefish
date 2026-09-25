@@ -99,8 +99,9 @@ export class Villa {
     // the gifts, each in its spot
     new Shack(room, state, kit, addCollider, VILLA_SHOPS);
 
-    // Coral herself, by the sofa, facing the door
-    const at = room.toWorld(-1.35, 0, -0.95);
+    // Coral herself, by the sofa, facing the door — on the bare boards, clear of the rug (its edge
+    // is at x −1.3): the rug is drawn over whatever's just above it, and her shoe sank into it
+    const at = room.toWorld(-1.8, 0, -0.95);
     this.coral = new Character(`${import.meta.env.BASE_URL}models/characters/marta.glb`, at.x, at.y, at.z, room.frame.yaw, kit.renderer);
     room.group.parent?.add(this.coral.group);
 
