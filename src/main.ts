@@ -11,10 +11,12 @@
 import { launchXR, SessionMode, World } from '@iwsdk/core';
 import type { Camera } from 'three';
 import { ensureAudio } from './audio/sfx.ts';
+import { BackpackSystem, backpackDeps, backpackView } from './backpack/BackpackSystem.ts';
 import { FishingSystem, fishingDeps, fishingView } from './fishing/FishingSystem.ts';
 import { loadProps } from './fishing/props.ts';
 import { createGameState } from './fishing/tidewater.ts';
 import { WristWallet } from './ui/wallet.ts';
+import { WaterFx } from './fx/water.ts';
 import { locomotion, teleportView, TeleportSystem } from './locomotion/TeleportSystem.ts';
 import { decodeTerrain, type WorldJson } from './world/data.ts';
 import { Heightfield } from './world/heightfield.ts';
@@ -22,6 +24,8 @@ import { Ocean } from './world/ocean.ts';
 import { createSky } from './world/sky.ts';
 import { Surfaces } from './world/surfaces.ts';
 import { buildTerrain } from './world/terrain.ts';
+import { Grass } from './world/grass.ts';
+import { Vegetation } from './world/vegetation.ts';
 import { buildVillage } from './world/village.ts';
 
 /** ff2's fixed-foveation level: sharp centre, cheap rim. */
@@ -70,15 +74,16 @@ World.create(container, {
   world.renderer.xr.setFoveation(FOVEATION);
 
   status.textContent = 'Loading the island…';
-  const progress = { terrain: 0, village: 0, props: 0 };
+  const progress = { terrain: 0, village: 0, props: 0, veg: 0 };
   const show = (): void => {
-    bar.style.width = `${Math.round(((progress.terrain + progress.village + progress.props) / 3) * 100)}%`;
+    bar.style.width = `${Math.round(((progress.terrain + progress.village + progress.props + progress.veg) / 4) * 100)}%`;
   };
-  const [json, terrainBuf, villageBuf, propsBuf] = await Promise.all([
+  const [json, terrainBuf, villageBuf, propsBuf, vegBuf] = await Promise.all([
     fetch(import.meta.env.BASE_URL + 'world/world.json').then((r) => r.json() as Promise<WorldJson>),
     fetchBuffer('world/terrain.bin', (f) => ((progress.terrain = f), show())),
     fetchBuffer('world/village.bin', (f) => ((progress.village = f), show())),
     fetchBuffer('props/props.bin', (f) => ((progress.props = f), show())),
+    fetchBuffer('world/veg.bin', (f) => ((progress.veg = f), show())),
   ]);
 
   status.textContent = 'Building…';
@@ -87,10 +92,19 @@ World.create(container, {
   const sky = createSky(scene);
   scene.add(buildTerrain(grid));
   scene.add(buildVillage(villageBuf));
+  const vegetation = new Vegetation(vegBuf);
+  scene.add(vegetation.group);
+  const grass = vegetation.grassMask ? new Grass(vegetation.atlas, vegetation.grassMask, vegetation.grassRes, new Heightfield(grid), grid) : null;
+  if (grass) scene.add(grass.mesh);
   const ocean = new Ocean(grid, sky.state);
   scene.add(ocean.mesh);
   const t0 = performance.now();
-  ocean.mesh.onBeforeRender = (_r, _s, camera: Camera) => ocean.update((performance.now() - t0) / 1000, camera);
+  ocean.mesh.onBeforeRender = (_r, _s, camera: Camera) => {
+    const t = (performance.now() - t0) / 1000;
+    ocean.update(t, camera);
+    vegetation.update(t, camera);
+    grass?.update(t, camera);
+  };
 
   const heightfield = new Heightfield(grid);
   const surfaces = new Surfaces(heightfield, json.colliders);
@@ -99,9 +113,15 @@ World.create(container, {
 
   // the fishing: Tidewater's rules and save, the rod in your hand, the wallet on your wrists
   const game = createGameState();
+  // the backpack's grid is the limit on what you carry now, not the hold's kilograms
+  game.fits = () => true;
+  const fx = new WaterFx((x, z) => ocean.heightAt(x, z));
+  scene.add(fx.group);
   const wallet = new WristWallet(game, [world.player.raySpaces.left, world.player.raySpaces.right]);
-  Object.assign(fishingDeps, { props: loadProps(propsBuf), state: game, ocean, terrain: heightfield, surfaces, layout: json.layout, wallet });
+  Object.assign(fishingDeps, { props: loadProps(propsBuf), state: game, ocean, terrain: heightfield, surfaces, layout: json.layout, wallet, fx });
   world.registerSystem(FishingSystem);
+  backpackDeps.state = game;
+  world.registerSystem(BackpackSystem);
 
   // Tidewater's start: the boardwalk up from the pier foot, looking down it.
   const s = json.layout.start;
@@ -109,7 +129,7 @@ World.create(container, {
   world.player.rotation.set(0, s.yaw, 0);
 
   // Dev hook: drive the rig without a headset (`__fish.move.to(x, z, yaw)`).
-  (window as unknown as { __fish: unknown }).__fish = { world, surfaces, move: teleportView, json, game, fishing: fishingView };
+  (window as unknown as { __fish: unknown }).__fish = { world, surfaces, move: teleportView, json, game, fishing: fishingView, vegetation, backpack: backpackView };
 
   if (import.meta.env.DEV) void import('./dev/harness.ts').then((m) => m.installHarness(world));
 

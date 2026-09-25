@@ -3,6 +3,15 @@
  * levels of detail, coloured from one baked albedo texture so every LOD
  * shares the same 2 m colour detail.
  *
+ * Two things keep it from reading as low-res:
+ *  - RELIEF PER PIXEL. The heightmap rides along as a (half-float) texture
+ *    and the fragment stage takes its normal from it, so a ridge or a gully
+ *    shades the same on a 16 m far chunk as on the 2 m one under your feet;
+ *    the coarse LODs only change the silhouette, never the lighting.
+ *  - DETAIL UP CLOSE. A tiling noise texture at three scales (grain, clumps,
+ *    patches) breaks the 2 m colour texels into grass tufts, dry spots and
+ *    soil, fading out with distance so it never shimmers.
+ *
  * Quest budget: the chunk under you is 8k triangles, the far ones 128, and
  * chunks that are nothing but deep sea floor aren't built at all — the
  * ocean shades them out anyway.
@@ -13,20 +22,25 @@ import {
   BufferGeometry,
   DataTexture,
   Group,
+  DataUtils,
+  HalfFloatType,
   LinearFilter,
   LinearMipmapLinearFilter,
   LOD,
   Mesh,
   MeshLambertMaterial,
+  RedFormat,
+  RepeatWrapping,
   RGBAFormat,
   SRGBColorSpace,
   UnsignedByteType,
+  Vector2,
 } from 'three';
 import type { TerrainGrid } from './data.ts';
 
 const CHUNK = 64; // cells per chunk edge at full detail (2 m cells → 128 m)
 const LEVELS = [1, 2, 4, 8]; // cell stride per LOD
-const LOD_DIST = [0, 170, 380, 800]; // metres, camera → chunk centre
+const LOD_DIST = [0, 240, 560, 1100]; // metres, camera → chunk centre
 const DEEP = -28; // a chunk that never rises above this isn't worth drawing
 
 export function buildTerrain(grid: TerrainGrid): Group {
@@ -43,6 +57,7 @@ export function buildTerrain(grid: TerrainGrid): Group {
   map.needsUpdate = true;
 
   const material = new MeshLambertMaterial({ map });
+  shadeTerrain(material, grid);
 
   const group = new Group();
   group.name = 'terrain';
@@ -155,4 +170,127 @@ function chunkGeometry(
   geo.setIndex(count > 65535 ? new BufferAttribute(new Uint32Array(idx), 1) : new BufferAttribute(new Uint16Array(idx), 1));
   geo.computeBoundingSphere();
   return geo;
+}
+
+/** Tileable value noise, three octaves in R (grain), G (clumps), B (patches). */
+function detailNoise(n = 256): DataTexture {
+  const lattice = (size: number, seed: number): Float32Array => {
+    const a = new Float32Array(size * size);
+    let x = seed;
+    for (let i = 0; i < a.length; i++) {
+      x = (x * 16807) % 2147483647;
+      a[i] = x / 2147483647;
+    }
+    return a;
+  };
+  const sample = (L: Float32Array, size: number, u: number, v: number): number => {
+    const x = u * size;
+    const y = v * size;
+    const i = Math.floor(x);
+    const j = Math.floor(y);
+    const fx = x - i;
+    const fy = y - j;
+    const sx = fx * fx * (3 - 2 * fx);
+    const sy = fy * fy * (3 - 2 * fy);
+    const at = (a: number, b: number): number => L[(((b % size) + size) % size) * size + (((a % size) + size) % size)];
+    return (at(i, j) * (1 - sx) + at(i + 1, j) * sx) * (1 - sy) + (at(i, j + 1) * (1 - sx) + at(i + 1, j + 1) * sx) * sy;
+  };
+  const oct: [Float32Array, number][] = [
+    [lattice(64, 11), 64],
+    [lattice(16, 23), 16],
+    [lattice(4, 37), 4],
+  ];
+  const d = new Uint8Array(n * n * 4);
+  for (let y = 0; y < n; y++) {
+    for (let x = 0; x < n; x++) {
+      const u = x / n;
+      const v = y / n;
+      const k = (y * n + x) * 4;
+      oct.forEach(([L, size], c) => {
+        const f = sample(L, size, u, v) * 0.65 + sample(L, size, u * 2, v * 2) * 0.35;
+        d[k + c] = Math.round(f * 255);
+      });
+      d[k + 3] = 255;
+    }
+  }
+  const t = new DataTexture(d, n, n, RGBAFormat, UnsignedByteType);
+  t.wrapS = t.wrapT = RepeatWrapping;
+  t.minFilter = LinearMipmapLinearFilter;
+  t.magFilter = LinearFilter;
+  t.generateMipmaps = true;
+  t.anisotropy = 4;
+  t.needsUpdate = true;
+  return t;
+}
+
+/** Per-pixel normals from the heightmap, and close-up detail over the colour map. */
+function shadeTerrain(material: MeshLambertMaterial, grid: TerrainGrid): void {
+  const { res, cell, origin, heights } = grid;
+  const half = new Uint16Array(heights.length);
+  for (let i = 0; i < heights.length; i++) half[i] = DataUtils.toHalfFloat(heights[i]);
+  const heightTex = new DataTexture(half, res, res, RedFormat, HalfFloatType);
+  heightTex.minFilter = LinearFilter;
+  heightTex.magFilter = LinearFilter;
+  heightTex.generateMipmaps = false;
+  heightTex.flipY = false;
+  heightTex.needsUpdate = true;
+  const uniforms = {
+    uHeight: { value: heightTex },
+    uDetail: { value: detailNoise() },
+    uTerrain: { value: new Vector2(origin, res * cell) },
+    uCell: { value: cell },
+  };
+  material.onBeforeCompile = (shader) => {
+    Object.assign(shader.uniforms, uniforms);
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vTerrainW;')
+      .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvTerrainW = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+    shader.fragmentShader = shader.fragmentShader
+      .replace(
+        '#include <common>',
+        `#include <common>
+        varying vec3 vTerrainW;
+        uniform sampler2D uHeight;
+        uniform sampler2D uDetail;
+        uniform vec2 uTerrain; // origin, size
+        uniform float uCell;`,
+      )
+      .replace(
+        '#include <map_fragment>',
+        `#include <map_fragment>
+        {
+          // close-up detail: grain, clumps and patches, faded out with distance (no shimmer)
+          float dist = length(vTerrainW - cameraPosition);
+          float nearK = 1.0 - smoothstep(25.0, 140.0, dist);
+          vec3 g = texture2D(uDetail, vTerrainW.xz / 1.7).rgb;
+          vec3 c = texture2D(uDetail, vTerrainW.xz / 9.0).rgb;
+          vec3 p = texture2D(uDetail, vTerrainW.xz / 57.0).rgb;
+          float grain = (g.r - 0.5) * 0.34 * nearK;
+          float clump = (c.g - 0.5) * 0.28 * (0.4 + 0.6 * nearK);
+          float patchK = smoothstep(0.55, 0.8, p.b);
+          vec3 col = diffuseColor.rgb;
+          // green ground gets dry, yellowed patches; everything gets grain and clumps
+          float greenness = clamp((col.g - max(col.r, col.b)) * 6.0, 0.0, 1.0);
+          col = mix(col, col * vec3(1.18, 1.05, 0.72), patchK * greenness * 0.55);
+          col *= 1.0 + grain + clump;
+          diffuseColor.rgb = col;
+        }`,
+      )
+      .replace(
+        '#include <normal_fragment_begin>',
+        `#include <normal_fragment_begin>
+        {
+          // relief from the heightmap itself: a 2 m gully shades on every LOD
+          vec2 huv = (vTerrainW.xz - uTerrain.x) / uTerrain.y;
+          float t = uCell / uTerrain.y;
+          float hL = texture2D(uHeight, huv - vec2(t, 0.0)).r;
+          float hR = texture2D(uHeight, huv + vec2(t, 0.0)).r;
+          float hD = texture2D(uHeight, huv - vec2(0.0, t)).r;
+          float hU = texture2D(uHeight, huv + vec2(0.0, t)).r;
+          vec3 nW = normalize(vec3(hL - hR, 2.0 * uCell, hD - hU));
+          normal = normalize((viewMatrix * vec4(nW, 0.0)).xyz);
+        }`,
+      );
+  };
+  material.customProgramCacheKey = () => 'terrain-relief';
 }

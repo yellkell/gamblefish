@@ -29,7 +29,11 @@ import { Euler, Matrix4, Mesh, Quaternion, Vector2, Vector3, type Object3D } fro
 import { Line2 } from 'three/examples/jsm/lines/Line2.js';
 import { LineGeometry } from 'three/examples/jsm/lines/LineGeometry.js';
 import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
-import { Bed, loadSamples, MIX, setListener, shot } from '../audio/samples.ts';
+import { Bed, loadSamples, MIX, setListener, shot, surfaceThrash, waterEntrySmall, waterExitFish, waterExitSmall } from '../audio/samples.ts';
+import { catchSting } from '../audio/sfx.ts';
+import type { WaterFx } from '../fx/water.ts';
+import { backpackView } from '../backpack/BackpackSystem.ts';
+import { fill, GRID_SIZES, type Piece } from '../backpack/logic.ts';
 import { pulseHand } from '../input/haptics.ts';
 import { locomotion } from '../locomotion/TeleportSystem.ts';
 import { INK } from '../ui/panel.ts';
@@ -94,7 +98,8 @@ export const fishingDeps: {
   surfaces: Surfaces | null;
   layout: WorldJson['layout'] | null;
   wallet: WristWallet | null;
-} = { props: null, state: null, ocean: null, terrain: null, surfaces: null, layout: null, wallet: null };
+  fx: WaterFx | null;
+} = { props: null, state: null, ocean: null, terrain: null, surfaces: null, layout: null, wallet: null, fx: null };
 
 /** Dev window (`__fish.fishing`). */
 export const fishingView: { state?: () => RodState; bite?: () => unknown; fight?: () => unknown; system?: FishingSystem } = {};
@@ -250,7 +255,7 @@ export class FishingSystem extends createSystem({}) {
 
     // rod button: out into this hand, away, or across to the other hand
     for (const h of ['left', 'right'] as const) {
-      if (!this.rodButton(h)) continue;
+      if (!this.rodButton(h) || backpackView.open) continue;
       if (this.state === 'landing') this.endLanding();
       else if (this.state === 'fighting') continue;
       else if (this.state === 'stowed') this.equip(h);
@@ -265,7 +270,8 @@ export class FishingSystem extends createSystem({}) {
       this.reelInNow();
     }
 
-    const held = this.trigger(this.hand);
+    // the backpack has the trigger while it's open
+    const held = backpackView.open ? 0 : this.trigger(this.hand);
     const down = !this.triggerHeld && held > FISHING.triggerOn;
     const up = this.triggerHeld && held < FISHING.triggerOff;
     if (down) this.triggerHeld = true;
@@ -320,6 +326,7 @@ export class FishingSystem extends createSystem({}) {
     this.updateGauge();
     this.toast.update(dt, this.camera);
     deps.wallet?.update(dt);
+    deps.fx?.update(dt);
 
     locomotion.enabled = this.state !== 'fighting' && this.state !== 'landing';
   }
@@ -366,6 +373,7 @@ export class FishingSystem extends createSystem({}) {
     this.bobVel.copy(_v);
     this.setState('flying');
     const power = Math.min(1, speed / vmax);
+    this.buzz(this.hand, 0.3 + power * 0.45, 45 + power * 40);
     shot('bail_click', MIX.bail + 2, { rate: 0.92 + Math.random() * 0.06 });
     if (power > 0.15) {
       shot('rod_swish', MIX.rodSwish - (1 - power) * 9, { rate: 0.9 + power * 0.2 + Math.random() * 0.06 });
@@ -418,7 +426,10 @@ export class FishingSystem extends createSystem({}) {
       return;
     }
     this.setState('floating');
-    shot('plop', MIX.plop, { rate: 0.95 + Math.random() * 0.15, at: this.bob, ref: 4 });
+    waterEntrySmall(this.bob);
+    fishingDeps.fx?.splash(this.bob, 0.22);
+    this.buzz(this.hand, 0.18, 35);
+    this.rippleT = 1.2;
     const h = this.habitat();
     this.bite = { phase: 'wait', t: biteDelay(h, FISHING.hour) };
     if (!Number.isFinite(this.bite.t)) this.toast.show('Too shallow — nothing lives here', 2, INK.dim);
@@ -454,18 +465,21 @@ export class FishingSystem extends createSystem({}) {
       b.t = 0.7 + Math.random() * 0.8;
       b.pulse = 0;
       this.buzz(this.hand, 0.22, 45);
+      fishingDeps.fx?.ripple(this.bob, 0.55, 0, 1.0);
     } else if (b.phase === 'nibble') {
       b.nibbles = (b.nibbles ?? 1) - 1;
       b.pulse = 0;
       if (b.nibbles > 0) {
         b.t = 0.6 + Math.random() * 1.0;
         this.buzz(this.hand, 0.22, 45);
+        fishingDeps.fx?.ripple(this.bob, 0.55, 0, 1.0);
       } else {
         b.phase = 'take';
         // big, strong fish give a (slightly) shorter window
         b.t = 2.4 - FISH[b.species!].fight * 0.5;
         this.hapticT = 0;
-        shot('fish_splash', MIX.fishSplash - 7, { rate: 1, at: this.bob, ref: 6 });
+        surfaceThrash(this.bob, 0.35);
+        fishingDeps.fx?.splash(this.bob, 0.35);
       }
     } else {
       this.toast.show('It took the bait and ran', 1.8, INK.dim);
@@ -505,7 +519,9 @@ export class FishingSystem extends createSystem({}) {
 
     // the fish thrashes at the surface as each run starts
     if (f.surge > 0.6 && !this.splashed) {
-      shot('fish_splash', MIX.fishSplash - (1 - Math.min(1, 0.3 + f.kg / 8)) * 10, { rate: 0.9 + Math.random() * 0.2, at: this.bob, ref: 6 });
+      const strength = Math.min(1, 0.3 + f.kg / 8);
+      surfaceThrash(this.bob, strength);
+      fishingDeps.fx?.splash(this.bob, 0.35 + strength * 0.6);
       this.buzz(this.hand, 1, 260);
     }
     this.splashed = f.surge > 0.6 ? true : f.surge < 0.3 ? false : this.splashed;
@@ -525,9 +541,13 @@ export class FishingSystem extends createSystem({}) {
     const name = FISH[f.species].name;
     if (st === 'caught') {
       const state = fishingDeps.state!;
-      state.addFish(f.species, f.kg, FISHING.hour);
-      shot('fish_splash', MIX.fishSplash, { at: this.bob, ref: 6 });
-      shot('fish_flop', MIX.fishFlop, { rate: 0.9 + Math.random() * 0.2 });
+      this.caughtId = state.addFish(f.species, f.kg, FISHING.hour)?.id ?? null;
+      waterExitFish(this.bob, f.kg);
+      fishingDeps.fx?.splash(this.bob, 0.7 + Math.min(1, f.kg / 8) * 0.6);
+      shot('fish_flop', MIX.fishFlop, { rate: 0.9 + Math.random() * 0.2, delay: 0.35 });
+      this.buzz(this.hand, 1, 240);
+      const info = state.lastCatch;
+      window.setTimeout(() => catchSting(!!info && (info.newSpecies || info.record)), 450);
       this.startLanding(f.species, f.kg);
     } else if (st === 'snapped') {
       this.toast.show('Snap! The line broke', 2.4, INK.danger);
@@ -540,6 +560,9 @@ export class FishingSystem extends createSystem({}) {
     }
   }
   private dragSpeed = 0;
+  /** the save entry of the fish on the line, handed to the backpack when the card goes */
+  private caughtId: number | null = null;
+  private rippleT = 0;
 
   /** Your other hand on the reel's handle: grip near it, then wind it round. */
   private updateCrankHand(dt: number): void {
@@ -621,6 +644,13 @@ export class FishingSystem extends createSystem({}) {
     L.u.uFreq.value = 2.2 + thrash * 10;
     L.u.uTime.value = time;
     if (Math.random() < dt * 0.5 * Math.exp(-this.t * 0.3)) shot('fish_flop', MIX.fishFlop - 4, { rate: 0.9 + Math.random() * 0.2 });
+    // water streams off it, then drips, then stops
+    const wet = 30 * Math.exp(-this.t * 0.55);
+    if (fishingDeps.fx && Math.random() < wet * dt * 4) {
+      _v.copy(L.mesh.position);
+      _v.y -= L.len * (0.1 + Math.random() * 0.4);
+      fishingDeps.fx.drip(_v, 1 + Math.floor(Math.random() * 2), L.len * 0.25);
+    }
 
     // the card beside it, toward your right, facing you
     _x.copy(_w).sub(this.bob).setY(0).normalize();
@@ -638,6 +668,12 @@ export class FishingSystem extends createSystem({}) {
     this.landing = null;
     this.card.hide();
     if (this.state === 'landing') this.reelInNow();
+    // into the backpack: it opens with the catch on your pointer
+    if (this.caughtId !== null) {
+      const id = this.caughtId;
+      this.caughtId = null;
+      backpackView.offer?.(id);
+    }
   }
 
   /* ── rod, bobber, line ───────────────────────────────────────────────── */
@@ -749,6 +785,11 @@ export class FishingSystem extends createSystem({}) {
         break;
       }
       case 'floating': {
+        this.rippleT -= dt;
+        if (this.rippleT <= 0) {
+          this.rippleT = 1.6 + Math.random() * 1.2;
+          fishingDeps.fx?.ripple(this.bob, 0.35, 0, 1.6);
+        }
         const bob = Math.sin(this.t * 2.1) * 0.008;
         const yT = ocean.heightAt(this.bob.x, this.bob.z) + 0.012 + bob - this.dip * 0.09;
         this.bob.y += (yT - this.bob.y) * (1 - Math.exp(-dt * 12));
@@ -766,6 +807,11 @@ export class FishingSystem extends createSystem({}) {
         const surf = Math.max(ocean.heightAt(this.bob.x, this.bob.z) + 0.02, ground);
         this.bob.y += (surf - this.bob.y) * (1 - Math.exp(-dt * 10));
         if (d < 2.2) {
+          if (this.onWater()) {
+            waterExitSmall(this.bob);
+            fishingDeps.fx?.splash(this.bob, 0.1, false);
+            fishingDeps.fx?.ripple(this.bob, 0.7, 0, 1.2);
+          }
           this.setState('idle');
           this.bobVel.set(0, 0, 0);
         }
@@ -893,14 +939,16 @@ export class FishingSystem extends createSystem({}) {
         colour = INK.amber;
         break;
     }
+    const size = GRID_SIZES[Math.max(0, Math.min(GRID_SIZES.length - 1, s.upgrades.hold | 0))];
+    const bag = fill(s.inventory as unknown as Piece[], size[0], size[1]);
     this.gauge.paint({
       label,
       labelColour: colour,
       tension: f ? f.tension : null,
       band: f ? f.band : [0.3, 0.85],
       lineOut: this.lineOut,
-      holdKg: s.holdKg,
-      holdMax: s.stats.holdKg,
+      holdKg: bag.used,
+      holdMax: bag.total,
     });
   }
 }

@@ -158,3 +158,39 @@ export function uiClick(): void {
   clank(1500, 0.05, 0.04);
   tone({ freq: 110, type: 'sine', dur: 0.04, gain: 0.08 });
 }
+
+/**
+ * The catch: a bright rising chime over a low thump, in the kit's struck-steel voice — longer
+ * and higher when it's a new species or a record.
+ */
+export function catchSting(special = false): void {
+  const notes = special ? [523, 659, 784, 1047] : [587, 784, 988];
+  notes.forEach((f, i) => {
+    tone({ freq: f, type: 'sine', dur: special ? 0.7 : 0.5, gain: 0.16, delay: i * 0.085 });
+    tone({ freq: f * 2, type: 'triangle', dur: 0.25, gain: 0.04, delay: i * 0.085 });
+  });
+  tone({ freq: 90, to: 55, type: 'sine', dur: 0.3, gain: 0.3 });
+  if (special) clank(2200, 0.05, 0.6, notes.length * 0.085);
+}
+
+/** A refusal: a short low double knock (the fish won't go there). */
+export function uiDeny(): void {
+  tone({ freq: 150, to: 110, type: 'triangle', dur: 0.08, gain: 0.12 });
+  tone({ freq: 130, to: 95, type: 'triangle', dur: 0.1, gain: 0.12, delay: 0.09 });
+}
+
+/**
+ * Two fish fusing: a bright arpeggio that climbs with the new tier, and climbs again for each
+ * link of a chain merge — plus a plate-steel ring on the way up.
+ */
+export function mergeChime(tier: number, chain = 1): void {
+  const root = 440 * Math.pow(2, (tier * 4 + (chain - 1) * 2) / 12);
+  const steps = [0, 4, 7, 12, tier >= 2 ? 16 : 12];
+  steps.forEach((st, i) => {
+    const f = root * Math.pow(2, st / 12);
+    tone({ freq: f, type: 'sine', dur: 0.45, gain: 0.13, delay: i * 0.055 });
+    tone({ freq: f * 2, type: 'triangle', dur: 0.2, gain: 0.035, delay: i * 0.055 });
+  });
+  clank(1800 + tier * 400, 0.06, 0.5, steps.length * 0.055);
+  tone({ freq: 70, to: 45, type: 'sine', dur: 0.35, gain: 0.3 });
+}

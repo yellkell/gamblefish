@@ -29,18 +29,29 @@ const TW = resolve(ROOT, 'vendor/tidewater/src');
 const OUT = resolve(ROOT, 'public/world');
 const url = (p) => 'file:///' + resolve(TW, p).replace(/\\/g, '/');
 
-// The fish drying racks upload their instance table to a GPU storage buffer
-// at build time. No device here — and we don't ship those props — so the
-// upload becomes a no-op. (It is the ONLY GPU call on the village path.)
+// No GPU here. Two things on the build path reach for one anyway, and both
+// have a CPU copy of what we actually read: the fish drying racks upload an
+// instance table (we don't ship those props), and the vegetation scatter's
+// shared detail texture uploads itself before placement samples its CPU
+// data. A do-nothing device (and WebGPU's enum globals) lets both through.
 const { StorageBuffer } = await import(url('engine/gpu/Texture.js'));
 StorageBuffer.prototype.write = function () {
   return this;
 };
+const { GPU } = await import(url('engine/gpu/GPU.js'));
+const nop = new Proxy(function () {}, { get: (t, p) => (p === 'then' ? undefined : p === Symbol.toPrimitive ? () => 0 : nop), apply: () => nop, construct: () => nop });
+for (const k of Object.keys(GPU)) if (GPU[k] === null) GPU[k] = nop;
+for (const k of ['GPUTextureUsage', 'GPUBufferUsage', 'GPUShaderStage', 'GPUMapMode', 'GPUColorWrite']) globalThis[k] = new Proxy({}, { get: () => 1 });
 
 const { TerrainData } = await import(url('world/TerrainData.js'));
 const { Colliders } = await import(url('world/Colliders.js'));
 const { Village } = await import(url('world/Village.js'));
 const { WORLD } = await import(url('world/WorldLayout.js'));
+const { VegSite, scatterVegetation, buildGrassMask } = await import(url('world/vegetation/Scatter.js'));
+const { Rocks } = await import(url('world/Rocks.js'));
+const { buildRockGeometry, ROCK_STYLES } = await import(url('world/terrain/RockGeometry.js'));
+const { mulberry32 } = await import(url('util/Noise.js'));
+const { TREE_H, TREE_LOBES, SHRUB_H, SHRUB_LOBES } = await import(url('world/vegetation/PlantGeometry.js'));
 const E = await import(url('engine/index.js'));
 
 const t0 = performance.now();
@@ -49,7 +60,21 @@ const colliders = new Colliders();
 // Village flattens its building pads INTO the terrain, so it must be built
 // before the heights are sampled.
 const village = new Village({ scene: new E.Scene(), terrain, colliders });
-console.log(`generated island + village in ${((performance.now() - t0) / 1000).toFixed(1)} s`);
+// Where everything grows (Tidewater's own land-cover scatter, clear of the houses and paths)
+const vegSite = new VegSite(terrain, { footprints: village.getFootprints() });
+const veg = scatterVegetation(vegSite);
+// where the grass grows (Tidewater's grass mask: R dune grass, G meadow, B sea oats, A creeper)
+const grassMask = buildGrassMask(vegSite);
+// Rocks: Tidewater's placement; the emergent ones join the collision world as it does
+const rocks = Rocks.prototype._place.call({ terrainData: terrain, village }, mulberry32(4242));
+for (const r of rocks) {
+  const top = r.y + r.size * r.sy * 0.8;
+  if (r.size < 0.9 || top < -0.3) continue;
+  colliders.addCylinder(r.x, r.z, r.size * 0.75, r.y - r.size * 0.5, top, { tag: 'rock' });
+}
+// Every building's frame (the village keeps only centres; the layout has the rest)
+const specs = Village.prototype._layout.call(village, { next: () => 0.5, range: (a, b) => (a + b) / 2, chance: () => false, pick: (a) => a[0] });
+console.log(`generated island + village + ${rocks.length} rocks + vegetation in ${((performance.now() - t0) / 1000).toFixed(1)} s`);
 
 /* ── terrain: 2 m grid over the whole domain ───────────────────────────── */
 
@@ -253,6 +278,55 @@ const cylinders = colliders.cylinders.map((c) => ({
   top: r3(c.yMax),
 }));
 
+/* ── vegetation + rocks ─────────────────────────────────────────────────── */
+
+// per plant: x, y, z, scale, vertical scale, yaw, lean azimuth, lean, stem height
+const VEG_STRIDE = 9;
+const vegArrays = {};
+const vegCounts = {};
+for (const [type, list] of Object.entries(veg)) {
+  if (!Array.isArray(list) || !list.length) continue;
+  const a = new Float32Array(list.length * VEG_STRIDE);
+  list.forEach((p, i) => {
+    a.set([p.x, p.y, p.z, p.s ?? 1, p.sy ?? 1, p.yaw ?? 0, p.la ?? 0, p.l ?? 0, p.H ?? 0], i * VEG_STRIDE);
+  });
+  vegArrays[`veg.${type}`] = a;
+  vegCounts[type] = list.length;
+}
+const rockMat = new Float32Array(rocks.length * 16);
+const rockStyle = new Uint8Array(rocks.length);
+rocks.forEach((r, i) => {
+  rockMat.set(r.matrix.elements, i * 16);
+  rockStyle[i] = r.style;
+});
+vegArrays['rocks.matrix'] = rockMat;
+vegArrays['rocks.style'] = rockStyle;
+ROCK_STYLES.forEach((st, si) => {
+  for (const [lod, subdiv] of [['near', 3], ['far', 1]]) {
+    const g = buildRockGeometry(si, 17 + si * 31, subdiv);
+    vegArrays[`rock.${si}.${lod}.position`] = new Float32Array(g.attributes.position.array);
+    const nrm = g.attributes.normal.array;
+    const n8 = new Int8Array(nrm.length);
+    for (let i = 0; i < nrm.length; i++) n8[i] = Math.round(nrm[i] * 127);
+    vegArrays[`rock.${si}.${lod}.normal`] = n8;
+    const idx = g.index.array;
+    vegArrays[`rock.${si}.${lod}.index`] = g.attributes.position.count > 65535 ? new Uint32Array(idx) : new Uint16Array(idx);
+  }
+});
+
+const buildings = [
+  ...specs.houses.map((h) => {
+    const b = village.buildings.find((v) => v.name === h.name);
+    return { name: h.name, kind: h.foundation === 'stilts' ? 'hut' : 'house', x: h.x, z: h.z, yaw: h.yaw, w: h.w, d: h.d, stories: h.stories ?? 1, doorX: h.doorX ?? 0, porch: h.porch?.depth ?? 0, floorY: r3(b.floorY), roofTop: r3(b.roofTop) };
+  }),
+  ...specs.sheds.map((h) => {
+    const b = village.buildings.find((v) => v.name === h.name);
+    return { name: h.name, kind: 'shed', x: h.x, z: h.z, yaw: h.yaw, w: 2.4, d: 2.0, stories: 1, doorX: 0, porch: 0, floorY: r3(b.floorY), roofTop: r3(b.roofTop) };
+  }),
+  { name: 'boathouse', kind: 'boathouse', x: specs.boathouse.x, z: specs.boathouse.z, yaw: specs.boathouse.yaw, w: 7, d: 8, stories: 1, doorX: 0, porch: 0, floorY: r3(terrain.heightAt(specs.boathouse.x, specs.boathouse.z)), roofTop: 0 },
+  { name: 'stall', kind: 'stall', x: specs.stall.x, z: specs.stall.z, yaw: specs.stall.yaw, w: 4, d: 2.5, stories: 1, doorX: 0, porch: 0, floorY: r3(terrain.heightAt(specs.stall.x, specs.stall.z)), roofTop: 0 },
+];
+
 /* ── write ─────────────────────────────────────────────────────────────── */
 
 mkdirSync(OUT, { recursive: true });
@@ -260,6 +334,29 @@ const terrainBin = pack({ heights, albedo, depth });
 writeFileSync(resolve(OUT, 'terrain.bin'), terrainBin);
 const villageBin = pack(villageArrays);
 writeFileSync(resolve(OUT, 'village.bin'), villageBin);
+// grass: two channels at 2 m — beach grass (dune + sea oats) and meadow
+{
+  const n = grassMask.res * grassMask.res;
+  const g = new Uint8Array(n * 2);
+  for (let i = 0; i < n; i++) {
+    g[i * 2] = Math.max(grassMask.data[i * 4], grassMask.data[i * 4 + 2]);
+    g[i * 2 + 1] = grassMask.data[i * 4 + 1];
+  }
+  vegArrays['grass.mask'] = g;
+}
+const vegBin = pack(vegArrays, {
+  grassRes: grassMask.res,
+  stride: VEG_STRIDE,
+  counts: vegCounts,
+  rocks: rocks.length,
+  rockStyles: ROCK_STYLES.length,
+  // Tidewater's crown shapes: [x, y, z, radius] per lobe at nominal size
+  treeH: TREE_H,
+  treeLobes: TREE_LOBES,
+  shrubH: SHRUB_H,
+  shrubLobes: SHRUB_LOBES,
+});
+writeFileSync(resolve(OUT, 'veg.bin'), vegBin);
 
 const world = {
   source: 'vendor/tidewater (MIT) — see vendor/tidewater/VERSION',
@@ -282,11 +379,13 @@ const world = {
   },
   village: villageMeta,
   footprints: village.getFootprints(),
+  buildings,
   colliders: { boxes, cylinders },
 };
 writeFileSync(resolve(OUT, 'world.json'), JSON.stringify(world));
 
 const mb = (b) => (b.length / 1048576).toFixed(2) + ' MB';
-console.log(`terrain.bin ${mb(terrainBin)}  village.bin ${mb(villageBin)}`);
+console.log(`terrain.bin ${mb(terrainBin)}  village.bin ${mb(villageBin)}  veg.bin ${mb(vegBin)}`);
+console.log('vegetation', vegCounts, 'rocks', rocks.length);
 console.log('village', villageMeta);
 console.log(`colliders: ${boxes.length} boxes (${boxes.filter((b) => b.walkable).length} walkable), ${cylinders.length} cylinders`);

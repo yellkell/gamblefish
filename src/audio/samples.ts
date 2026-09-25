@@ -31,9 +31,11 @@ export const MIX = {
   fishSplash: -24,
   fishFlop: -32,
   coins: -30,
+  splash: -30,
+  emerge: -38,
 } as const;
 
-const NAMES = ['reel_wind', 'reel_drag', 'line_strain', 'rod_swish', 'bail_click', 'line_out', 'plop', 'line_snap', 'fish_splash', 'fish_flop', 'coins'];
+const NAMES = ['reel_wind', 'reel_drag', 'line_strain', 'rod_swish', 'bail_click', 'line_out', 'plop', 'line_snap', 'fish_splash', 'fish_flop', 'coins', 'splash', 'emerge', 'big_splash'];
 
 const dB = (x: number): number => Math.pow(10, x / 20);
 
@@ -68,7 +70,7 @@ export interface Pos {
  * Play one slice of a sprite. `level` is the target loudness (dB, Tidewater's MIX scale);
  * `at` places it in the world (with `ref` metres as the distance the level is measured at).
  */
-export function shot(name: string, level: number, opts: { rate?: number; at?: Pos; ref?: number; slice?: number } = {}): void {
+export function shot(name: string, level: number, opts: { rate?: number; at?: Pos; ref?: number; slice?: number; delay?: number } = {}): void {
   const ctx = audioContext();
   const out = sfxOut();
   const buf = buffers.get(name);
@@ -97,7 +99,43 @@ export function shot(name: string, level: number, opts: { rate?: number; at?: Po
   } else {
     g.connect(out);
   }
-  src.start(ctx.currentTime, start, dur);
+  src.start(ctx.currentTime + (opts.delay ?? 0), start, dur);
+}
+
+/*
+ * Water, layered. A single recorded plop is a quarter of a second; real water goes on — the
+ * impact, the body of water it throws, the drops falling back and the surface settling. These
+ * stack Tidewater's recordings (plop, splash bodies, the streaming / dripping "emerge") with
+ * offsets and pitch set by the size of the thing, all placed at the spot in 3-D.
+ */
+
+/** Something small (the bobber) dropping into the sea: plop, a small body of water, the settle. */
+export function waterEntrySmall(at: Pos): void {
+  shot('plop', MIX.plop, { rate: 0.95 + Math.random() * 0.15, at, ref: 4 });
+  shot('splash', MIX.splash - 16, { rate: 1.55 + Math.random() * 0.2, at, ref: 4 });
+  shot('emerge', MIX.emerge - 8, { rate: 1.35 + Math.random() * 0.15, at, ref: 4, delay: 0.18 });
+}
+
+/** Something small lifted out (the bobber reeled in): a tiny splash and water running off. */
+export function waterExitSmall(at: Pos): void {
+  shot('emerge', MIX.emerge - 4, { rate: 1.5 + Math.random() * 0.15, at, ref: 3 });
+  shot('splash', MIX.splash - 22, { rate: 1.8, at, ref: 3 });
+}
+
+/** A fish hauled out of the water: the thrash, the body of water, water streaming off, drips. */
+export function waterExitFish(at: Pos, kg: number): void {
+  const big = Math.min(1, kg / 8);
+  shot('fish_splash', MIX.fishSplash + 2 * big, { rate: 0.95 - big * 0.12 + Math.random() * 0.08, at, ref: 6, slice: 3 + Math.floor(Math.random() * 2) });
+  shot('splash', MIX.splash - 6 + big * 4, { rate: 1.15 - big * 0.25, at, ref: 6 });
+  if (big > 0.5) shot('big_splash', MIX.splash - 12 + big * 6, { rate: 1.1, at, ref: 8, slice: 1 });
+  shot('emerge', MIX.emerge + 4, { rate: 1.0 - big * 0.1, at, ref: 4, delay: 0.25 });
+  shot('emerge', MIX.emerge - 4, { rate: 0.85, at, ref: 4, delay: 0.9 });
+}
+
+/** A hooked fish breaking the surface on a run. */
+export function surfaceThrash(at: Pos, strength: number): void {
+  shot('fish_splash', MIX.fishSplash - (1 - strength) * 10, { rate: 0.9 + Math.random() * 0.2, at, ref: 6 });
+  shot('splash', MIX.splash - 14 + strength * 6, { rate: 1.3 - strength * 0.2, at, ref: 6, delay: 0.05 });
 }
 
 /** A looping bed whose level and pitch follow a value every frame (the reel's wind, the drag). */

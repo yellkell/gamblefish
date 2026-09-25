@@ -73,7 +73,7 @@ export class RodGauge {
     c.font = font(500, 20);
     c.fillStyle = INK.dim;
     c.textAlign = 'left';
-    c.fillText(`cooler ${s.holdKg.toFixed(1)} / ${s.holdMax} kg`, 14, 106);
+    c.fillText(`backpack ${s.holdKg} / ${s.holdMax} cells  ·  A to open`, 14, 106, 228);
     this.panel.commit();
   }
 }
@@ -169,7 +169,7 @@ export class CatchCard {
     c.textAlign = 'left';
     c.font = font(600, 24);
     c.fillStyle = info.kept ? INK.dim : INK.danger;
-    c.fillText(info.kept ? 'into the cooler' : 'cooler full — let it go', 28, y + 146);
+    c.fillText('into your backpack…', 28, y + 146);
     if (info.record && info.prevBestKg > 0) {
       c.textAlign = 'right';
       c.fillStyle = INK.dim;
