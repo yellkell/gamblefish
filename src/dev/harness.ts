@@ -5,6 +5,8 @@
  *   await __harness.enter()                 start the emulated VR session
  *   __harness.stand(55, 34, Math.PI)        put the rig somewhere (x, z, yaw)
  *   __harness.aim(pitchDeg, yawDeg)         pin the right controller's pose
+ *   __harness.aimHand(hand, pitch, yaw, pos) pin either controller (pos in the headset's space)
+ *   await __harness.press(hand, 'a-button')  press and release a button
  *   await __harness.cast()                  trigger down, swing forward, let go mid-swing
  *   await __harness.until('fighting')       wait for a state (strikes on the take by itself)
  *   await __harness.fight()                 reel with the trigger, easing off on the red
@@ -36,12 +38,14 @@ const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms
 
 export function installHarness(world: World): void {
   const dev = (window as unknown as { IWER_DEVICE?: { controllers: Record<string, IwerController> } }).IWER_DEVICE;
-  const pose: { q: number[] | null; p: number[] | null } = { q: null, p: null };
-  let pinned = false;
+  const poses: Record<string, { q: number[] | null; p: number[] | null }> = { left: { q: null, p: null }, right: { q: null, p: null } };
+  const pinned: Record<string, boolean> = {};
 
-  const pin = (): IwerController | null => {
-    const R = dev?.controllers.right;
-    if (!R || pinned) return R ?? null;
+  /** Take a controller's pose away from the devui panel, which rewrites it every frame. */
+  const pin = (hand: 'left' | 'right' = 'right'): IwerController | null => {
+    const R = dev?.controllers[hand];
+    if (!R || pinned[hand]) return R ?? null;
+    const pose = poses[hand];
     const qp = Object.getPrototypeOf(R.quaternion) as IwerVec;
     const pp = Object.getPrototypeOf(R.position) as IwerVec;
     R.quaternion.set = function (this: IwerVec, ...a: number[]) {
@@ -56,19 +60,22 @@ export function installHarness(world: World): void {
     R.position.copy = function (this: IwerVec, o: unknown) {
       return pose.p ? pp.set.call(this, ...pose.p) : pp.copy.call(this, o);
     };
-    pinned = true;
+    pinned[hand] = true;
     return R;
   };
 
-  const aim = (pitchDeg: number, yawDeg = 0, pos: [number, number, number] = [0.25, 1.5, -0.4]): void => {
-    const R = pin();
+  /** Pose a controller: pitch / yaw (degrees) and position in the headset's local space. */
+  const aimHand = (hand: 'left' | 'right', pitchDeg: number, yawDeg = 0, pos?: [number, number, number]): void => {
+    const R = pin(hand);
     if (!R) return;
     const q = new Quaternion().setFromEuler(new Euler((pitchDeg * Math.PI) / 180, (yawDeg * Math.PI) / 180, 0, 'YXZ'));
+    const pose = poses[hand];
     pose.q = [q.x, q.y, q.z, q.w];
-    pose.p = pos;
+    pose.p = pos ?? [hand === 'right' ? 0.25 : -0.25, 1.5, -0.4];
     Object.getPrototypeOf(R.quaternion).set.call(R.quaternion, ...pose.q);
-    Object.getPrototypeOf(R.position).set.call(R.position, ...pos);
+    Object.getPrototypeOf(R.position).set.call(R.position, ...pose.p);
   };
+  const aim = (pitchDeg: number, yawDeg = 0, pos: [number, number, number] = [0.25, 1.5, -0.4]): void => aimHand('right', pitchDeg, yawDeg, pos);
 
   const state = (): string => fishingView.state?.() ?? '?';
 
@@ -130,6 +137,15 @@ export function installHarness(world: World): void {
   (window as unknown as { __harness: unknown }).__harness = {
     state,
     snapshot,
+    aimHand,
+    /** press and release a button on a controller ('trigger', 'squeeze', 'a-button', ...) */
+    async press(hand: 'left' | 'right', id: string, ms = 90): Promise<void> {
+      const R = pin(hand);
+      R?.updateButtonValue(id, 1);
+      await sleep(ms);
+      R?.updateButtonValue(id, 0);
+      await sleep(60);
+    },
     hide(): void {
       document.getElementById('harness-snap')?.remove();
     },

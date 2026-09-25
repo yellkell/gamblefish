@@ -125,6 +125,7 @@ World.create(container, {
   Object.assign(fishingDeps, { props: loadProps(propsBuf), state: game, ocean, terrain: heightfield, surfaces, layout: json.layout, wallet, fx });
   world.registerSystem(FishingSystem);
   backpackDeps.state = game;
+  backpackDeps.props = fishingDeps.props;
   world.registerSystem(BackpackSystem);
 
   // Tidewater's start: the boardwalk up from the pier foot, looking down it.

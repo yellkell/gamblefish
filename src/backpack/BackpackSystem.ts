@@ -1,118 +1,203 @@
 /**
- * BackpackSystem — the backpack menu: Tarkov's grid, Backpack Battles' merges, in VR.
+ * BackpackSystem — the backpack as a physical tackle-box tray, Tarkov's grid with Backpack
+ * Battles' merges, played with your hands.
  *
- *  A (or X)        open / close the backpack. It also opens by itself when you land a fish,
- *                  with the catch already on your pointer.
- *  TRIGGER         point at a fish to pick it up; point at the grid to put it down.
- *  STICK / GRIP    flick the stick sideways (or squeeze grip) to turn the fish you're holding.
- *  RELEASE         drop a fish on RELEASE to let it go back to the sea.
+ *  THE SEQUENCE
+ *   1. Catch it: the fish hangs off your rod tip (FishingSystem).
+ *   2. Take it: grip it with your free hand — it unhooks and flops in your hand, full size.
+ *   3. Press A (or X): the tray comes up in front of you at waist height, tipped toward you, the
+ *      fish you already carry lying in their slots.
+ *   4. Bring the fish over the tray: it shrinks to slot size in your hand and a GHOST fish hovers
+ *      in the slot it would drop into — green if it fits, red if it doesn't. Flick the stick to
+ *      turn it a quarter.
+ *   5. If it would touch a fish of the same kind and tier, MERGE badges hover over both and the
+ *      partner glows: dropping it there fuses them into the next tier.
+ *   6. Click (trigger) to place: it drops into the slot with a wet slap and a thunk. A merge pulls
+ *      the partner in, flashes, and pops the new fish out in its tier's colours with the gain
+ *      rising off it.
  *
- * Put a fish down touching another of the same species and tier and they fuse into one of the
- * next tier (backpack/logic.ts): a flash, the gain rising off it, a chime and a kick in your
- * hand — and if the new fish now touches a match of ITS tier, that one goes too.
+ *  Also: grip a fish in the tray to lift it back into your hand; drop one in the RELEASE net at
+ *  the tray's side to let it go. Close the tray (A) with a fish in hand and you keep holding it.
  *
- * Closing with a new catch still in hand puts it in the first spot it fits; if nothing fits, it
- * goes back to the sea. While the backpack is open, teleport and the rod are paused.
- *
- * The pieces live on the save's own fish entries (GameState.inventory), so layout, tiers and
- * merges persist, and the fish market sells them at their tier's value.
+ * The rules (shapes, fitting, merging, value) are backpack/logic.ts; the pieces live on the
+ * save's own fish entries, so layout and tiers persist and the market sells at tier value.
  */
 
 import { createSystem, InputComponent } from '@iwsdk/core';
-import { BufferGeometry, Float32BufferAttribute, Line, LineBasicMaterial, Mesh, MeshBasicMaterial, Plane, Ray, SphereGeometry, Vector3 } from 'three';
-import { SKIN, SPECIES } from '../../vendor/tidewater/src/world/fish/FishSpecies.js';
-import { shot, MIX } from '../audio/samples.ts';
+import {
+  AdditiveBlending,
+  CanvasTexture,
+  Euler,
+  Group,
+  Matrix4,
+  Mesh,
+  MeshBasicMaterial,
+  MeshPhongMaterial,
+  Quaternion,
+  RingGeometry,
+  SRGBColorSpace,
+  Sprite,
+  SpriteMaterial,
+  Vector3,
+  type Object3D,
+} from 'three';
+import { MIX, shot } from '../audio/samples.ts';
 import { mergeChime, uiClick, uiDeny } from '../audio/sfx.ts';
+import type { FishUniforms, Props } from '../fishing/props.ts';
 import { FISH, type GameState } from '../fishing/tidewater.ts';
 import { pulseHand } from '../input/haptics.ts';
 import { locomotion } from '../locomotion/TeleportSystem.ts';
 import { font } from '../ui/fonts.ts';
 import { INK, Panel, roundRect } from '../ui/panel.ts';
-import {
-  bounds,
-  cellsOf,
-  findSpot,
-  fill,
-  fits,
-  GRID_SIZES,
-  merge,
-  MERGE_BONUS,
-  mergePartners,
-  rotate,
-  shapeFor,
-  TIERS,
-  type Piece,
-  type Rot,
-} from './logic.ts';
+import { bounds, cellsOf, fill, findSpot, fits, GRID_SIZES, merge, MERGE_BONUS, mergePartners, rotate, shapeFor, TIERS, type Piece, type Rot } from './logic.ts';
+import { CELL, Tray } from './tray.ts';
 
 type Hand = 'left' | 'right';
 
-const PX = [1024, 640] as const;
-const M = [0.96, 0.6] as const;
-const GRID_BOX = { x: 24, y: 70, w: 640, h: 540 };
-const RELEASE_BOX = { x: 690, y: 520, w: 310, h: 90 };
-const TIER_COLOUR = ['#9aa4ac', '#dfe8f0', '#ffb000', '#ff5fd2'];
-
-const SK = SKIN as unknown as Record<string, { back: number; flank: number; belly: number; fin: number; edge: number }>;
-const SP = SPECIES as unknown as Record<string, { iris: number }>;
-const hex = (n: number): string => `#${n.toString(16).padStart(6, '0')}`;
+const TIER_HEX = [0x9aa4ac, 0xdfeaf4, 0xffb000, 0xff5fd2];
+const TIER_CSS = ['#9aa4ac', '#dfeaf4', '#ffb000', '#ff5fd2'];
+/** how the fish itself wears its tier (Phong emissive) */
+const TIER_GLOW = [0x000000, 0x1c2228, 0x3a2400, 0x2a0a22];
 
 /** What the backpack needs from the game; set by main before registration. */
-export const backpackDeps: { state: GameState | null; onRelease: ((species: string) => void) | null } = { state: null, onRelease: null };
+export const backpackDeps: { state: GameState | null; props: Props | null } = { state: null, props: null };
 
-/** Anyone can ask: is the backpack open (fishing / teleport pause while it is). */
+/** Anyone can ask: is the tray open / is a fish in hand (fishing and teleport defer to it). */
 export const backpackView: {
   open: boolean;
-  offer?: (id: number) => void;
+  holding: boolean;
+  /** which hand has a fish in it (fishing keeps that hand off the reel) */
+  hand: Hand | null;
+  /** a caught fish goes into `hand` (its save entry id) */
+  takeInHand?: (id: number, hand: Hand) => void;
   toggle?: () => void;
   system?: BackpackSystem;
-} = { open: false };
+} = { open: false, holding: false, hand: null };
 
-interface Fx {
-  kind: 'pop' | 'flash' | 'gain';
-  id: number;
-  t: number;
-  text?: string;
-  x?: number;
-  y?: number;
+interface FishModel {
+  mesh: Mesh;
+  u: FishUniforms;
+  mat: MeshPhongMaterial;
 }
 
-const _o = new Vector3();
-const _d = new Vector3();
-const _hit = new Vector3();
-const _n = new Vector3();
+interface Anim {
+  kind: 'drop' | 'fuse' | 'pop' | 'gain' | 'burst';
+  t: number;
+  dur: number;
+  obj: Object3D;
+  from?: Matrix4;
+  to?: Matrix4;
+  done?: () => void;
+}
+
+const _v = new Vector3();
+const _w = new Vector3();
+const _q = new Quaternion();
+const _s = new Vector3();
+const _m = new Matrix4();
+const _loc = new Vector3();
+const UP = new Vector3(0, 1, 0);
+/** the fish in your palm: snout along where you point, lying on its side */
+const IN_PALM = new Quaternion().setFromEuler(new Euler(0, Math.PI, Math.PI / 2));
+const HEADS = [new Vector3(1, 0, 0), new Vector3(0, 0, 1), new Vector3(-1, 0, 0), new Vector3(0, 0, -1)];
+
+function label(text: string, colour: string, px = 44, w = 512): Sprite {
+  const c = document.createElement('canvas');
+  c.width = w;
+  c.height = 128;
+  const g = c.getContext('2d')!;
+  g.font = font(700, px);
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  g.lineWidth = 10;
+  g.strokeStyle = 'rgba(0,0,0,0.75)';
+  g.strokeText(text, w / 2, 64, w - 20);
+  g.shadowColor = colour;
+  g.shadowBlur = 18;
+  g.fillStyle = colour;
+  g.fillText(text, w / 2, 64, w - 20);
+  const t = new CanvasTexture(c);
+  t.colorSpace = SRGBColorSpace;
+  const s = new Sprite(new SpriteMaterial({ map: t, transparent: true, depthTest: false, toneMapped: false }));
+  s.scale.set(0.24 * (w / 512), 0.06, 1);
+  s.renderOrder = 30;
+  return s;
+}
+
+/** The merge badge: a ring with two arrows meeting, in the new tier's colour, and its name. */
+function mergeBadge(tier: number): Sprite {
+  const c = document.createElement('canvas');
+  c.width = 256;
+  c.height = 256;
+  const g = c.getContext('2d')!;
+  const col = TIER_CSS[tier];
+  g.shadowColor = col;
+  g.shadowBlur = 20;
+  g.strokeStyle = col;
+  g.fillStyle = col;
+  g.lineWidth = 12;
+  g.beginPath();
+  g.arc(128, 104, 62, 0, Math.PI * 2);
+  g.stroke();
+  for (const s of [-1, 1]) {
+    g.beginPath();
+    g.moveTo(128 + s * 44, 104);
+    g.lineTo(128 + s * 14, 104);
+    g.stroke();
+    g.beginPath();
+    g.moveTo(128 + s * 6, 104);
+    g.lineTo(128 + s * 24, 84);
+    g.lineTo(128 + s * 24, 124);
+    g.closePath();
+    g.fill();
+  }
+  g.font = font(700, 40);
+  g.textAlign = 'center';
+  g.fillText(`→ ${TIERS[tier].toUpperCase()}`, 128, 218);
+  const t = new CanvasTexture(c);
+  t.colorSpace = SRGBColorSpace;
+  const s = new Sprite(new SpriteMaterial({ map: t, transparent: true, depthTest: false, toneMapped: false }));
+  s.scale.set(0.11, 0.11, 1);
+  s.renderOrder = 31;
+  return s;
+}
 
 export class BackpackSystem extends createSystem({}) {
-  private panel!: Panel;
-  private cursor!: Mesh;
-  private beam!: Line;
-  private hand: Hand = 'right';
-  private hover: { px: number; py: number } | null = null;
-  private held: { piece: Piece; fresh: boolean; from: { x: number; y: number; rot: Rot } | null } | null = null;
-  private fx: Fx[] = [];
-  private dirty = true;
-  private triggerDown: Record<Hand, boolean> = { left: false, right: false };
-  private stickArmed: Record<Hand, boolean> = { left: true, right: true };
-  private gripDown: Record<Hand, boolean> = { left: false, right: false };
-  private readonly plane = new Plane();
-  private readonly ray = new Ray();
+  private tray!: Tray;
+  private info!: Panel;
+  private readonly models = new Map<number, FishModel>(); // the fish lying in the tray
+  private ghost: Mesh | null = null;
+  private ghostMat!: MeshBasicMaterial;
+  private badges: Sprite[] = [];
+  private readonly badgePool = new Map<number, Sprite[]>();
+  private releaseNet!: Group;
+
+  /** the fish in your hand */
+  private held: { piece: Piece; model: FishModel; hand: Hand; from: { x: number; y: number; rot: Rot } | null } | null = null;
+  private anims: Anim[] = [];
+  private readonly trig: Record<Hand, boolean> = { left: false, right: false };
+  private readonly grip: Record<Hand, boolean> = { left: false, right: false };
+  private readonly stick: Record<Hand, boolean> = { left: true, right: true };
+  private overTray = 0; // 0 in hand .. 1 over the tray (smoothed)
+  private drop: { x: number; y: number; ok: boolean; partners: Piece[] } | null = null;
+  private infoKey = '';
 
   init(): void {
-    this.panel = new Panel([PX[0], PX[1]], [M[0], M[1]]);
-    this.panel.mesh.visible = false;
-    this.panel.mesh.renderOrder = 20;
-    this.scene.add(this.panel.mesh);
-    this.cursor = new Mesh(new SphereGeometry(0.008, 10, 8), new MeshBasicMaterial({ color: 0xffb000, depthTest: false }));
-    this.cursor.renderOrder = 21;
-    this.cursor.visible = false;
-    this.scene.add(this.cursor);
-    const g = new BufferGeometry();
-    g.setAttribute('position', new Float32BufferAttribute([0, 0, 0, 0, 0, -1], 3));
-    this.beam = new Line(g, new LineBasicMaterial({ color: 0xffb000, transparent: true, opacity: 0.6, depthTest: false }));
-    this.beam.frustumCulled = false;
-    this.beam.visible = false;
-    this.scene.add(this.beam);
-    backpackView.offer = (id) => this.offer(id);
+    this.tray = new Tray();
+    this.scene.add(this.tray.group);
+    this.info = new Panel([640, 200], [0.44, 0.1375]);
+    this.tray.group.add(this.info.mesh);
+    this.ghostMat = new MeshBasicMaterial({ color: 0x3fd66a, transparent: true, opacity: 0.4, depthWrite: false, toneMapped: false });
+    // the release net: a rope ring over dark water, off the tray's right side
+    this.releaseNet = new Group();
+    const ring = new Mesh(new RingGeometry(0.075, 0.09, 28).rotateX(-Math.PI / 2), new MeshBasicMaterial({ color: 0x3fd6c6, transparent: true, opacity: 0.8, toneMapped: false }));
+    const bottom = new Mesh(new RingGeometry(0.0, 0.075, 28).rotateX(-Math.PI / 2), new MeshBasicMaterial({ color: 0x0a3d40, transparent: true, opacity: 0.6 }));
+    bottom.position.y = -0.005;
+    const tag = label('RELEASE', '#3fd6c6', 40, 384);
+    tag.position.set(0, 0.06, 0.1);
+    this.releaseNet.add(ring, bottom, tag);
+    this.tray.group.add(this.releaseNet);
+    backpackView.takeInHand = (id, hand) => this.takeInHand(id, hand);
     backpackView.toggle = () => (backpackView.open ? this.close() : this.open());
     backpackView.system = this;
     this.adoptOld();
@@ -123,17 +208,15 @@ export class BackpackSystem extends createSystem({}) {
   private get state(): GameState {
     return backpackDeps.state!;
   }
-
   private get grid(): [number, number] {
     const lv = Math.max(0, Math.min(GRID_SIZES.length - 1, this.state.upgrades.hold | 0));
     return GRID_SIZES[lv];
   }
-
   private get pieces(): Piece[] {
     return this.state.inventory as unknown as Piece[];
   }
 
-  /** Fish saved before the backpack existed get a shape and a spot (or, if full, stay loose). */
+  /** Fish saved before the backpack existed (or left loose) get a shape and a spot. */
   private adoptOld(): void {
     const [C, R] = this.grid;
     let changed = false;
@@ -154,84 +237,149 @@ export class BackpackSystem extends createSystem({}) {
     if (changed) this.state.save();
   }
 
+  /* ── fish models ─────────────────────────────────────────────────────── */
+
+  private makeModel(p: Piece): FishModel {
+    const { mesh, uniforms } = backpackDeps.props!.makeFish(p.species);
+    const mat = mesh.material as MeshPhongMaterial;
+    mat.emissive.setHex(TIER_GLOW[p.tier] ?? 0);
+    uniforms.uSwim.value = 0.012;
+    uniforms.uFreq.value = 0.8;
+    return { mesh, u: uniforms, mat };
+  }
+
+  /** Where a piece's fish lies in the tray: on its side, along its length, head per rotation. */
+  private slotMatrix(p: Pick<Piece, 'x' | 'y' | 'rot' | 'shape'>, out: Matrix4, lift = 0.012): Matrix4 {
+    const cells = cellsOf(p);
+    const minC = Math.min(...cells.map((k) => k[0]));
+    const maxC = Math.max(...cells.map((k) => k[0]));
+    const minR = Math.min(...cells.map((k) => k[1]));
+    const maxR = Math.max(...cells.map((k) => k[1]));
+    const centre = this.tray.cellCentre((minC + maxC) / 2, (minR + maxR) / 2, _w, lift);
+    const b0 = bounds(rotate(p.shape, 0));
+    const len = b0.w * CELL * 0.96;
+    // a two-row piece: the fish drawn a little deeper, so it fills its footprint
+    const deep = b0.h > 1 ? 1.4 : 1;
+    // rot 0: head toward +X (the tail cell is column 0); each quarter turn swings it toward +Z
+    const H = HEADS[p.rot];
+    const Y = new Vector3().crossVectors(H, UP);
+    // fish-local x (its side) faces up out of the tray, y (its back) across, z (its snout) along H
+    out.makeBasis(UP, Y, H).scale(_s.set(len, len * deep, len)).setPosition(centre.x, centre.y + len * 0.05, centre.z);
+    return out;
+  }
+
+  private syncModels(): void {
+    const placed = new Set<number>();
+    for (const p of this.pieces) {
+      if (!p.placed) continue;
+      placed.add(p.id);
+      let m = this.models.get(p.id);
+      if (!m) {
+        m = this.makeModel(p);
+        this.models.set(p.id, m);
+        this.tray.group.add(m.mesh);
+      }
+      const mesh = m.mesh;
+      if (!this.anims.some((a) => a.obj === mesh)) {
+        mesh.matrixAutoUpdate = false;
+        this.slotMatrix(p, mesh.matrix);
+        mesh.matrixWorldNeedsUpdate = true;
+      }
+    }
+    for (const [id, m] of this.models) {
+      if (placed.has(id) || this.anims.some((a) => a.obj === m.mesh)) continue;
+      this.tray.group.remove(m.mesh);
+      m.mat.dispose();
+      this.models.delete(id);
+    }
+  }
+
+  /* ── in hand ─────────────────────────────────────────────────────────── */
+
+  private takeInHand(id: number, hand: Hand): void {
+    const p = this.pieces.find((f) => f.id === id);
+    if (!p) return;
+    p.shape = shapeFor(p.species, p.cm, p.kg);
+    p.tier = p.tier ?? 0;
+    const b = bounds(p.shape);
+    p.rot = b.w >= b.h ? 0 : 1;
+    p.placed = false;
+    this.state.save();
+    const model = this.makeModel(p);
+    model.u.uSwim.value = 0.09;
+    model.u.uFreq.value = 2.6;
+    this.scene.add(model.mesh);
+    this.held = { piece: p, model, hand, from: null };
+    this.buzz(hand, 0.7, 90);
+    shot('fish_flop', MIX.fishFlop, { rate: 0.95 + Math.random() * 0.1 });
+  }
+
+  /** Pose the held fish: full size across your palm, shrinking to slot size over the tray. */
+  private poseHeld(time: number): void {
+    const h = this.held;
+    if (!h) return;
+    this.player.gripSpaces[h.hand].getWorldPosition(_v);
+    this.player.raySpaces[h.hand].getWorldQuaternion(_q);
+    const k = this.overTray;
+    // full size: its real length (capped); over the tray: its slot's length
+    const real = Math.min(0.9, h.piece.cm / 100);
+    const slot = bounds(rotate(h.piece.shape, 0)).w * CELL * 0.96;
+    const len = real + (slot - real) * k;
+    // in the palm: snout forward along where you point, lying on its side
+    const qHand = _q.clone().multiply(IN_PALM);
+    let q = qHand;
+    if (this.drop && k > 0.01) {
+      this.slotMatrix({ ...h.piece, x: this.drop.x, y: this.drop.y }, _m);
+      const qTray = new Quaternion();
+      _m.decompose(_w, qTray, _s);
+      qTray.premultiply(this.tray.group.getWorldQuaternion(new Quaternion()));
+      q = qHand.clone().slerp(qTray, k);
+    }
+    const mesh = h.model.mesh;
+    mesh.matrixAutoUpdate = true;
+    mesh.position.copy(_v);
+    mesh.quaternion.copy(q);
+    mesh.scale.setScalar(len);
+    h.model.u.uTime.value = time;
+    h.model.u.uSwim.value = 0.015 + 0.07 * (1 - k) * (0.6 + 0.4 * Math.sin(time * 1.3));
+  }
+
   /* ── open / close ────────────────────────────────────────────────────── */
 
   private open(): void {
     if (backpackView.open) return;
     backpackView.open = true;
-    // a trigger already down (the press that dismissed the catch card) isn't a click in here
-    for (const h of ['left', 'right'] as const) {
-      this.triggerDown[h] = (this.input.xr.gamepads[h]?.getButtonValue(InputComponent.Trigger) ?? 0) > 0.3;
-    }
-    // in front of you at chest height, tipped back a little, world-locked until you close it
-    const cam = this.camera;
-    cam.getWorldPosition(_o);
-    cam.getWorldDirection(_d);
-    _d.y = 0;
-    _d.normalize();
-    const m = this.panel.mesh;
-    m.position.copy(_o).addScaledVector(_d, 0.72);
-    m.position.y -= 0.28;
-    m.lookAt(_o.x, m.position.y + 0.25, _o.z);
-    m.visible = true;
-    this.dirty = true;
-    shot('bail_click', MIX.bail + 6, { rate: 0.7 });
-    uiClick();
-  }
-
-  /** Whatever's in hand goes back where it came from — or, if it's a new catch, into the first
-   *  spot it fits; with no room anywhere it goes back to the sea. */
-  private stowHeld(): void {
-    const h = this.held;
-    if (!h) return;
     const [C, R] = this.grid;
-    if (h.from) Object.assign(h.piece, h.from, { placed: true });
-    else {
-      const s = findSpot(h.piece, this.pieces, C, R);
-      if (s) {
-        Object.assign(h.piece, s, { placed: true });
-        this.mergeFrom(h.piece);
-      } else this.release(h.piece, 'No room — back to the sea');
-    }
-    this.held = null;
-    this.state.save();
+    this.tray.build(C, R);
+    this.tray.present(this.camera);
+    this.releaseNet.position.set(this.tray.width / 2 + 0.16, 0.01, this.tray.height / 2 - 0.08);
+    this.info.mesh.position.set(0, 0.075, -this.tray.height / 2 - 0.1);
+    this.info.mesh.rotation.set(-0.25, 0, 0);
+    this.tray.group.visible = true;
+    this.tray.group.scale.setScalar(0.85);
+    this.anims.push({ kind: 'pop', t: 0, dur: 0.22, obj: this.tray.group });
+    // a trigger already down isn't a click in here
+    for (const h of ['left', 'right'] as const) this.trig[h] = (this.input.xr.gamepads[h]?.getButtonValue(InputComponent.Trigger) ?? 0) > 0.3;
+    this.infoKey = '';
+    this.syncModels();
+    // the box's lid: two latches
+    shot('bail_click', MIX.bail + 8, { rate: 0.62 });
+    shot('bail_click', MIX.bail + 4, { rate: 0.8, delay: 0.07 });
+    this.buzz(this.held?.hand ?? 'right', 0.25, 40);
   }
 
   private close(): void {
     if (!backpackView.open) return;
-    this.stowHeld();
     backpackView.open = false;
-    this.panel.mesh.visible = false;
-    this.cursor.visible = false;
-    this.beam.visible = false;
-    uiClick();
+    this.tray.group.visible = false;
+    this.clearGhost();
+    this.overTray = 0;
+    shot('bail_click', MIX.bail + 6, { rate: 0.7 });
   }
-
-  /** A new catch: open the backpack with it on the pointer. */
-  private offer(id: number): void {
-    const p = this.pieces.find((f) => f.id === id);
-    if (!p) return;
-    this.stowHeld();
-    p.shape = shapeFor(p.species, p.cm, p.kg);
-    p.tier = 0;
-    p.rot = bounds(p.shape).w >= bounds(p.shape).h ? 0 : 1;
-    p.placed = false;
-    this.open();
-    this.held = { piece: p, fresh: true, from: null };
-    this.dirty = true;
-  }
-
-  private release(p: Piece, msg: string): void {
-    this.state.release(p.id);
-    backpackDeps.onRelease?.(p.species);
-    this.toast = { text: msg, t: 0 };
-    shot('splash', MIX.splash - 10, { rate: 1.3 });
-  }
-  private toast: { text: string; t: number } | null = null;
 
   /* ── frame ───────────────────────────────────────────────────────────── */
 
-  update(delta: number): void {
+  update(delta: number, time: number): void {
     const dt = Math.min(delta, 0.05);
     if (!backpackDeps.state) return;
     for (const h of ['left', 'right'] as const) {
@@ -242,467 +390,457 @@ export class BackpackSystem extends createSystem({}) {
       }
     }
     locomotion.enabled = locomotion.enabled && !backpackView.open;
-    if (!backpackView.open) return;
-
-    this.point();
-    this.handleInput();
-
-    // effects
-    for (const f of this.fx) f.t += dt;
-    const live = this.fx.filter((f) => f.t < (f.kind === 'gain' ? 1.4 : 0.35));
-    if (live.length || this.fx.length) this.dirty = true;
-    this.fx = live;
-    if (this.toast) {
-      this.toast.t += dt;
-      if (this.toast.t > 2.2) this.toast = null;
-      this.dirty = true;
+    if (backpackView.open) {
+      this.track(dt);
+      this.handleInput();
+      this.showGhost(time);
+      this.paintInfo();
     }
-    if (this.dirty) this.paint();
-    this.dirty = false;
+    this.poseHeld(time);
+    this.animate(dt, time);
+    backpackView.holding = !!this.held;
+    backpackView.hand = this.held?.hand ?? null;
   }
 
-  /** Cast the pointing hand's ray at the panel: the cursor, and the canvas point under it. */
-  private point(): void {
-    const ray = this.player.raySpaces[this.hand];
-    ray.getWorldPosition(_o);
-    ray.getWorldDirection(_d).negate(); // an Object3D's world direction is its +Z; the ray points −Z
-    const m = this.panel.mesh;
-    m.updateMatrixWorld();
-    _n.set(0, 0, 1).transformDirection(m.matrixWorld);
-    this.plane.setFromNormalAndCoplanarPoint(_n, m.position);
-    this.ray.set(_o, _d);
-    const hit = this.ray.intersectPlane(this.plane, _hit);
-    let hover: { px: number; py: number } | null = null;
-    if (hit) {
-      const local = m.worldToLocal(_hit.clone());
-      const u = local.x / M[0] + 0.5;
-      const v = 0.5 - local.y / M[1];
-      if (u >= -0.05 && u <= 1.05 && v >= -0.05 && v <= 1.05) hover = { px: u * PX[0], py: v * PX[1] };
+  /** Where's the fish hand relative to the tray: over it (and which slot), or away. */
+  private track(dt: number): void {
+    const h = this.held;
+    let over = 0;
+    this.drop = null;
+    if (h) {
+      this.player.gripSpaces[h.hand].getWorldPosition(_v);
+      this.tray.group.worldToLocal(_loc.copy(_v));
+      const inX = Math.abs(_loc.x) < this.tray.width / 2 + 0.08;
+      const inZ = Math.abs(_loc.z) < this.tray.height / 2 + 0.08;
+      if (inX && inZ && _loc.y > -0.08 && _loc.y < 0.32) {
+        over = 1;
+        const [C, R] = this.grid;
+        const at = this.tray.cellAt(_loc);
+        const b = bounds(rotate(h.piece.shape, h.piece.rot));
+        const x = Math.max(0, Math.min(C - b.w, Math.round(at.c - b.w / 2)));
+        const y = Math.max(0, Math.min(R - b.h, Math.round(at.r - b.h / 2)));
+        const cand = { ...h.piece, x, y, placed: true };
+        const ok = fits(cand, this.pieces, C, R);
+        this.drop = { x, y, ok, partners: ok ? mergePartners(cand, this.pieces) : [] };
+      }
     }
-    this.cursor.visible = !!hover;
-    this.beam.visible = !!hover;
-    if (hover && hit) {
-      this.cursor.position.copy(_hit);
-      const pos = this.beam.geometry.attributes.position as Float32BufferAttribute;
-      pos.setXYZ(0, _o.x, _o.y, _o.z);
-      pos.setXYZ(1, _hit.x, _hit.y, _hit.z);
-      pos.needsUpdate = true;
-    }
-    const was = this.hover;
-    if (!was !== !hover || (was && hover && (Math.floor(was.px / 8) !== Math.floor(hover.px / 8) || Math.floor(was.py / 8) !== Math.floor(hover.py / 8)))) this.dirty = true;
-    this.hover = hover;
+    this.overTray += (over - this.overTray) * (1 - Math.exp(-dt * 12));
+  }
+
+  private overRelease(): boolean {
+    const h = this.held;
+    if (!h) return false;
+    this.player.gripSpaces[h.hand].getWorldPosition(_v);
+    this.tray.group.worldToLocal(_loc.copy(_v));
+    return Math.hypot(_loc.x - this.releaseNet.position.x, _loc.z - this.releaseNet.position.z) < 0.12 && _loc.y > -0.08 && _loc.y < 0.3;
   }
 
   private handleInput(): void {
-    let pressed = false;
     for (const h of ['left', 'right'] as const) {
       const pad = this.input.xr.gamepads[h];
-      const v = pad?.getButtonValue(InputComponent.Trigger) ?? 0;
-      if (!this.triggerDown[h] && v > 0.6) {
-        this.triggerDown[h] = true;
-        this.hand = h; // the hand that clicks is the one that points
-        pressed = true;
-      } else if (this.triggerDown[h] && v < 0.3) this.triggerDown[h] = false;
-      // turn the held fish: a sideways flick, or a squeeze
+      const t = pad?.getButtonValue(InputComponent.Trigger) ?? 0;
+      const g = pad?.getButtonValue(InputComponent.Squeeze) ?? 0;
+      const tDown = !this.trig[h] && t > 0.6;
+      const gDown = !this.grip[h] && g > 0.6;
+      if (t > 0.6) this.trig[h] = true;
+      else if (t < 0.3) this.trig[h] = false;
+      if (g > 0.6) this.grip[h] = true;
+      else if (g < 0.3) this.grip[h] = false;
       const ax = pad?.getAxesValues(InputComponent.Thumbstick);
       if (ax) {
-        if (Math.abs(ax.x) < 0.3) this.stickArmed[h] = true;
-        else if (this.stickArmed[h] && Math.abs(ax.x) > 0.7) {
-          this.stickArmed[h] = false;
-          this.turn(ax.x > 0 ? 1 : 3);
+        if (Math.abs(ax.x) < 0.3) this.stick[h] = true;
+        else if (this.stick[h] && Math.abs(ax.x) > 0.7) {
+          this.stick[h] = false;
+          if (this.held) this.turn(ax.x > 0 ? 1 : 3);
         }
       }
-      const g = pad?.getButtonValue(InputComponent.Squeeze) ?? 0;
-      if (!this.gripDown[h] && g > 0.6) {
-        this.gripDown[h] = true;
-        this.turn(1);
-      } else if (this.gripDown[h] && g < 0.3) this.gripDown[h] = false;
+      if (this.held && this.held.hand === h && tDown) this.place();
+      else if (!this.held && (gDown || tDown)) this.lift(h);
     }
-    if (pressed) this.click();
   }
 
   private turn(q: 1 | 3): void {
-    if (!this.held) return;
-    const p = this.held.piece;
+    const p = this.held!.piece;
     p.rot = ((p.rot + q) % 4) as Rot;
-    this.dirty = true;
-    shot('bail_click', MIX.bail + 4, { rate: 1.3 });
-    this.buzz(0.15, 25);
+    shot('bail_click', MIX.bail + 4, { rate: 1.35 });
+    this.buzz(this.held!.hand, 0.18, 22);
   }
 
-  private buzz(k: number, ms: number): void {
-    pulseHand(this.renderer.xr.getSession() ?? undefined, this.hand, k, ms);
-  }
-
-  /** The grid cell under the canvas point (fractional), or null outside the grid. */
-  private cellAt(px: number, py: number): { c: number; r: number } | null {
-    const [C, R] = this.grid;
-    const cs = this.cellSize();
-    const gx = GRID_BOX.x + (GRID_BOX.w - C * cs) / 2;
-    const gy = GRID_BOX.y + (GRID_BOX.h - R * cs) / 2;
-    const c = (px - gx) / cs;
-    const r = (py - gy) / cs;
-    if (c < -0.5 || r < -0.5 || c > C + 0.5 || r > R + 0.5) return null;
-    return { c, r };
-  }
-
-  private cellSize(): number {
-    const [C, R] = this.grid;
-    return Math.floor(Math.min(GRID_BOX.w / C, GRID_BOX.h / R));
-  }
-
-  /** Where the held piece would sit if dropped now (its top-left cell), centred on the cursor. */
-  private dropSpot(): { x: number; y: number } | null {
-    if (!this.hover || !this.held) return null;
-    const at = this.cellAt(this.hover.px, this.hover.py);
-    if (!at) return null;
-    const b = bounds(rotate(this.held.piece.shape, this.held.piece.rot));
-    const [C, R] = this.grid;
-    // centred on the pointer, but kept inside the grid: pointing at the edge still lands it
-    const x = Math.max(0, Math.min(C - b.w, Math.round(at.c - b.w / 2)));
-    const y = Math.max(0, Math.min(R - b.h, Math.round(at.r - b.h / 2)));
-    return { x, y };
-  }
-
-  private inRelease(): boolean {
-    const h = this.hover;
-    return !!h && h.px >= RELEASE_BOX.x && h.px <= RELEASE_BOX.x + RELEASE_BOX.w && h.py >= RELEASE_BOX.y && h.py <= RELEASE_BOX.y + RELEASE_BOX.h;
-  }
-
-  private click(): void {
-    const [C, R] = this.grid;
-    if (this.held) {
-      const p = this.held.piece;
-      if (this.inRelease()) {
-        this.held = null;
-        this.release(p, `Released the ${FISH[p.species].name.toLowerCase()}`);
-        this.state.save();
-        this.dirty = true;
-        return;
-      }
-      const spot = this.dropSpot();
-      if (spot && fits({ ...p, ...spot }, this.pieces, C, R)) {
-        Object.assign(p, spot, { placed: true });
-        this.held = null;
-        this.fx.push({ kind: 'pop', id: p.id, t: 0 });
+  /** Click: drop the fish in hand into its ghost's slot (or the release net). */
+  private place(): void {
+    const h = this.held!;
+    if (this.overRelease()) {
+      this.releaseHeld();
+      return;
+    }
+    const d = this.drop;
+    if (!d || !d.ok) {
+      uiDeny();
+      this.buzz(h.hand, 0.6, 70);
+      return;
+    }
+    const p = h.piece;
+    Object.assign(p, { x: d.x, y: d.y, placed: true });
+    // the fish in your hand becomes the slot's fish: it drops from your hand into the slot
+    const model = h.model;
+    model.mesh.updateMatrixWorld();
+    this.tray.group.updateMatrixWorld();
+    const from = new Matrix4().copy(this.tray.group.matrixWorld).invert().multiply(model.mesh.matrixWorld);
+    this.scene.remove(model.mesh);
+    this.tray.group.add(model.mesh);
+    model.mesh.matrixAutoUpdate = false;
+    model.mesh.matrix.copy(from);
+    model.u.uSwim.value = 0.012;
+    model.u.uFreq.value = 0.8;
+    model.mat.emissive.setHex(TIER_GLOW[p.tier]);
+    this.models.set(p.id, model);
+    const to = this.slotMatrix(p, new Matrix4());
+    this.held = null;
+    this.clearGhost();
+    this.anims.push({
+      kind: 'drop',
+      t: 0,
+      dur: 0.2,
+      obj: model.mesh,
+      from,
+      to,
+      done: () => {
+        // landing: a wet slap on the felt, a thunk in the box
+        shot('fish_flop', MIX.fishFlop + 2, { rate: 1.1 + Math.random() * 0.1, slice: 1 + Math.floor(Math.random() * 3) });
         uiClick();
-        this.buzz(0.3, 30);
-        this.mergeFrom(p);
-        this.state.save();
-      } else {
-        uiDeny();
-        this.buzz(0.6, 60);
-      }
-      this.dirty = true;
-      return;
-    }
-    // pick up the fish under the cursor
-    const h = this.hover;
-    if (!h) return;
-    if (h.px >= 690 && h.px <= 1000 && h.py >= 18 && h.py <= 58) {
-      this.close();
-      return;
-    }
-    const at = this.cellAt(h.px, h.py);
-    if (!at) return;
+        this.buzz(h.hand, 0.5, 45);
+        this.burst(p, TIER_HEX[p.tier], 0.6);
+        this.mergeFrom(p, h.hand);
+      },
+    });
+    this.state.save();
+  }
+
+  /** Grip (or click) a fish in the tray to lift it back into your hand. */
+  private lift(hand: Hand): void {
+    this.player.gripSpaces[hand].getWorldPosition(_v);
+    this.tray.group.worldToLocal(_loc.copy(_v));
+    if (_loc.y > 0.2 || _loc.y < -0.08) return;
+    const at = this.tray.cellAt(_loc);
     const c = Math.floor(at.c);
     const r = Math.floor(at.r);
     const p = this.pieces.find((f) => f.placed && cellsOf(f).some(([x, y]) => x === c && y === r));
     if (!p) return;
-    this.held = { piece: p, fresh: false, from: { x: p.x, y: p.y, rot: p.rot } };
+    const model = this.models.get(p.id);
+    if (!model) return;
+    this.models.delete(p.id);
+    this.tray.group.remove(model.mesh);
+    this.scene.add(model.mesh);
+    this.held = { piece: p, model, hand, from: { x: p.x, y: p.y, rot: p.rot } };
     p.placed = false;
-    shot('bail_click', MIX.bail + 4, { rate: 1.1 });
-    this.buzz(0.2, 25);
-    this.dirty = true;
+    shot('fish_flop', MIX.fishFlop - 4, { rate: 1.2, slice: 2 });
+    this.buzz(hand, 0.35, 40);
+  }
+
+  private releaseHeld(): void {
+    const h = this.held!;
+    this.scene.remove(h.model.mesh);
+    h.model.mat.dispose();
+    this.state.release(h.piece.id);
+    this.held = null;
+    this.clearGhost();
+    shot('splash', MIX.splash - 6, { rate: 1.25 });
+    shot('emerge', MIX.emerge - 4, { rate: 1.3, delay: 0.15 });
+    this.buzz(h.hand, 0.4, 60);
+    const tag = label(`released the ${FISH[h.piece.species].name.toLowerCase()}`, '#3fd6c6', 36);
+    tag.position.copy(this.releaseNet.position).add(_v.set(0, 0.1, 0));
+    this.tray.group.add(tag);
+    this.anims.push({ kind: 'gain', t: 0, dur: 1.4, obj: tag });
   }
 
   /** Merge the piece just placed with any match it touches — and chain. */
-  private mergeFrom(start: Piece): void {
+  private mergeFrom(start: Piece, hand: Hand): void {
     const [C, R] = this.grid;
-    let p: Piece | null = start;
-    let chain = 0;
-    while (p) {
-      const partner: Piece | undefined = mergePartners(p, this.pieces)[0];
-      if (!partner) break;
-      const nextId = Math.max(0, ...this.pieces.map((f) => f.id)) + 1;
-      const res = merge(p, partner, this.pieces, C, R, nextId);
-      if (!res) break;
-      const inv = this.state.inventory as unknown as Piece[];
-      for (const id of res.consumed) {
-        const i = inv.findIndex((f) => f.id === id);
-        if (i >= 0) inv.splice(i, 1);
-      }
-      const merged = { ...res.piece, cm: Math.round(res.piece.cm), caughtAt: 12, record: false } as Piece & { caughtAt: number; record: boolean };
-      inv.push(merged);
-      (this.state as unknown as { _nextId: number })._nextId = nextId + 1;
-      chain++;
-      // the show: flash, the gain rising off it, a chime that climbs with the chain
-      this.fx.push({ kind: 'flash', id: merged.id, t: 0 });
-      this.fx.push({ kind: 'gain', id: merged.id, t: 0, text: `${TIERS[merged.tier].toUpperCase()}  +$${res.gained}` });
-      window.setTimeout(() => mergeChime(merged.tier, chain), (chain - 1) * 180);
-      this.buzz(0.7 + 0.1 * chain, 120);
-      p = merged;
+    const partner = mergePartners(start, this.pieces)[0];
+    if (!partner) return;
+    const nextId = Math.max(0, ...this.pieces.map((f) => f.id)) + 1;
+    const res = merge(start, partner, this.pieces, C, R, nextId);
+    if (!res) return;
+    const a = this.models.get(start.id);
+    const b = this.models.get(partner.id);
+    // swap the save: the two out, the fused fish in
+    const inv = this.state.inventory as unknown as Piece[];
+    for (const id of res.consumed) {
+      const i = inv.findIndex((f) => f.id === id);
+      if (i >= 0) inv.splice(i, 1);
+      this.models.delete(id);
     }
-    if (chain) this.state.save();
+    const merged = { ...res.piece, caughtAt: 12, record: false } as Piece & { caughtAt: number; record: boolean };
+    (this.state as unknown as { _nextId: number })._nextId = nextId + 1;
+    // the show: both fish slide together and flash; the fused one pops out in its tier's colours
+    const meet = this.slotMatrix(merged, new Matrix4());
+    for (const m of [a, b]) {
+      if (!m) continue;
+      m.mat.emissive.setHex(0xffffff);
+      this.anims.push({
+        kind: 'fuse',
+        t: 0,
+        dur: 0.28,
+        obj: m.mesh,
+        from: m.mesh.matrix.clone(),
+        to: meet,
+        done: () => {
+          this.tray.group.remove(m.mesh);
+          m.mat.dispose();
+        },
+      });
+    }
+    shot('fish_flop', MIX.fishFlop - 2, { rate: 1.35 });
+    window.setTimeout(() => {
+      inv.push(merged);
+      this.state.save();
+      const nm = this.makeModel(merged);
+      this.models.set(merged.id, nm);
+      this.tray.group.add(nm.mesh);
+      nm.mesh.matrixAutoUpdate = false;
+      nm.mesh.matrix.copy(meet);
+      this.anims.push({ kind: 'pop', t: 0, dur: 0.35, obj: nm.mesh, to: meet.clone() });
+      mergeChime(merged.tier, 1);
+      this.buzz(hand, 0.9, 140);
+      this.burst(merged, TIER_HEX[merged.tier], 1.4);
+      const tag = label(`${TIERS[merged.tier].toUpperCase()}  +$${res.gained}`, TIER_CSS[merged.tier]);
+      _v.setFromMatrixPosition(meet);
+      tag.position.set(_v.x, 0.08, _v.z);
+      this.tray.group.add(tag);
+      this.anims.push({ kind: 'gain', t: 0, dur: 1.6, obj: tag });
+      this.infoKey = '';
+      // and on: does the new fish touch a match of ITS tier?
+      window.setTimeout(() => this.mergeFrom(merged, hand), 380);
+    }, 280);
   }
 
-  /* ── painting ────────────────────────────────────────────────────────── */
+  /** A ring bursting out of the slot in the tier's colour. */
+  private burst(p: Piece, hex: number, size: number): void {
+    const ring = new Mesh(new RingGeometry(0.8, 1, 36).rotateX(-Math.PI / 2), new MeshBasicMaterial({ color: hex, transparent: true, blending: AdditiveBlending, depthWrite: false, toneMapped: false }));
+    _v.setFromMatrixPosition(this.slotMatrix(p, _m));
+    ring.position.set(_v.x, 0.02, _v.z);
+    ring.scale.setScalar(0.02);
+    ring.userData.size = size * CELL * 1.6;
+    this.tray.group.add(ring);
+    this.anims.push({ kind: 'burst', t: 0, dur: 0.5, obj: ring });
+  }
 
-  private paint(): void {
-    const c = this.panel.ctx;
+  /* ── the ghost ───────────────────────────────────────────────────────── */
+
+  private clearGhost(): void {
+    if (this.ghost) this.ghost.visible = false;
+    for (const b of this.badges) b.visible = false;
+    this.badges = [];
+    this.tray.paintTiles(this.tierTiles());
+  }
+
+  private tierTiles(): [number, number, number, number][] {
+    const out: [number, number, number, number][] = [];
+    for (const p of this.pieces) if (p.placed) for (const [c, r] of cellsOf(p)) out.push([c, r, TIER_HEX[p.tier], p.tier > 0 ? 0.22 : 0.08]);
+    return out;
+  }
+
+  private showGhost(time: number): void {
+    this.syncModels();
+    const h = this.held;
+    const d = this.drop;
+    const tiles = this.tierTiles();
+    for (const b of this.badges) b.visible = false;
+    this.badges = [];
+    // fish lying in the tray wear their tier (partners of a pending merge pulse, below)
+    for (const p of this.pieces) {
+      const m = this.models.get(p.id);
+      if (m && p.placed && p.tier < 3 && !this.anims.some((a) => a.obj === m.mesh)) m.mat.emissive.setHex(TIER_GLOW[p.tier]);
+    }
+    if (!h || !d) {
+      if (this.ghost) this.ghost.visible = false;
+      this.tray.paintTiles(tiles);
+      return;
+    }
+    // the ghost fish hovering in its slot, and its footprint
+    if (!this.ghost || this.ghost.geometry !== h.model.mesh.geometry) {
+      if (this.ghost) this.tray.group.remove(this.ghost);
+      this.ghost = new Mesh(h.model.mesh.geometry, this.ghostMat);
+      this.ghost.matrixAutoUpdate = false;
+      this.ghost.renderOrder = 4;
+      this.tray.group.add(this.ghost);
+    }
+    const cand = { ...h.piece, x: d.x, y: d.y };
+    this.slotMatrix(cand, this.ghost.matrix, 0.03 + 0.012 * Math.sin(time * 5));
+    this.ghost.matrixWorldNeedsUpdate = true;
+    this.ghost.visible = true;
+    const merging = d.partners.length > 0;
+    const hex = !d.ok ? 0xe8352a : merging ? TIER_HEX[h.piece.tier + 1] : 0x3fd66a;
+    this.ghostMat.color.setHex(hex);
+    this.ghostMat.opacity = 0.35 + 0.15 * Math.sin(time * 6);
+    for (const [c, r] of cellsOf(cand)) tiles.push([c, r, hex, 0.38]);
+    // merge badges over the ghost and over each partner, pulsing; the partners glow
+    if (merging) {
+      const nt = h.piece.tier + 1;
+      let pool = this.badgePool.get(nt);
+      if (!pool) this.badgePool.set(nt, (pool = []));
+      const spots = [cand, ...d.partners];
+      while (pool.length < spots.length) {
+        const s = mergeBadge(nt);
+        this.tray.group.add(s);
+        pool.push(s);
+      }
+      spots.forEach((p, i) => {
+        const s = pool![i];
+        _v.setFromMatrixPosition(this.slotMatrix(p, _m));
+        s.position.set(_v.x, 0.1 + 0.01 * Math.sin(time * 4 + i), _v.z);
+        const k = 1 + 0.12 * Math.sin(time * 8);
+        s.scale.set(0.11 * k, 0.11 * k, 1);
+        s.visible = true;
+        this.badges.push(s);
+      });
+      for (const p of d.partners) {
+        const m = this.models.get(p.id);
+        if (m) m.mat.emissive.setRGB(0.3 + 0.25 * Math.sin(time * 8), 0.24, 0.06);
+        for (const [c, r] of cellsOf(p)) tiles.push([c, r, TIER_HEX[nt], 0.25 + 0.15 * Math.sin(time * 8)]);
+      }
+    }
+    this.tray.paintTiles(tiles);
+  }
+
+  /* ── animation ───────────────────────────────────────────────────────── */
+
+  private animate(dt: number, time: number): void {
+    // tiers live on the fish: Legendary shimmers through the hues
+    for (const p of this.pieces) {
+      const m = this.models.get(p.id);
+      if (!m) continue;
+      m.u.uTime.value = time;
+      if (p.tier === 3) m.mat.emissive.setHSL((time * 0.15) % 1, 0.8, 0.18);
+    }
+    const alive: Anim[] = [];
+    for (const a of this.anims) {
+      a.t += dt;
+      const k = Math.min(1, a.t / a.dur);
+      const e = 1 - Math.pow(1 - k, 3);
+      switch (a.kind) {
+        case 'drop':
+        case 'fuse': {
+          const pa = new Vector3();
+          const qa = new Quaternion();
+          const sa = new Vector3();
+          const pb = new Vector3();
+          const qb = new Quaternion();
+          const sb = new Vector3();
+          a.from!.decompose(pa, qa, sa);
+          a.to!.decompose(pb, qb, sb);
+          pa.lerp(pb, e);
+          if (a.kind === 'drop') pa.y += Math.sin(k * Math.PI) * 0.03; // a little hop into the slot
+          qa.slerp(qb, e);
+          sa.lerp(sb, e);
+          if (a.kind === 'fuse') sa.multiplyScalar(1 + 0.2 * Math.sin(k * Math.PI));
+          a.obj.matrix.compose(pa, qa, sa);
+          a.obj.matrixWorldNeedsUpdate = true;
+          break;
+        }
+        case 'pop': {
+          const s = k < 0.6 ? (k / 0.6) * 1.18 : 1.18 - ((k - 0.6) / 0.4) * 0.18;
+          if (a.to) {
+            a.to.decompose(_w, _q, _s);
+            a.obj.matrix.compose(_w, _q, _s.multiplyScalar(Math.max(0.01, s)));
+            a.obj.matrixWorldNeedsUpdate = true;
+          } else a.obj.scale.setScalar(0.85 + 0.15 * e);
+          break;
+        }
+        case 'gain':
+          a.obj.position.y += dt * 0.08;
+          ((a.obj as Sprite).material as SpriteMaterial).opacity = 1 - k * k;
+          break;
+        case 'burst':
+          a.obj.scale.setScalar(0.02 + e * ((a.obj.userData.size as number) ?? 0.2));
+          ((a.obj as Mesh).material as MeshBasicMaterial).opacity = 1 - k;
+          break;
+      }
+      if (k < 1) alive.push(a);
+      else {
+        if (a.kind === 'gain' || a.kind === 'burst') a.obj.parent?.remove(a.obj);
+        a.done?.();
+      }
+    }
+    this.anims = alive;
+  }
+
+  /* ── the info card behind the tray ───────────────────────────────────── */
+
+  private paintInfo(): void {
     const [C, R] = this.grid;
-    const cs = this.cellSize();
-    const gx = GRID_BOX.x + (GRID_BOX.w - C * cs) / 2;
-    const gy = GRID_BOX.y + (GRID_BOX.h - R * cs) / 2;
-    this.panel.clear();
-    roundRect(c, 4, 4, PX[0] - 8, PX[1] - 8, 26);
-    c.fillStyle = 'rgba(10, 16, 22, 0.92)';
+    const placed = this.pieces.filter((f) => f.placed);
+    const { used, total } = fill(placed, C, R);
+    const worth = placed.reduce((a, f) => a + f.value, 0);
+    const h = this.held;
+    const d = this.drop;
+    const rel = this.overRelease();
+    const key = `${used}|${worth}|${h?.piece.id ?? '-'}|${h?.piece.rot ?? ''}|${d ? `${d.ok}${d.partners.length}` : '-'}|${rel}`;
+    if (key === this.infoKey) return;
+    this.infoKey = key;
+    const c = this.info.ctx;
+    this.info.clear();
+    roundRect(c, 4, 4, 632, 192, 18);
+    c.fillStyle = 'rgba(10, 16, 22, 0.88)';
     c.fill();
     c.lineWidth = 3;
     c.strokeStyle = INK.rim;
     c.stroke();
-
-    // header
-    const pieces = this.pieces.filter((f) => f.placed);
-    const { used, total } = fill(pieces, C, R);
-    const worth = pieces.reduce((a, f) => a + f.value, 0);
-    c.textBaseline = 'middle';
-    c.textAlign = 'left';
-    c.font = font(700, 38);
-    c.fillStyle = INK.hot;
-    c.fillText('BACKPACK', 30, 38);
-    c.font = font(600, 24);
-    c.fillStyle = INK.dim;
-    c.fillText(`${used} / ${total} cells`, 236, 40);
-    c.fillStyle = INK.amber;
-    c.textAlign = 'right';
-    c.fillText(`worth $${worth}`, 660, 40);
-    // close button
-    roundRect(c, 690, 18, 310, 40, 10);
-    c.fillStyle = this.hover && this.hover.px >= 690 && this.hover.py <= 58 && this.hover.py >= 18 ? 'rgba(255,176,0,0.25)' : 'rgba(255,255,255,0.06)';
-    c.fill();
-    c.fillStyle = INK.hot;
-    c.textAlign = 'center';
-    c.font = font(600, 22);
-    c.fillText('CLOSE  (A)', 845, 39);
-
-    // grid
-    for (let r = 0; r < R; r++) {
-      for (let q = 0; q < C; q++) {
-        roundRect(c, gx + q * cs + 2, gy + r * cs + 2, cs - 4, cs - 4, 6);
-        c.fillStyle = 'rgba(255,255,255,0.05)';
-        c.fill();
-      }
-    }
-
-    // the drop preview (green fits, red doesn't) and who it would merge with
-    const drop = this.dropSpot();
-    let partners: Piece[] = [];
-    if (this.held && drop) {
-      const p = { ...this.held.piece, ...drop };
-      const ok = fits(p, this.pieces, C, R);
-      for (const [q, r] of cellsOf(p)) {
-        if (q < 0 || r < 0 || q >= C || r >= R) continue;
-        roundRect(c, gx + q * cs + 2, gy + r * cs + 2, cs - 4, cs - 4, 6);
-        c.fillStyle = ok ? 'rgba(63, 214, 106, 0.28)' : 'rgba(232, 53, 42, 0.32)';
-        c.fill();
-      }
-      if (ok) partners = mergePartners({ ...p, placed: true }, this.pieces);
-    }
-
-    // the fish
-    const t = performance.now() / 1000;
-    for (const p of pieces) {
-      const pop = this.fx.find((f) => f.id === p.id && f.kind === 'pop');
-      const flash = this.fx.find((f) => f.id === p.id && f.kind === 'flash');
-      const scale = pop ? 1 + 0.12 * Math.sin((pop.t / 0.35) * Math.PI) : 1;
-      this.drawPiece(c, p, gx, gy, cs, scale, partners.includes(p) ? 0.5 + 0.5 * Math.sin(t * 10) : 0, flash ? 1 - flash.t / 0.35 : 0);
-    }
-
-    // the held fish under the cursor
-    if (this.held && this.hover) {
-      const p = this.held.piece;
-      const b = bounds(rotate(p.shape, p.rot));
-      c.globalAlpha = 0.9;
-      this.drawPiece(c, { ...p, x: 0, y: 0 }, this.hover.px - (b.w * cs) / 2, this.hover.py - (b.h * cs) / 2, cs, 1.06, 0, 0);
-      c.globalAlpha = 1;
-    }
-
-    // gains rising off merged fish
-    for (const f of this.fx) {
-      if (f.kind !== 'gain') continue;
-      const p = pieces.find((x) => x.id === f.id);
-      if (!p) continue;
-      const cells = cellsOf(p);
-      const cx = gx + (Math.min(...cells.map((k) => k[0])) + Math.max(...cells.map((k) => k[0])) + 1) * cs * 0.5;
-      const cy = gy + Math.min(...cells.map((k) => k[1])) * cs - f.t * 60;
-      c.globalAlpha = Math.max(0, 1 - f.t / 1.4);
-      c.font = font(700, 34);
-      c.textAlign = 'center';
-      c.fillStyle = TIER_COLOUR[p.tier];
-      c.fillText(f.text ?? '', cx, cy);
-      c.globalAlpha = 1;
-    }
-
-    this.paintInfo(c, partners);
-    this.panel.commit();
-  }
-
-  /** A fish painted across its cells: tier frame, then the fish itself, turned with the piece. */
-  private drawPiece(c: CanvasRenderingContext2D, p: Piece, gx: number, gy: number, cs: number, scale: number, glow: number, flash: number): void {
-    const cells = cellsOf(p);
-    const tc = p.tier === 3 ? `hsl(${(performance.now() / 8) % 360}, 90%, 65%)` : TIER_COLOUR[p.tier];
-    for (const [q, r] of cells) {
-      roundRect(c, gx + q * cs + 3, gy + r * cs + 3, cs - 6, cs - 6, 8);
-      c.fillStyle = `rgba(${p.tier === 2 ? '255,176,0' : p.tier === 1 ? '220,232,240' : p.tier === 3 ? '255,95,210' : '154,164,172'}, ${0.14 + glow * 0.25 + flash * 0.5})`;
-      c.fill();
-      c.lineWidth = 2 + glow * 3;
-      c.strokeStyle = tc;
-      c.stroke();
-    }
-    // the fish, drawn along its length (rot 0: tail at the left, head at the right)
-    const b = bounds(rotate(p.shape, 0));
-    const len = b.w * cs * 0.94 * scale;
-    const hgt = Math.max(cs * 0.5, b.h * cs * 0.78) * scale;
-    const minC = Math.min(...cells.map((k) => k[0]));
-    const minR = Math.min(...cells.map((k) => k[1]));
-    const rb = bounds(rotate(p.shape, p.rot));
-    const cx = gx + (minC + rb.w / 2) * cs;
-    const cy = gy + (minR + rb.h / 2) * cs;
-    const model = FISH[p.species]?.model ?? p.species;
-    const k = SK[model] ?? { back: 0x445566, flank: 0x99aabb, belly: 0xdddddd, fin: 0x778899, edge: 0x556677 };
-    c.save();
-    c.translate(cx, cy);
-    c.rotate((p.rot * Math.PI) / 2);
-    const tail = len * 0.18;
-    const x0 = -len / 2 + tail;
-    const x1 = len / 2;
-    // tail fin
-    c.fillStyle = hex(k.fin);
-    c.beginPath();
-    c.moveTo(x0 + tail * 0.2, 0);
-    c.lineTo(-len / 2, -hgt * 0.42);
-    c.lineTo(-len / 2 + tail * 0.35, 0);
-    c.lineTo(-len / 2, hgt * 0.42);
-    c.closePath();
-    c.fill();
-    // body: counter-shaded like the 3-D fish
-    const g = c.createLinearGradient(0, -hgt / 2, 0, hgt / 2);
-    g.addColorStop(0, hex(k.back));
-    g.addColorStop(0.5, hex(k.flank));
-    g.addColorStop(1, hex(k.belly));
-    c.fillStyle = g;
-    c.beginPath();
-    c.moveTo(x0, 0);
-    c.bezierCurveTo(x0 + (x1 - x0) * 0.25, -hgt * 0.55, x1 - (x1 - x0) * 0.2, -hgt * 0.5, x1, 0);
-    c.bezierCurveTo(x1 - (x1 - x0) * 0.2, hgt * 0.5, x0 + (x1 - x0) * 0.25, hgt * 0.55, x0, 0);
-    c.fill();
-    // dorsal fin and eye
-    c.fillStyle = hex(k.fin);
-    c.beginPath();
-    c.moveTo(x0 + (x1 - x0) * 0.35, -hgt * 0.38);
-    c.lineTo(x0 + (x1 - x0) * 0.5, -hgt * 0.62);
-    c.lineTo(x0 + (x1 - x0) * 0.7, -hgt * 0.36);
-    c.fill();
-    c.fillStyle = '#0a0a0c';
-    c.beginPath();
-    c.arc(x1 - (x1 - x0) * 0.13, -hgt * 0.08, Math.max(2.5, hgt * 0.07), 0, Math.PI * 2);
-    c.fill();
-    c.fillStyle = hex(SP[model]?.iris ?? 0xd8d8c0);
-    c.beginPath();
-    c.arc(x1 - (x1 - x0) * 0.13 + 1, -hgt * 0.08 - 1, Math.max(1, hgt * 0.025), 0, Math.PI * 2);
-    c.fill();
-    c.restore();
-    // tier pips in the corner
-    if (p.tier > 0) {
-      c.fillStyle = tc;
-      c.font = font(700, 18);
-      c.textAlign = 'left';
-      c.fillText('★'.repeat(p.tier), gx + minC * cs + 8, gy + minR * cs + 16);
-    }
-  }
-
-  private paintInfo(c: CanvasRenderingContext2D, partners: Piece[]): void {
-    const x = 700;
-    let y = 100;
-    // what you're holding, or what you're pointing at
-    let p: Piece | null = this.held?.piece ?? null;
-    if (!p && this.hover) {
-      const at = this.cellAt(this.hover.px, this.hover.py);
-      if (at) {
-        const q = Math.floor(at.c);
-        const r = Math.floor(at.r);
-        p = this.pieces.find((f) => f.placed && cellsOf(f).some(([a, b]) => a === q && b === r)) ?? null;
-      }
-    }
-    c.textAlign = 'left';
     c.textBaseline = 'alphabetic';
-    if (p) {
-      const f = FISH[p.species];
+    c.textAlign = 'left';
+    c.font = font(700, 30);
+    c.fillStyle = INK.hot;
+    c.fillText('BACKPACK', 22, 42);
+    c.font = font(600, 22);
+    c.fillStyle = INK.dim;
+    c.fillText(`${used} / ${total}`, 180, 42);
+    c.textAlign = 'right';
+    c.fillStyle = INK.amber;
+    c.fillText(`worth $${worth}`, 618, 42);
+    c.textAlign = 'left';
+    if (h) {
+      const p = h.piece;
       c.font = font(700, 20);
-      c.fillStyle = p.tier === 3 ? `hsl(${(performance.now() / 8) % 360}, 90%, 65%)` : TIER_COLOUR[p.tier];
-      c.fillText(TIERS[p.tier].toUpperCase(), x, y);
-      y += 38;
-      c.font = font(700, 34);
+      c.fillStyle = TIER_CSS[p.tier];
+      c.fillText(TIERS[p.tier].toUpperCase(), 22, 82);
+      c.font = font(700, 32);
       c.fillStyle = INK.hot;
-      c.fillText(f.name, x, y, 300);
-      y += 34;
+      c.fillText(FISH[p.species].name, 22, 116, 420);
       c.font = font(500, 22);
       c.fillStyle = INK.dim;
-      c.fillText(`${Math.round(p.cm)} cm · ${p.kg.toFixed(2)} kg`, x, y);
-      y += 40;
-      c.font = font(700, 40);
+      c.fillText(`${Math.round(p.cm)} cm · ${p.kg.toFixed(2)} kg`, 22, 148);
+      c.font = font(700, 34);
       c.fillStyle = INK.amber;
-      c.fillText(`$${p.value}`, x, y);
-      y += 40;
-      if (p.tier < TIERS.length - 1) {
-        c.font = font(500, 20);
-        c.fillStyle = INK.dim;
-        c.fillText(`Touch another ${TIERS[p.tier].toLowerCase()} one`, x, y);
-        y += 24;
-        c.fillText(`to merge: ×${MERGE_BONUS[p.tier + 1]} → ${TIERS[p.tier + 1]}`, x, y);
-        y += 30;
-      }
-      if (partners.length) {
-        c.font = font(700, 24);
+      c.textAlign = 'right';
+      c.fillText(`$${p.value}`, 618, 116);
+      c.font = font(600, 20);
+      if (rel) {
+        c.fillStyle = INK.sea;
+        c.fillText('click to let it go', 618, 180);
+      } else if (d && !d.ok) {
+        c.fillStyle = INK.danger;
+        c.fillText("won't fit there · flick the stick to turn", 618, 180);
+      } else if (d && d.partners.length) {
+        c.fillStyle = TIER_CSS[p.tier + 1];
+        c.fillText(`MERGE → ${TIERS[p.tier + 1].toUpperCase()}  ×${MERGE_BONUS[p.tier + 1]}`, 618, 180);
+      } else if (d) {
         c.fillStyle = INK.good;
-        c.fillText('WILL MERGE!', x, y);
-        y += 30;
-      }
-      if (this.held) {
-        c.font = font(500, 20);
+        c.fillText('click to place', 618, 180);
+      } else {
         c.fillStyle = INK.dim;
-        c.fillText('Flick the stick / grip to turn', x, y + 10);
+        c.fillText('bring it over the backpack', 618, 180);
       }
     } else {
       c.font = font(500, 22);
       c.fillStyle = INK.dim;
-      const lines = ['Point and pull the trigger', 'to pick up a fish.', '', 'Two of the same kind,', 'same tier, touching:', 'they merge — worth more,', 'and they take less room.'];
-      lines.forEach((l, i) => c.fillText(l, x, y + i * 28));
+      c.fillText('Grip a fish to lift it out.', 22, 90);
+      c.fillText('Same kind, same tier, touching: they merge —', 22, 124);
+      c.fillText('worth more, and they take less room.', 22, 154);
     }
-    // release zone
-    const over = this.inRelease() && !!this.held;
-    roundRect(c, RELEASE_BOX.x, RELEASE_BOX.y, RELEASE_BOX.w, RELEASE_BOX.h, 14);
-    c.fillStyle = over ? 'rgba(63, 214, 198, 0.35)' : 'rgba(63, 214, 198, 0.1)';
-    c.fill();
-    c.lineWidth = 2;
-    c.strokeStyle = INK.sea;
-    c.setLineDash([10, 8]);
-    c.stroke();
-    c.setLineDash([]);
-    c.font = font(700, 26);
-    c.fillStyle = INK.sea;
-    c.textAlign = 'center';
-    c.textBaseline = 'middle';
-    c.fillText('RELEASE', RELEASE_BOX.x + RELEASE_BOX.w / 2, RELEASE_BOX.y + 34);
-    c.font = font(500, 18);
-    c.fillText('drop a fish here to let it go', RELEASE_BOX.x + RELEASE_BOX.w / 2, RELEASE_BOX.y + 64);
-    if (this.toast) {
-      c.globalAlpha = Math.min(1, (2.2 - this.toast.t) / 0.4);
-      c.font = font(700, 26);
-      c.fillStyle = INK.hot;
-      c.fillText(this.toast.text, RELEASE_BOX.x + RELEASE_BOX.w / 2, RELEASE_BOX.y - 30, 300);
-      c.globalAlpha = 1;
-    }
+    this.info.commit();
+  }
+
+  private buzz(hand: Hand, k: number, ms: number): void {
+    pulseHand(this.renderer.xr.getSession() ?? undefined, hand, k, ms);
   }
 }

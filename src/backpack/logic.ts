@@ -3,9 +3,9 @@
  * three.js, no DOM), so tools/backpack-check.mjs runs the same code the headset does.
  *
  *  SHAPES   A fish takes the cells its real length needs (CELL_CM per cell, up to 7). Slender
- *           species are one cell tall; deep-bodied species and heavy fish are two tall with a
- *           one-cell tail fin at the tail end — so a snapper packs like a Tetris piece and a
- *           houndfish like a bar. Pieces turn in 90° steps.
+ *           and small fish are one cell tall; deep-bodied or heavy fish three cells long or more
+ *           are two tall with a one-cell tail fin at the tail end — so a snapper packs like a
+ *           Tetris piece and a houndfish like a bar. Pieces turn in 90° steps.
  *  GRID     The backpack's size follows the fish-hold upgrade (Tidewater's `hold` track):
  *           6×4, then 8×5, then 10×6.
  *  MERGING  Put a fish down touching another of the same species and tier and they fuse into
@@ -35,7 +35,8 @@ const DEEP = new Set(['angel', 'tang', 'chromis', 'sergeant', 'grunt', 'parrot',
 /** The piece a fish of `cm` makes, at rotation 0: cells [col, row], tail at col 0. */
 export function shapeFor(species: string, cm: number, kg: number): Cell[] {
   const len = Math.max(1, Math.min(MAX_LEN, Math.round(cm / CELL_CM)));
-  const tall = len >= 2 && (DEEP.has(species) || kg >= 5);
+  // a second row only where the fish is long enough to look that deep in its slot
+  const tall = len >= 3 && (DEEP.has(species) || kg >= 5);
   const cells: Cell[] = [];
   for (let c = 0; c < len; c++) {
     cells.push([c, 0]);

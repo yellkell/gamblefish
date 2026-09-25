@@ -41,7 +41,7 @@ check('findSpot finds the next free row', spot && spot.y === 1, JSON.stringify(s
 
 console.log('\nmerging');
 const m1 = piece(10, 'grunt', 40, 0.8, { x: 0, y: 0, value: 12 });
-const m2 = piece(11, 'grunt', 44, 0.9, { x: 0, y: 2, value: 14 });
+const m2 = piece(11, 'grunt', 44, 0.9, { x: 0, y: 1, value: 14 });
 check('same species + tier, edge to edge: touching', touching(m1, m2));
 check('…and they are merge partners', mergePartners(m2, [m1]).length === 1);
 const other = piece(12, 'jack', 40, 1, { x: 0, y: 2 });

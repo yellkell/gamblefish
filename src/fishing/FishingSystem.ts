@@ -311,10 +311,13 @@ export class FishingSystem extends createSystem({}) {
       case 'fighting':
         this.updateFight(dt, reelIn);
         break;
-      case 'landing':
-        if (this.t > 1 && down) this.endLanding();
-        else if (this.t > FISHING.cardSeconds) this.endLanding();
+      case 'landing': {
+        // take it off the hook: grip it with your free hand (or the rod's trigger / the card timing out)
+        const free = this.other(this.hand);
+        const grabbed = this.squeeze(free) > 0.6 && this.landing && this.grip(free).getWorldPosition(_h).distanceTo(this.landing.mesh.position) < 0.45;
+        if (grabbed || (this.t > 1 && down) || this.t > FISHING.cardSeconds) this.endLanding(free);
         break;
+      }
     }
     this.hintT -= dt;
 
@@ -569,7 +572,7 @@ export class FishingSystem extends createSystem({}) {
     const off = this.other(this.hand);
     const g = this.grip(off);
     g.getWorldPosition(_h);
-    const canCrank = this.state !== 'stowed' && this.state !== 'landing';
+    const canCrank = this.state !== 'stowed' && this.state !== 'landing' && backpackView.hand !== off;
     const near = this.rod.crankCentre(_v).distanceTo(_h) < FISHING.crankReach;
     const holding = this.squeeze(off) > 0.5;
     if (!this.cranking && canCrank && holding && near) {
@@ -659,7 +662,7 @@ export class FishingSystem extends createSystem({}) {
     this.card.group.lookAt(_w);
   }
 
-  private endLanding(): void {
+  private endLanding(into: Hand | null = null): void {
     const L = this.landing;
     if (L) {
       this.scene.remove(L.mesh);
@@ -668,11 +671,11 @@ export class FishingSystem extends createSystem({}) {
     this.landing = null;
     this.card.hide();
     if (this.state === 'landing') this.reelInNow();
-    // into the backpack: it opens with the catch on your pointer
+    // off the hook and into your free hand; A brings up the backpack to put it away
     if (this.caughtId !== null) {
       const id = this.caughtId;
       this.caughtId = null;
-      backpackView.offer?.(id);
+      backpackView.takeInHand?.(id, into ?? this.other(this.hand));
     }
   }
 
