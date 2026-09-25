@@ -8,6 +8,7 @@
  */
 
 import { WHEEL, REDS, colourOf, wins, odds, settle, spin, fairRandom } from '../src/casino/roulette.ts';
+import { REELS, STOPS, SYMBOLS, THREE, line, pays, pull } from '../src/casino/slots.ts';
 
 const results = [];
 const check = (name, ok, detail) => {
@@ -60,6 +61,30 @@ const chi = counts.reduce((a, c) => a + (c - N / 37) ** 2 / (N / 37), 0);
 check('370,000 crypto spins: every pocket about 1/37 (χ² < 68)', chi < 68, `χ² ${chi.toFixed(1)}, min ${Math.min(...counts)}, max ${Math.max(...counts)}`);
 check('fairRandom stays in [0, 1)', Array.from({ length: 10000 }, fairRandom).every((x) => x >= 0 && x < 1));
 check('spin() maps the whole range to a pocket', spin(() => 0) === 0 && spin(() => 0.999999999) === 36);
+
+console.log('\nslots: the reels');
+check('three reels of 24 stops, every symbol on every reel', REELS.length === 3 && REELS.every((r) => r.length === STOPS && SYMBOLS.every((s) => r.includes(s))));
+check('every reel carries the same mix (6 worm, 5 shell, 4 hook, 4 anchor, 3 marlin, 2 chest)', REELS.every((r) => [6, 5, 4, 4, 3, 2].every((n, k) => r.filter((s) => s === SYMBOLS[k]).length === n)));
+check('the payline reads the stopped symbols, wrapping round', line([0, 0, 0]).join() === REELS.map((r) => r[0]).join() && line([24, -1, 25]).join() === [REELS[0][0], REELS[1][23], REELS[2][1]].join());
+
+console.log('\nslots: the paytable');
+check('three of a kind pays its line', SYMBOLS.every((s) => pays([s, s, s]).mult === THREE[s]));
+check('two worms from the left pay 3, one pays 1, a worm elsewhere nothing', pays(['worm', 'worm', 'hook']).mult === 3 && pays(['worm', 'shell', 'worm']).mult === 1 && pays(['shell', 'worm', 'worm']).mult === 0);
+check('a mixed line pays nothing', pays(['chest', 'chest', 'marlin']).mult === 0);
+let back = 0;
+let hits = 0;
+for (let a = 0; a < STOPS; a++) for (let b = 0; b < STOPS; b++) for (let c = 0; c < STOPS; c++) {
+  const m = pays(line([a, b, c])).mult;
+  back += m;
+  if (m) hits++;
+}
+const rtp = back / STOPS ** 3;
+check('every one of the 13,824 stops enumerated: returns 94.85% (the topper says 94.8%)', Math.abs(rtp - 0.9485) < 0.0001, `${(rtp * 100).toFixed(2)}%, pays on ${((hits / STOPS ** 3) * 100).toFixed(1)}% of pulls`);
+const tally = [0, 0, 0].map(() => new Array(STOPS).fill(0));
+for (let i = 0; i < 240000; i++) pull().forEach((s, r) => tally[r][s]++);
+const chiS = tally.map((t) => t.reduce((a, c) => a + (c - 10000) ** 2 / 10000, 0));
+// 23 degrees of freedom: 99.9% of fair reels come in under 49.7
+check('240,000 crypto pulls: each reel stops evenly (χ² < 50)', chiS.every((x) => x < 50), chiS.map((x) => x.toFixed(1)).join(', '));
 
 const pass = results.filter(Boolean).length;
 console.log(`\n${pass}/${results.length} passed`);

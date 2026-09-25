@@ -28,8 +28,9 @@ import { Grass } from './world/grass.ts';
 import { VillageSigns, type BuildingFrame } from './village/signs.ts';
 import { FishMarket } from './village/market.ts';
 import { RouletteTable } from './casino/RouletteTable.ts';
+import { SlotMachine } from './casino/SlotMachine.ts';
 import { PointerSystem } from './ui/pointer.ts';
-import { buildInteriors, interiorAt, openColliders } from './village/interiors.ts';
+import { buildInteriors, interiorAt, openColliders, type Interior } from './village/interiors.ts';
 import { Blink } from './fx/blink.ts';
 import { Vegetation } from './world/vegetation.ts';
 import { buildVillage } from './world/village.ts';
@@ -156,9 +157,16 @@ World.create(container, {
   const stall = frames.find((b) => b.name === 'stall');
   const market = stall ? new FishMarket(scene, stall, game) : null;
   // the casinos' tables
-  const tables: RouletteTable[] = [];
-  const lure = interiors.find((i) => i.name === 'C');
+  const tables: { update(dt: number, camera: Camera): void }[] = [];
+  const room = (n: string): Interior | undefined => interiors.find((i) => i.name === n);
+  const lure = room('C');
   if (lure) tables.push(new RouletteTable(lure, game, { chips: [1, 5, 25, 100], maxBet: 500, at: [0, -0.6] }));
+  const reels = room('B');
+  if (reels) {
+    const z = -reels.d / 2 + 0.28;
+    const colours = ['#3fd6ff', '#ff3fb4', '#ffb000'];
+    [-1.5, 0, 1.5].forEach((x, k) => tables.push(new SlotMachine(reels, game, world, { bets: [1, 5, 25], at: [x, z, 0], colour: colours[k] })));
+  }
   villageTick = (dt) => {
     market?.update(dt, world.camera);
     for (const t of tables) t.update(dt, world.camera);

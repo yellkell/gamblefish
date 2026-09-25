@@ -256,3 +256,28 @@ export class RollBed {
     this.filter!.frequency.setTargetAtTime(500 + speed * 900, t, 0.1);
   }
 }
+
+/** The slot lever: a ratchet clicking down as it's pulled, `k` from 0 (up) to 1 (bottom). */
+export function leverClick(k: number): void {
+  clank(900 + k * 500, 0.04, 0.05);
+}
+
+/** A slot reel slamming to a stop on its detent: a thunk and a short rattle. */
+export function reelStop(n: number): void {
+  tone({ freq: 120 - n * 10, to: 70, type: 'triangle', dur: 0.12, gain: 0.25 });
+  clank(1400 + n * 120, 0.06, 0.08);
+  whooshNoise(0.05, 0.08, 2400, 900, 0.02);
+}
+
+/** Coins dropping into the tray: `count` tinny hits spread out, faster for bigger wins. */
+export function coinDrops(count: number): void {
+  const n = Math.min(40, count);
+  const gap = n > 15 ? 0.045 : 0.08;
+  for (let i = 0; i < n; i++) clank(3200 + Math.random() * 1400, 0.035 + Math.random() * 0.02, 0.18, i * gap + Math.random() * 0.02);
+}
+
+/** The machine's win bells: a fast ringing alternation, longer for bigger wins. */
+export function slotBells(seconds: number): void {
+  const n = Math.round(seconds * 10);
+  for (let i = 0; i < n; i++) tone({ freq: i % 2 ? 1568 : 1319, type: 'triangle', dur: 0.09, gain: 0.07, delay: i * 0.1 });
+}

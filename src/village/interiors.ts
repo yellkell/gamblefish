@@ -65,6 +65,7 @@ export interface Interior {
  */
 export const FURNITURE: Record<string, [number, number, number, number, number][]> = {
   C: [[0.03, -0.6, 1.72, 0.55, 0.95]], // the roulette table and wheel (casino/RouletteTable TABLE, at z −0.6)
+  B: [[0, -1.8, 2.05, 0.33, 1.9]], // three slot machines along the back wall
 };
 
 /** Roles you go inside. */
