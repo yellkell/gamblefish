@@ -409,7 +409,9 @@ async function createCheckout(req, uid, pack) {
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
       client_reference_id: uid,
-      metadata: { uid, pack: pack.id, coins: String(pack.coins) },
+      // `app` tells this bank's webhook the session is ours: the Stripe account is shared with
+      // ff2's bank, and Stripe sends every account's checkout events to every endpoint
+      metadata: { app: 'gamblefish', uid, pack: pack.id, coins: String(pack.coins) },
       line_items: [
         {
           quantity: 1,
@@ -459,6 +461,7 @@ async function handleWebhook(req, res) {
   }
   if (event.type === 'checkout.session.completed' || event.type === 'checkout.session.async_payment_succeeded') {
     const s = event.data.object;
+    if (s.metadata?.app !== 'gamblefish') return json(res, 200, { received: true, ignored: 'not a gamblefish checkout' });
     if (s.payment_status === 'paid') {
       const uid = String(s.metadata?.uid ?? s.client_reference_id ?? '');
       const coins = Number(s.metadata?.coins ?? 0);
