@@ -17,6 +17,10 @@
  *   5. FALLING ONTO DECKS. An arc falling onto the pier from above lands on
  *      the deck, but an arc from the sand under it doesn't pop up through it.
  *   6. THE ISLAND. Dry beach is standable, the swash and cliffs are not.
+ *   7. WALK-IN BUILDINGS. Through the door, not through the walls.
+ *   8. NO CRAWLING UNDER. An arc thrown at a doorway from the ground (your hand
+ *      below the room's floor) lands on the porch or the floor, never on the
+ *      ground under the house; arcs thrown around a room land on its floor.
  */
 
 import { readFileSync } from 'node:fs';
@@ -26,14 +30,15 @@ import { decodeTerrain } from '../src/world/data.ts';
 import { Heightfield } from '../src/world/heightfield.ts';
 import { Surfaces, simulateArc } from '../src/world/surfaces.ts';
 import { TELEPORT, TELEPORT_COLOURS } from '../src/locomotion/config.ts';
-import { openColliders } from '../src/village/interiors.ts';
+import { hasInterior, openColliders } from '../src/village/interiors.ts';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const json = JSON.parse(readFileSync(resolve(ROOT, 'public/world/world.json'), 'utf8'));
 const tb = readFileSync(resolve(ROOT, 'public/world/terrain.bin'));
 const grid = decodeTerrain(json, tb.buffer.slice(tb.byteOffset, tb.byteOffset + tb.byteLength));
 const hf = new Heightfield(grid);
-const S = new Surfaces(hf, json.colliders);
+const S0 = new Surfaces(hf, json.colliders);
+const S = S0;
 
 const results = [];
 const check = (name, ok, detail) => {
@@ -44,7 +49,7 @@ const f2 = (v) => v.toFixed(2);
 
 /** Aim from a standing spot: controller at chest height, pitched `pitchDeg`
  *  up, toward yaw (0 = −z). Returns the arc result plus the club verdict. */
-function aim(x, z, standY, yaw, pitchDeg = 20) {
+function aim(x, z, standY, yaw, pitchDeg = 20, S = S0) {
   const p = (pitchDeg * Math.PI) / 180;
   const dir = { x: -Math.sin(yaw) * Math.cos(p), y: Math.sin(p), z: -Math.cos(yaw) * Math.cos(p) };
   const origin = { x, y: standY + 1.2, z };
@@ -152,6 +157,58 @@ console.log('\n7. walk-in buildings');
   check('inside → back out through the door: not blocked', !open.crossesWall(inside.x, inside.z, porch.x, porch.z, Math.max(porchY, b.floorY)));
   const closed = S.crossesWall(porch.x, porch.z, inside.x, inside.z, Math.max(porchY, b.floorY));
   check('(before opening, the house was solid)', closed);
+}
+
+console.log('\n8. no crawling under a house');
+{
+  const open = new Surfaces(hf, { boxes: openColliders(json.colliders.boxes, json.buildings), cylinders: json.colliders.cylinders });
+  for (const b of json.buildings.filter((x) => hasInterior(x.name))) {
+    const c = Math.cos(b.yaw);
+    const s = Math.sin(b.yaw);
+    const fw = (lx, lz) => ({ x: b.x + lx * c + lz * s, z: b.z - lx * s + lz * c });
+    const local = (x, z) => ({ lx: (x - b.x) * c - (z - b.z) * s, lz: (x - b.x) * s + (z - b.z) * c });
+    // under the house or its porch, below the floor
+    const under = (p) => {
+      const q = local(p.x, p.z);
+      return Math.abs(q.lx) < b.w / 2 && q.lz > -b.d / 2 && q.lz < b.d / 2 + b.porch && p.y < b.floorY - 0.3;
+    };
+    let arcs = 0;
+    let bad = 0;
+    // from the ground out front, at the stairs and off to either side, aimed at the room
+    for (const out of [2.5, 4, 6]) {
+      for (const side of [-1.5, 0, 1.5]) {
+        const from = fw(b.doorX + side, b.d / 2 + b.porch + out);
+        const g = open.groundAt(from.x, from.z);
+        if (g.kind !== 'ground') continue;
+        for (const aimX of [-1, 0, 1]) {
+          const to = fw(b.doorX + aimX, 0);
+          const yaw = Math.atan2(-(to.x - from.x), -(to.z - from.z));
+          for (let pitch = -15; pitch <= 35; pitch += 5) {
+            const r = aim(from.x, from.z, g.y, yaw, pitch, open);
+            if (!r.landed) continue;
+            arcs++;
+            if (under({ x: r.landing.x, y: r.area.y, z: r.landing.z })) bad++;
+          }
+        }
+      }
+    }
+    check(`${b.name}: arcs at the door from the ground never land under the floor`, bad === 0, `${bad}/${arcs} under`);
+    // inside: from the middle, around the room
+    const mid = fw(0, 0);
+    let inArcs = 0;
+    let inBad = 0;
+    for (let yaw = 0; yaw < Math.PI * 2; yaw += Math.PI / 4) {
+      for (const pitch of [-60, -45, -30]) {
+        const r = aim(mid.x, mid.z, b.floorY + 0.02, yaw, pitch, open);
+        if (!r.landed) continue;
+        const q = local(r.landing.x, r.landing.z);
+        if (Math.abs(q.lx) > b.w / 2 - 0.2 || Math.abs(q.lz) > b.d / 2 - 0.2) continue; // out past the walls
+        inArcs++;
+        if (Math.abs(r.area.y - (b.floorY + 0.02)) > 0.05 && r.area.tag !== 'furniture') inBad++;
+      }
+    }
+    check(`${b.name}: arcs around the room land on its floor`, inBad === 0, `${inBad}/${inArcs} elsewhere`);
+  }
 }
 
 const failed = results.filter((r) => !r).length;

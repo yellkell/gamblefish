@@ -142,7 +142,7 @@ function paintSign(c: CanvasRenderingContext2D, ox: number, oy: number, r: Build
     plankBoard(c, 0, 0, w, h, board, seed);
     c.textAlign = 'center';
     c.textBaseline = 'middle';
-    c.font = font(700, r.role === 'outbuilding' ? 60 : 64);
+    c.font = font(700, r.role === 'outbuilding' ? 64 : 72);
     c.lineWidth = 10;
     c.strokeStyle = 'rgba(30,20,12,0.85)';
     const ty = r.sub ? h * 0.42 : h * 0.52;
@@ -156,7 +156,7 @@ function paintSign(c: CanvasRenderingContext2D, ox: number, oy: number, r: Build
     c.fillRect(40, h * 0.66, w - 80, 6);
     c.globalAlpha = 1;
     if (r.sub) {
-      c.font = font(600, 28);
+      c.font = font(700, 32);
       c.lineWidth = 6;
       c.strokeText(r.sub, w / 2, h * 0.82, w - 60);
       c.fillStyle = '#f6ecd4';
@@ -256,7 +256,9 @@ export class VillageSigns {
       } else if (awning) {
         // standing on the front edge of the porch roof (or the door's hood), its foot on the
         // fascia: out in front of the roofs, where you see it from the path
-        sw = Math.min(b.w * 0.45, 2.3, awning.w + 0.1);
+        // big enough to read from the path in the headset (a porch's is ~2.8 m; a door hood's
+        // board overhangs the hood a little)
+        sw = b.porch > 0 ? Math.min(b.w * 0.55, 2.8, awning.w + 0.1) : Math.min(b.w * 0.5, 2.4);
         lx = awning.x;
         ly = awning.bottom + ((sw * SH) / SW) / 2;
         lz = awning.z + 0.03;
@@ -311,7 +313,9 @@ export class VillageSigns {
       g.computeBoundingSphere();
       return g;
     };
-    this.group.add(new Mesh(mk(boards), new MeshLambertMaterial({ map: tex, transparent: true, alphaTest: 0.1, side: DoubleSide })));
+    // painted boards take the light, but glow a little of their own so one facing away from the
+    // sun still reads (in shade the plain lit board went dark brown on the headset)
+    this.group.add(new Mesh(mk(boards), new MeshLambertMaterial({ map: tex, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 0.45, transparent: true, alphaTest: 0.1, side: DoubleSide })));
     const neonMesh = new Mesh(mk(neon), new MeshBasicMaterial({ map: tex, transparent: true, alphaTest: 0.1, side: DoubleSide, toneMapped: false, fog: true }));
     this.group.add(neonMesh);
 

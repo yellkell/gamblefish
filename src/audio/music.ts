@@ -31,11 +31,18 @@ const CASINO = byName(import.meta.glob('./casino/*.{mp3,m4a}', { eager: true, qu
 
 /** ff2's jukebox decode rate */
 const LOFI_RATE = 24000;
-/** the rotation outdoors: under the sea and the fishing */
-const OUTDOOR = 0.13;
-/** the casino song inside, and out of the door at the door (the panner then falls it off) */
-const INSIDE = 0.2;
-const DOOR = 0.34;
+/**
+ * Every song is levelled to the same loudness as it's decoded (NORM, RMS dBFS: the jukebox's
+ * masters sit 7 dB apart), then:
+ *  - the rotation outdoors ~8 dB over a wash breaking 5 m away, ~14 dB over the distant surf
+ *    (shore.ts levels, measured) and under a close splash;
+ *  - the casino song a little fuller inside, and out of the door at the door (the panner then
+ *    falls it off).
+ */
+const NORM = -20;
+const OUTDOOR = dB(-4);
+const INSIDE = dB(-2);
+const DOOR = dB(0);
 /** how far from a casino door you start hearing it (and the rotation dips) */
 const SPILL = 16;
 
@@ -66,6 +73,21 @@ function readMuted(): boolean {
 interface Loaded {
   buffer: AudioBuffer;
   head: number;
+  /** gain that levels it to NORM */
+  level: number;
+}
+
+function dB(x: number): number {
+  return Math.pow(10, x / 20);
+}
+
+/** RMS of the whole song (dBFS) → the gain to NORM (never more than +12 dB). */
+function levelOf(buffer: AudioBuffer): number {
+  const d = buffer.getChannelData(0);
+  let sum = 0;
+  for (let i = 0; i < d.length; i += 4) sum += d[i] * d[i];
+  const rms = Math.sqrt(sum / Math.max(1, Math.ceil(d.length / 4)));
+  return rms > 0 ? Math.min(dB(12), dB(NORM) / rms) : 1;
 }
 
 async function decode(url: string): Promise<Loaded | null> {
@@ -82,7 +104,7 @@ async function decode(url: string): Promise<Loaded | null> {
         for (let i = 0; i < sum.length; i++) sum[i] += d[i] / src.numberOfChannels;
       }
     }
-    return { buffer, head: audibleFrom(buffer) };
+    return { buffer, head: audibleFrom(buffer), level: levelOf(buffer) };
   } catch {
     return null; // a song that won't load is just silence
   }
@@ -200,7 +222,9 @@ export class Music {
     }
     const src = ctx.createBufferSource();
     src.buffer = loaded.buffer;
-    src.connect(this.rotation!);
+    const lv = ctx.createGain();
+    lv.gain.value = loaded.level;
+    src.connect(lv).connect(this.rotation!);
     if (ROTATION.length === 1) {
       src.loop = true;
       src.loopStart = loaded.head;
@@ -221,8 +245,11 @@ export class Music {
     src.loop = true;
     src.loopStart = loaded.head;
     src.loopEnd = loaded.buffer.duration;
-    src.connect(this.inGain!);
-    src.connect(this.muffle!);
+    const lv = ctx.createGain();
+    lv.gain.value = loaded.level;
+    src.connect(lv);
+    lv.connect(this.inGain!);
+    lv.connect(this.muffle!);
     src.start(0, loaded.head);
   }
 }

@@ -11,8 +11,9 @@
  *             account strip (SAVE MY PURCHASES / LOG IN, or who it's saved to)
  *             and the terms in one line.
  *   CONFIRM   the 18+ and no-cash-value agreement, every purchase.
- *   CHECKOUT  a QR code: scan it with your phone and pay there (or OPEN ON
- *             THIS HEADSET). The coins land by themselves within seconds.
+ *   CHECKOUT  a QR code: screenshot it, bring the screenshot up on your
+ *             phone and tap the code there to pay (or OPEN ON THIS HEADSET).
+ *             The coins land by themselves within seconds.
  *   PAID      the coins that landed, and (the first time) one tap to save the
  *             purchase to the email you paid with.
  *   LOG IN    on a new headset: type your email, open the link on your phone,
@@ -42,6 +43,8 @@ type Face = 'packs' | 'confirm' | 'checkout' | 'paid' | 'login';
 const W = 1500;
 const H = 900;
 const BRASS = '#d8b060';
+/** on the board, every visit */
+const FOR_FUN = '(This game is for fun: microtransactions exist to support further development, rather than to further the gameplay experience.)';
 
 interface Btn {
   id: string;
@@ -324,7 +327,8 @@ export class IslandBank {
           btn('save-type', 'SAVE MY PURCHASES', 44, 720, 520, 80, BRASS, true, 34);
           btn('login', 'LOG IN (new headset)', 590, 720, 520, 80, '#3fd6c6', true, 34);
         }
-        text('18+ only. Coins are for play in Gamble Fish: no cash value, never withdrawn or exchanged. Payments by Stripe.', 44, 860, 24, INK.dim, 'left', 500, W - 88);
+        text(FOR_FUN, 44, 836, 26, INK.hot, 'left', 600, W - 88);
+        text('18+ only. Coins are for play in Gamble Fish: no cash value, never withdrawn or exchanged. Payments by Stripe.', 44, 872, 22, INK.dim, 'left', 500, W - 88);
         break;
       }
       case 'confirm': {
@@ -337,9 +341,11 @@ export class IslandBank {
           '   can never be withdrawn, sold or exchanged for money or prizes.',
           '• You pay on your phone through Stripe; this headset never sees your card.',
         ];
+        text('(This game is for fun: microtransactions exist to support further development,', W / 2, 600, 30, INK.dim, 'center', 500);
+        text('rather than to further the gameplay experience.)', W / 2, 638, 30, INK.dim, 'center', 500);
         lines.forEach((l, i) => text(l, 120, 400 + i * 50, 34, INK.hot));
-        btn('agree', `I AGREE: PAY ${priceLabel(p.minor)}`, 120, 660, 760, 110, '#ffb000', true, 44);
-        btn('back', 'BACK', 910, 660, 470, 110, 'rgba(255,255,255,0.3)', true, 40);
+        btn('agree', `I AGREE: PAY ${priceLabel(p.minor)}`, 120, 680, 760, 110, '#ffb000', true, 44);
+        btn('back', 'BACK', 910, 680, 470, 110, 'rgba(255,255,255,0.3)', true, 40);
         break;
       }
       case 'checkout': {
@@ -354,10 +360,11 @@ export class IslandBank {
           c.fillStyle = '#f4f2ee';
           c.fill();
           drawQr(c, co.short, 90, 160, 500);
-          text('Scan with your phone', 680, 200, 54, INK.hot, 'left', 700);
-          text(`to pay ${priceLabel(co.pack.minor)} for ${co.pack.coins.toLocaleString('en-US')} coins`, 680, 256, 36, INK.dim);
-          text('Point your phone camera at the code through the', 680, 330, 30, INK.dim);
-          text("headset's passthrough, or open it here instead.", 680, 368, 30, INK.dim);
+          text('Pay on your phone', 680, 200, 54, INK.hot, 'left', 700);
+          text(`${priceLabel(co.pack.minor)} for ${co.pack.coins.toLocaleString('en-US')} coins`, 680, 252, 36, INK.dim);
+          text('1.  Take a screenshot of this code.', 680, 314, 32, INK.hot);
+          text('2.  Bring the screenshot up on your phone.', 680, 356, 32, INK.hot);
+          text('3.  Tap the QR code there to pay.', 680, 398, 32, INK.hot);
           const dots = '.'.repeat(1 + (Math.floor(performance.now() / 500) % 3));
           text(`waiting for the payment${dots}`, 680, 450, 38, '#3fd6c6', 'left', 700);
           btn('open', 'OPEN ON THIS HEADSET', 680, 520, 560, 90, 'rgba(255,255,255,0.3)', true, 34);

@@ -15,8 +15,8 @@
  *  - BEDS: a low distant-surf roar from the direction of the nearest shore, and the pier's
  *    lapping from the nearest point under the deck.
  *
- * Everything goes through one shore bus. Indoors it's muffled and quieter; outdoors it's open.
- * Tidewater's SoundScape.js gives the levels (samples.ts MIX).
+ * Everything goes through one shore bus, 8 dB under Tidewater's SoundScape.js levels (samples.ts
+ * MIX) so the music stays on top. Indoors it's muffled and quieter still.
  */
 
 import { Vector3 } from 'three';
@@ -43,6 +43,12 @@ const RAYS = 36;
 const RAY_STEP = 2;
 const RAY_MAX = 160;
 const dB = (x: number): number => Math.pow(10, x / 20);
+/**
+ * The whole sea under the music: Tidewater mixed its surf for a world with no score; here the
+ * jukebox is the lead, so the shore sits 8 dB below Tidewater's levels (and 18 dB indoors).
+ */
+const OUTDOORS = dB(-8);
+const INDOORS = dB(-18);
 
 interface Loop {
   gain: GainNode;
@@ -86,7 +92,7 @@ export class ShoreSound {
     const t = ctx.currentTime;
 
     const inside = this.indoors();
-    this.bus!.gain.setTargetAtTime(inside ? 0.35 : 1, t, 0.25);
+    this.bus!.gain.setTargetAtTime(inside ? INDOORS : OUTDOORS, t, 0.25);
     this.muffle!.frequency.setTargetAtTime(inside ? 420 : 18000, t, 0.25);
 
     this.scan -= dt;

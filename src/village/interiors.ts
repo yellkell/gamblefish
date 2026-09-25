@@ -11,7 +11,9 @@
  *    island. The light is baked into the room's own textures (a warm pool under the lamp, the
  *    walls glowing toward the middle and falling off to the corners): unlit materials, so a
  *    lamp costs nothing on the headset.
- *  - THE DOORWAY from outside: a warm glow over the closed door, so it reads as open and lit.
+ *  - THE DOORWAY is real: the bake cuts it in the house's front wall and leaves the door out
+ *    (tools/bake-world.mjs), and the room lines it through the wall. From outside you see into
+ *    the lit room; from inside, out to the island.
  *
  * Each interior has a `contents` group in the building's own frame (x across the facade, +z out
  * of the front, y = 0 on the floor) for whatever lives there: tables, counters, people.
@@ -39,8 +41,14 @@ import type { BuildingFrame } from './signs.ts';
 const STOREY = 2.75;
 /** the inner shell sits this far inside the exterior walls */
 const INSET = 0.17;
+/** the gap left in the walls' colliders at the door (a little wider than you see: forgiving aim) */
 const DOOR_W = 1.1;
-const DOOR_H = 2.15;
+/**
+ * The doorway itself: Tidewater's door size (Buildings.js doorUnit dw × dh). The bake cuts this
+ * opening in the house's front wall and leaves the door out (tools/bake-world.mjs); the room's
+ * shell has the same opening, lined through the wall.
+ */
+export const DOOR_OPENING = { w: 0.92, h: 2.08 };
 
 export interface Interior {
   name: string;
@@ -122,7 +130,7 @@ export function openColliders(boxes: BoxCollider[], frames: BuildingFrame[]): Bo
       const p = frameToWorld(b, x, 0, z);
       out.push({ tag: 'furniture', walkable: false, solid: true, cx: p.x, cz: p.z, hx, hz, rotY: b.yaw, top: b.floorY + top, bottom: b.floorY - 0.2 });
     }
-    out.push({ tag: 'interior', walkable: true, solid: true, cx: f.x, cz: f.z, hx: hw - INSET, hz: hd - INSET, rotY: b.yaw, top: b.floorY + 0.02, bottom: b.floorY - 0.3 });
+    out.push({ tag: 'interior', walkable: true, solid: true, cx: f.x, cz: f.z, hx: hw + 0.02, hz: hd + 0.02, rotY: b.yaw, top: b.floorY + 0.02, bottom: b.floorY - 8 }); // out under the walls (no gap at the threshold) and into the ground: no crawling under a house (surfaces.ts catchArc)
   }
   return out;
 }
@@ -291,15 +299,34 @@ export function buildInteriors(frames: BuildingFrame[]): Interior[] {
     panel(w, h, 0, h / 2, -d / 2, 0); // back, facing in (+z)
     panel(d, h, -w / 2, h / 2, 0, Math.PI / 2);
     panel(d, h, w / 2, h / 2, 0, -Math.PI / 2);
-    // front wall with the doorway (facing in: −z)
-    const dx = Math.max(-w / 2 + DOOR_W / 2, Math.min(w / 2 - DOOR_W / 2, b.doorX));
+    // front wall with the doorway (facing in: −z), the same opening as the one the bake cuts in
+    // the house's wall
+    const OW = DOOR_OPENING.w;
+    const OH = DOOR_OPENING.h;
+    const dx = Math.max(-w / 2 + OW / 2, Math.min(w / 2 - OW / 2, b.doorX));
     const l0 = -w / 2;
-    const l1 = dx - DOOR_W / 2;
-    const r0 = dx + DOOR_W / 2;
+    const l1 = dx - OW / 2;
+    const r0 = dx + OW / 2;
     const r1 = w / 2;
     if (l1 > l0) panel(l1 - l0, h, (l0 + l1) / 2, h / 2, d / 2, Math.PI);
     if (r1 > r0) panel(r1 - r0, h, (r0 + r1) / 2, h / 2, d / 2, Math.PI);
-    panel(DOOR_W, h - DOOR_H, dx, DOOR_H + (h - DOOR_H) / 2, d / 2, Math.PI);
+    panel(OW, h - OH, dx, OH + (h - OH) / 2, d / 2, Math.PI);
+    // the doorway lined through the wall, from the room's shell out to the house's front face:
+    // jambs and head in the trim's wood, the threshold in the floor's planks
+    const reveal = INSET + 0.005;
+    const rz = d / 2 + reveal / 2;
+    const jambMat = new MeshLambertMaterial({ color: 0xd8d0c0, side: DoubleSide });
+    for (const [x, ry] of [[l1, Math.PI / 2], [r0, -Math.PI / 2]] as const) {
+      const j = new Mesh(new PlaneGeometry(reveal, OH), jambMat);
+      j.position.set(x, OH / 2, rz);
+      j.rotation.y = ry;
+      group.add(j);
+    }
+    const head = new Mesh(new PlaneGeometry(OW, reveal).rotateX(Math.PI / 2), jambMat);
+    head.position.set(dx, OH, rz);
+    const sill = new Mesh(new PlaneGeometry(OW, reveal).rotateX(-Math.PI / 2), new MeshBasicMaterial({ map: floorTex }));
+    sill.position.set(dx, 0.012, rz);
+    group.add(head, sill);
     // a lamp: flex, shade, a warm bulb
     const lamp = new Group();
     const shade = new Mesh(new SphereGeometry(0.22, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2), new MeshLambertMaterial({ color: 0x2a2a2a, side: DoubleSide }));
@@ -314,11 +341,6 @@ export function buildInteriors(frames: BuildingFrame[]): Interior[] {
     lamp.add(shade, bulb, flex);
     lamp.position.set(0, h - 0.55, 0);
     group.add(lamp);
-
-    // outside: the doorway glows (it's open, and lit)
-    const glow = new Mesh(new PlaneGeometry(DOOR_W * 0.86, DOOR_H * 0.95), new MeshBasicMaterial({ color: role.role === 'casino' ? 0xffb86a : 0xffd9a0, transparent: true, opacity: 0.82, toneMapped: false }));
-    glow.position.set(b.doorX, DOOR_H * 0.475, b.d / 2 + 0.11); // in front of the door unit, which stands proud of the wall
-    group.add(glow);
 
     const c = Math.cos(b.yaw);
     const s = Math.sin(b.yaw);

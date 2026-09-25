@@ -514,6 +514,11 @@ export class Vegetation {
   private instanced(geo: BufferGeometry, mat: Material, capacity: number): InstancedMesh {
     const m = new InstancedMesh(geo, mat, capacity);
     m.instanceMatrix.setUsage(DynamicDrawUsage);
+    // its per-plant tint exists from the start: made lazily on the first re-pick, the mesh came
+    // to it after the shared leaf materials had compiled without instance colours, and in the
+    // headset's render those plants drew pitch black
+    for (let i = 0; i < capacity; i++) m.setColorAt(i, _c.setRGB(1, 1, 1));
+    m.instanceColor!.setUsage(DynamicDrawUsage);
     m.count = 0;
     m.frustumCulled = false;
     this.group.add(m);

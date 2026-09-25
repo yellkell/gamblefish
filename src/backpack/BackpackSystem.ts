@@ -421,7 +421,9 @@ export class BackpackSystem extends createSystem({}) {
     this.releaseNet.position.set(this.tray.width / 2 + 0.16, 0.01, this.tray.height / 2 - 0.08);
     this.info.mesh.position.set(0, 0.075, -this.tray.height / 2 - 0.1);
     this.musicButton.mesh.position.set(-this.tray.width / 2 - 0.13, 0.012, this.tray.height / 2 - 0.08);
-    this.info.mesh.rotation.set(-0.25, 0, 0);
+    // face your eyes, level (the tray itself is tipped 35° toward you: parented as-is, the text
+    // leaned away and read skewed)
+    this.info.mesh.lookAt(this.camera.getWorldPosition(_v));
     this.tray.group.visible = true;
     this.tray.group.scale.setScalar(0.85);
     this.anims.push({ kind: 'pop', t: 0, dur: 0.22, obj: this.tray.group });

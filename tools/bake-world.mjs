@@ -43,6 +43,154 @@ const nop = new Proxy(function () {}, { get: (t, p) => (p === 'then' ? undefined
 for (const k of Object.keys(GPU)) if (GPU[k] === null) GPU[k] = nop;
 for (const k of ['GPUTextureUsage', 'GPUBufferUsage', 'GPUShaderStage', 'GPUMapMode', 'GPUColorWrite']) globalThis[k] = new Proxy({}, { get: () => 1 });
 
+// A porch 2.6–5.2 m wide gets three posts (buildHouse: ceil(width / 2.6) + 1), and the middle one
+// stands on the stair line, right in front of the door — the Florist and the harbour huts. The
+// bake leaves that post out (and its base, cap and knee braces); the beam spans on its own.
+// Which house is being built comes from Village._layout's specs and buildHouse's own
+// B.pushAt(x, 0, z, yaw).
+const houseAt = new Map();
+let house = null;
+let houseDepth = -1;
+const near = (a, b, e = 0.02) => Math.abs(a - b) < e;
+/** the post in the stairs' way in the current house frame, if there is one: [x, z] */
+const blockingPost = (B) => {
+  if (!house || !house.porch || B.stack.length !== houseDepth) return null;
+  const pw = Math.min(house.w, house.porch.width || house.w);
+  if (Math.max(2, Math.ceil(pw / 2.6) + 1) !== 3) return null;
+  const pcx = house.porch.offset || 0;
+  const stairX = house.porch.stairX ?? house.doorX ?? 0;
+  return Math.abs(pcx - stairX) < 0.7 ? [pcx, house.d / 2 + house.porch.depth - 0.12] : null;
+};
+// The walk-in buildings (village/interiors.ts) get a real doorway: their front wall is built as
+// three pieces round an opening the size of Tidewater's door (DOOR_OPENING), and the door
+// itself — leaf, glass, knob — is left out; its casing, head and sill stay as the doorway's trim.
+// Through it you see into the lit room, and out of it to the island.
+const { hasInterior, DOOR_OPENING } = await import('../src/village/interiors.ts');
+let frontWall = false;
+
+// The boatyard's slipway. Tidewater lays each rail as one straight beam from the shed to 6.5 m
+// out, so it cuts through the sand where the beach dips and stops dead on the sand short of the
+// sea, and it gives each rail its own short ties, off-centre: two broken half-ladders. The bake
+// leaves those out and lays one slipway: both rails following the sand in half-metre lengths
+// from the shed on into the water, full-width ties across the pair every 0.6 m.
+let boathouse = null;
+let boathouseDepth = -1;
+const SLIP = { rails: [-0.55, 1.25], tie: 0.6, wet: 2.5, step: 0.5 };
+const walkIn = () => house && hasInterior(house.name);
+{
+  const { Village: V } = await import(url('world/Village.js'));
+  const layout = V.prototype._layout;
+  V.prototype._layout = function (rand) {
+    const specs = layout.call(this, rand);
+    for (const h of specs.houses ?? []) houseAt.set(`${h.x},${h.z}`, h);
+    boathouse = specs.boathouse ?? null;
+    return specs;
+  };
+  const { Builder } = await import(url('world/village/GeoBuilder.js'));
+  const { pushAt, pop, box, beam, part, lathe } = Builder.prototype;
+  Builder.prototype.pushAt = function (x, y, z, ...r) {
+    const out = pushAt.call(this, x, y, z, ...r);
+    const h = y === 0 ? houseAt.get(`${x},${z}`) : undefined;
+    if (h) ((house = h), (houseDepth = this.stack.length), (frontWall = false));
+    else if (boathouse && y === 0 && x === boathouse.x && z === boathouse.z) boathouseDepth = this.stack.length;
+    // buildHouse's frame for the front wall's windows and door
+    else if (house && this.stack.length === houseDepth + 1 && x === 0 && y === 0 && near(z, house.d / 2) && !(r[0] ?? 0)) frontWall = true;
+    return out;
+  };
+  Builder.prototype.pop = function () {
+    if (boathouseDepth >= 0 && this.stack.length === boathouseDepth) {
+      layBoathouseSlip(this);
+      boathouseDepth = -1;
+    }
+    const out = pop.call(this);
+    if (house && this.stack.length <= houseDepth) frontWall = false;
+    if (house && this.stack.length < houseDepth) house = null;
+    return out;
+  };
+  /** in the front wall's frame of a walk-in house: the door's own pieces, to leave out */
+  const doorPiece = (B, x, y, z) => walkIn() && frontWall && B.stack.length === houseDepth + 1 && house.floorY !== undefined && Math.abs(x - (house.doorX ?? 0)) < 0.5 && y - house.floorY < 2.2;
+  const inBoathouse = (B) => boathouseDepth >= 0 && B.stack.length === boathouseDepth;
+  /** Tidewater's slipway, in the boathouse frame: laid by layBoathouseSlip instead */
+  const layBoathouseSlip = (B) => {
+    const bh = boathouse;
+    const d = bh.d ?? 7.2;
+    const c = Math.cos(bh.yaw);
+    const sn = Math.sin(bh.yaw);
+    const g = (lx, lz) => terrain.heightAt(bh.x + lx * c + lz * sn, bh.z - lx * sn + lz * c);
+    const mid = (SLIP.rails[0] + SLIP.rails[1]) / 2;
+    const span = SLIP.rails[1] - SLIP.rails[0] + 0.4;
+    // the rails' bed: on the sand, then (under water) no deeper than the sea floor a little way out
+    const bed = (lz) => Math.max(Math.min(g(SLIP.rails[0], lz), g(SLIP.rails[1], lz)), -1.2);
+    const z0 = d / 2 - 0.3;
+    // run on until the bed is `wet` metres of slipway past the waterline
+    let z1 = z0 + 4;
+    let wetFrom = null;
+    for (let lz = z0; lz < z0 + 40; lz += 0.25) {
+      if (bed(lz) < 0 && wetFrom === null) wetFrom = lz;
+      if (wetFrom !== null && lz - wetFrom >= SLIP.wet) {
+        z1 = lz;
+        break;
+      }
+      z1 = lz;
+    }
+    let seed = 0.37;
+    // Props.js WOOD(seed, 0.95): bare, well-weathered timber ([seed, paint, pattern, weather])
+    const wood = () => [(seed = (seed * 9301 + 49297) % 233280) / 233280, 0, 0, 0.95];
+    for (const sx of SLIP.rails) {
+      for (let a = z0; a < z1 - 1e-6; a += SLIP.step) {
+        const b = Math.min(z1, a + SLIP.step);
+        beam.call(B, 'wood', [sx, bed(a) + 0.07, a], [sx, bed(b) + 0.07, b], 0.14, 0.12, { data: wood() });
+      }
+    }
+    for (let lz = z0 + 0.3; lz <= z1 - 0.1; lz += SLIP.tie) {
+      box.call(B, 'wood', mid, bed(lz) - 0.01, lz, span, 0.09, 0.16, { grain: 0, data: wood() });
+    }
+  };
+  Builder.prototype.box = function (key, x, y, z, sx, sy, sz, o) {
+    // Tidewater's slipway ties (1.1 m, one set per rail)
+    if (inBoathouse(this) && sx === 1.1 && sy === 0.09 && sz === 0.16) return;
+    const p = blockingPost(this);
+    // the post (0.12 square), its base and cap (0.16 square), at the post line
+    if (p && near(x, p[0]) && near(z, p[1]) && ((sx === 0.12 && sz === 0.12) || (sx === 0.16 && sz === 0.16))) return;
+    // a walk-in house's front wall (full width, 0.14 thick, just inside the front face): round the doorway
+    if (walkIn() && this.stack.length === houseDepth && x === 0 && sx === house.w && sz === 0.14 && near(z, house.d / 2 - 0.07)) {
+      const floorY = (house.floorY = y - sy / 2);
+      const W = DOOR_OPENING.w;
+      const Hd = DOOR_OPENING.h;
+      const ox = house.doorX ?? 0;
+      const l0 = -house.w / 2;
+      const l1 = ox - W / 2;
+      const r0 = ox + W / 2;
+      const r1 = house.w / 2;
+      box.call(this, key, (l0 + l1) / 2, y, z, l1 - l0, sy, sz, o);
+      box.call(this, key, (r0 + r1) / 2, y, z, r1 - r0, sy, sz, o);
+      box.call(this, key, ox, (floorY + Hd + floorY + sy) / 2, z, W, sy - Hd, sz, o);
+      return;
+    }
+    // the door leaf (0.92 × 2.08) and its glazing frame and bar
+    if (doorPiece(this, x, y, z) && ((near(z, 0.012) && sx === 0.92) || (near(z, 0.04) && sx === 0.56) || (near(z, 0.049) && sx === 0.02))) return;
+    return box.call(this, key, x, y, z, sx, sy, sz, o);
+  };
+  Builder.prototype.part = function (key, pt, x, y, z, o) {
+    // the door's pane
+    if (key === 'glass' && near(z, 0.047) && doorPiece(this, x, y, z)) return;
+    return part.call(this, key, pt, x, y, z, o);
+  };
+  Builder.prototype.lathe = function (key, x, y, z, profile, o) {
+    // the door's knob
+    if (key === 'hard' && near(z, 0.035) && doorPiece(this, x, y, z)) return;
+    return lathe.call(this, key, x, y, z, profile, o);
+  };
+  Builder.prototype.beam = function (key, p0, p1, w, h, o) {
+    // Tidewater's slipway rails (one straight beam each)
+    if (inBoathouse(this) && w === 0.14 && h === 0.12 && SLIP.rails.includes(p0[0]) && p0[0] === p1[0]) return;
+    const p = blockingPost(this);
+    // its knee braces: from 4 cm off the post, 0.32 m out to the beam
+    if (p && near(p0[2], p[1]) && near(Math.abs(p0[0] - p[0]), 0.04) && near(Math.abs(p1[0] - p0[0]), 0.32)) return;
+    return beam.call(this, key, p0, p1, w, h, o);
+  };
+}
+
 const { TerrainData } = await import(url('world/TerrainData.js'));
 const { Colliders } = await import(url('world/Colliders.js'));
 const { Village } = await import(url('world/Village.js'));

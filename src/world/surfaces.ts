@@ -44,6 +44,9 @@ interface Deck {
   r: number;
   top: number;
   tag: string;
+  /** solid from its top down into the ground (a porch, a stoop, a room's floor): nothing gets
+   *  under it, so it catches an arc from below too */
+  toGround: boolean;
 }
 
 interface Wall {
@@ -79,7 +82,8 @@ export class Surfaces {
       const sin = Math.sin(b.rotY);
       if (b.walkable) {
         if (NOT_A_FLOOR.has(b.tag)) continue;
-        this.decks.push({ cx: b.cx, cz: b.cz, hx: b.hx, hz: b.hz, cos, sin, r: Math.hypot(b.hx, b.hz), top: b.top, tag: b.tag });
+        const toGround = b.solid && b.bottom <= terrain.heightAt(b.cx, b.cz) + 0.05;
+        this.decks.push({ cx: b.cx, cz: b.cz, hx: b.hx, hz: b.hz, cos, sin, r: Math.hypot(b.hx, b.hz), top: b.top, tag: b.tag, toGround });
       } else if (b.solid) {
         // Tidewater's local frame: local = R(rotY)·(world − centre), with
         // lx = dx·cos − dz·sin, lz = dx·sin + dz·cos; invert for the corners.
@@ -127,11 +131,13 @@ export class Surfaces {
    */
   catchArc(x: number, y: number, z: number, prevY: number, falling: boolean): FloorArea | null {
     let best: FloorArea = this.groundAt(x, z);
-    if (falling) {
-      this.forDecksAt(x, z, (d) => {
-        if (d.top <= prevY + 1e-6 && d.top > best.y) best = { y: d.top, kind: 'deck', tag: d.tag };
-      });
-    }
+    // A floor that's solid down to the ground (a porch, a stoop, a room's floor) has no
+    // underneath: like the ground, it catches an arc from any direction. Otherwise an arc thrown
+    // at a doorway from the ground — your hand below the room's floor — slipped under the
+    // floorboards and came down on the ground beneath the house.
+    this.forDecksAt(x, z, (d) => {
+      if (((falling && d.top <= prevY + 1e-6) || d.toGround) && d.top > best.y) best = { y: d.top, kind: 'deck', tag: d.tag };
+    });
     return y <= best.y ? best : null;
   }
 
