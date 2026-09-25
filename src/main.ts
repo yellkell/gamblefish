@@ -29,6 +29,7 @@ import { VillageSigns, type BuildingFrame } from './village/signs.ts';
 import { FishMarket } from './village/market.ts';
 import { RouletteTable } from './casino/RouletteTable.ts';
 import { SlotMachine } from './casino/SlotMachine.ts';
+import { BlackjackTable } from './casino/BlackjackTable.ts';
 import { PointerSystem } from './ui/pointer.ts';
 import { buildInteriors, interiorAt, openColliders, type Interior } from './village/interiors.ts';
 import { Blink } from './fx/blink.ts';
@@ -161,6 +162,8 @@ World.create(container, {
   const room = (n: string): Interior | undefined => interiors.find((i) => i.name === n);
   const lure = room('C');
   if (lure) tables.push(new RouletteTable(lure, game, { chips: [1, 5, 25, 100], maxBet: 500, at: [0, -0.6] }));
+  const shark = room('G');
+  if (shark) tables.push(new BlackjackTable(shark, game, { chips: [5, 10, 25, 100], maxBet: 500, at: [0, -0.9] }));
   const reels = room('B');
   if (reels) {
     const z = -reels.d / 2 + 0.28;

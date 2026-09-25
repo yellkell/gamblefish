@@ -281,3 +281,15 @@ export function slotBells(seconds: number): void {
   const n = Math.round(seconds * 10);
   for (let i = 0; i < n; i++) tone({ freq: i % 2 ? 1568 : 1319, type: 'triangle', dur: 0.09, gain: 0.07, delay: i * 0.1 });
 }
+
+/** A card slid off the shoe across the felt: a soft papery hiss with a tick as it lands. */
+export function cardSlide(): void {
+  whooshNoise(0.14, 0.07, 3600, 1600);
+  clank(2600, 0.012, 0.03, 0.12);
+}
+
+/** A card turned over: a quick snap. */
+export function cardFlip(): void {
+  whooshNoise(0.05, 0.08, 5000, 2600);
+  tone({ freq: 900, to: 500, type: 'triangle', dur: 0.03, gain: 0.04, delay: 0.03 });
+}

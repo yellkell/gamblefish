@@ -9,6 +9,7 @@
 
 import { WHEEL, REDS, colourOf, wins, odds, settle, spin, fairRandom } from '../src/casino/roulette.ts';
 import { REELS, STOPS, SYMBOLS, THREE, line, pays, pull } from '../src/casino/slots.ts';
+import { Shoe, Round, basic, total, isNatural } from '../src/casino/blackjack.ts';
 
 const results = [];
 const check = (name, ok, detail) => {
@@ -85,6 +86,76 @@ for (let i = 0; i < 240000; i++) pull().forEach((s, r) => tally[r][s]++);
 const chiS = tally.map((t) => t.reduce((a, c) => a + (c - 10000) ** 2 / 10000, 0));
 // 23 degrees of freedom: 99.9% of fair reels come in under 49.7
 check('240,000 crypto pulls: each reel stops evenly (χ² < 50)', chiS.every((x) => x < 50), chiS.map((x) => x.toFixed(1)).join(', '));
+
+console.log('\nblackjack: hands');
+const C = (s) => s.split(' ').map((x) => ({ rank: { A: 1, J: 11, Q: 12, K: 13 }[x] ?? Number(x), suit: 0 }));
+check('A K is a natural 21', isNatural(C('A K')) && total(C('A K')).total === 21);
+check('A A 9 is soft 21; K Q 5 is 25', total(C('A A 9')).total === 21 && total(C('A A 9')).soft && total(C('K Q 5')).total === 25);
+check('A 6 is soft 17; A 6 K is hard 17', total(C('A 6')).soft && total(C('A 6')).total === 17 && !total(C('A 6 K')).soft && total(C('A 6 K')).total === 17);
+// a stacked shoe: cards listed in the order they come out (you, dealer, you, dealer, then draws)
+const stacked = (order) => {
+  const shoe = new Shoe(6);
+  shoe.cards = C(order).reverse();
+  return shoe;
+};
+const play = (order, bet, moves = []) => {
+  const r = new Round(stacked(order));
+  r.start(bet);
+  for (const m of moves) if (r.phase === 'player') r.act(m);
+  while (r.phase === 'player') r.act('stand');
+  return r;
+};
+let r = play('A 9 K 7', 2);
+check('a natural pays 3 to 2 without the dealer playing', r.settle()[0].outcome === 'blackjack' && r.settle()[0].returned === 5 && r.dealer.length === 2);
+check('an odd chip rounds the 3:2 up for you ($5 natural → $13 back)', play('A 9 K 7', 5).settle()[0].returned === 13);
+r = play('A A K K', 10);
+check('natural against natural is a push', r.settle()[0].outcome === 'push' && r.settle()[0].returned === 10);
+r = play('10 A 9 K', 10);
+check('the dealer peeks under an ace: a dealer natural ends it before you play', r.phase === 'done' && r.settle()[0].outcome === 'lose');
+r = play('10 6 9 A 5', 10);
+check('the dealer stands on soft 17', r.dealer.length === 2 && total(r.dealer).total === 17 && r.settle()[0].outcome === 'win');
+r = play('10 6 8 10 9', 10);
+check('the dealer draws on 16 (and busts with 25: you win)', r.dealer.length === 3 && r.settle()[0].outcome === 'win');
+r = play('10 6 5 10 K', 10, ['hit']);
+check('you bust at 25 and lose even when the dealer would have busted', r.settle()[0].outcome === 'bust' && r.dealer.length === 2);
+r = play('5 6 6 10 K 2', 10, ['double']);
+check('double: twice the bet, exactly one card', r.hands[0].bet === 20 && r.hands[0].cards.length === 3 && r.settle()[0].returned === 40);
+r = play('8 6 8 10 3 10 5 K', 10, ['split', 'double', 'stand']);
+check('split 8s: two hands, double after split, each settled on its own', r.hands.length === 2 && r.hands[0].bet === 20 && r.settle().every((s) => s.outcome === 'win') && r.settle().reduce((a, s) => a + s.returned, 0) === 60, r.hands.map((h) => h.cards.map((c) => c.rank).join('-')).join(' / '));
+r = play('A 6 A 10 K 9', 10, ['split']);
+check('split aces take one card each and a 21 there is not a blackjack', r.hands.every((h) => h.cards.length === 2 && h.done) && r.settle()[0].outcome === 'win' && r.settle()[0].returned === 20);
+check('no second split', (() => { const q = new Round(stacked('8 6 8 10 8 3')); q.start(10); q.act('split'); return !q.can('split'); })());
+
+console.log('\nblackjack: the shoe and the edge');
+const shoe6 = new Shoe(6);
+const seen = new Map();
+for (const c of shoe6.cards) seen.set(`${c.rank}${c.suit}`, (seen.get(`${c.rank}${c.suit}`) ?? 0) + 1);
+check('six decks: 312 cards, every card exactly six times', shoe6.cards.length === 312 && seen.size === 52 && [...seen.values()].every((n) => n === 6));
+let drawn = 0;
+while (!shoe6.due) (shoe6.draw(), drawn++);
+check('the cut card comes out three-quarters of the way through', drawn === 234, `${drawn} cards`);
+const firstCard = new Array(13).fill(0);
+for (let i = 0; i < 26000; i++) firstCard[new Shoe(1).draw().rank - 1]++;
+const chiB = firstCard.reduce((a, c) => a + (c - 2000) ** 2 / 2000, 0);
+check('26,000 shuffles: the top card is any rank evenly (χ² < 33)', chiB < 33, `χ² ${chiB.toFixed(1)}`);
+const sim = new Shoe(6);
+let bjStaked = 0;
+let bjBack = 0;
+const HANDS = 1_000_000;
+for (let i = 0; i < HANDS; i++) {
+  if (sim.due) sim.shuffle();
+  const q = new Round(sim);
+  q.start(2);
+  bjStaked += 2;
+  while (q.phase === 'player') {
+    const a = basic(q);
+    bjStaked += q.extra(a);
+    q.act(a);
+  }
+  for (const s of q.settle()) bjBack += s.returned;
+}
+const edgePerHand = (bjStaked - bjBack) / (HANDS * 2);
+check('a million hands of basic strategy: house edge 0.1–0.7% of the bet', edgePerHand > 0.001 && edgePerHand < 0.007, `${(edgePerHand * 100).toFixed(2)}% per hand`);
 
 const pass = results.filter(Boolean).length;
 console.log(`\n${pass}/${results.length} passed`);
