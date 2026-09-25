@@ -293,3 +293,45 @@ export function cardFlip(): void {
   whooshNoise(0.05, 0.08, 5000, 2600);
   tone({ freq: 900, to: 500, type: 'triangle', dur: 0.03, gain: 0.04, delay: 0.03 });
 }
+
+/** The lever hitting its catch at the bottom: a heavy mechanical clunk. */
+export function leverClunk(): void {
+  tone({ freq: 95, to: 48, type: 'sine', dur: 0.22, gain: 0.42 });
+  tone({ freq: 190, to: 110, type: 'triangle', dur: 0.08, gain: 0.18 });
+  clank(620, 0.12, 0.16);
+  whooshNoise(0.07, 0.14, 1800, 500);
+}
+
+/** The lever let go: its spring twangs it back up. */
+export function leverSpring(): void {
+  tone({ freq: 210, to: 330, type: 'triangle', dur: 0.25, gain: 0.06 });
+  clank(1100, 0.04, 0.2, 0.18);
+}
+
+/** A reel's detent clicking past as it slows. */
+export function reelTick(k = 1): void {
+  clank(2400 + Math.random() * 300, 0.022 * k, 0.03);
+}
+
+/** The win meter counting up: a bright blip that climbs as the count goes on. */
+export function rollTick(k: number): void {
+  tone({ freq: 880 * Math.pow(2, k * 1.2), type: 'square', dur: 0.03, gain: 0.025 });
+}
+
+/** One coin landing in the tray. */
+export function coinClink(): void {
+  clank(3400 + Math.random() * 1600, 0.03 + Math.random() * 0.02, 0.16);
+}
+
+/** Tension while the last reel crawls in: a rising hum. */
+export function riser(seconds: number): void {
+  tone({ freq: 220, to: 660, type: 'sawtooth', dur: seconds, gain: 0.03 });
+  tone({ freq: 331, to: 990, type: 'triangle', dur: seconds, gain: 0.03 });
+}
+
+/** A big win landing: a boom under a bright chord. */
+export function bigWinHit(): void {
+  tone({ freq: 70, to: 38, type: 'sine', dur: 0.6, gain: 0.5 });
+  [523, 659, 784, 1047].forEach((f) => tone({ freq: f, type: 'triangle', dur: 1.2, gain: 0.07 }));
+  clank(1800, 0.1, 1.2);
+}

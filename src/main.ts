@@ -167,8 +167,13 @@ World.create(container, {
   const reels = room('B');
   if (reels) {
     const z = -reels.d / 2 + 0.28;
-    const colours = ['#3fd6ff', '#ff3fb4', '#ffb000'];
-    [-1.5, 0, 1.5].forEach((x, k) => tables.push(new SlotMachine(reels, game, world, { bets: [1, 5, 25], at: [x, z, 0], colour: colours[k] })));
+    // deep lacquers with gold and chrome: sea-teal, cherry, midnight
+    const looks = [
+      { colour: '#0e4a50', accent: '#3fe0d0' },
+      { colour: '#6e0f1a', accent: '#ffb627' },
+      { colour: '#131f46', accent: '#ffd45a' },
+    ];
+    [-1.5, 0, 1.5].forEach((x, k) => tables.push(new SlotMachine(reels, game, world, { bets: [1, 5, 25], at: [x, z, 0], ...looks[k] })));
   }
   villageTick = (dt) => {
     market?.update(dt, world.camera);
