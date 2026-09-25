@@ -1,0 +1,59 @@
+rules_version = '2';
+
+/**
+ * GAMBLE FISH: the Firestore behind gamblefish.web.app (a project shared with
+ * the WINDOWS game: its leaderboard rule is below, unchanged).
+ *
+ * Everything here is written by the bank server (server/bank.mjs) with admin
+ * credentials, which these rules do not bind:
+ *
+ *   bank/{uid}            credit (what Stripe has been paid for) and claimed
+ *   bank/{uid}/receipts   one per checkout session, so a replayed webhook
+ *                         credits nothing twice
+ *   saves/{uid}           the account's game save
+ *
+ * A player may READ their own and nobody may write from a client, because a
+ * wallet a client can write is a wallet a client can print.
+ */
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function mine(uid) {
+      return request.auth != null && request.auth.uid == uid;
+    }
+
+    match /bank/{uid} {
+      allow read: if mine(uid);
+      allow write: if false;
+      match /receipts/{receipt} {
+        allow read: if mine(uid);
+        allow write: if false;
+      }
+    }
+
+    match /saves/{uid} {
+      allow read: if mine(uid);
+      allow write: if false;
+    }
+
+    /* ── the WINDOWS game's leaderboard ────────────────────────────────── */
+    // The window-7b629 project is shared with another game (window-7b629.web.app).
+    // Its rule is kept here exactly as it was in the console, because deploying
+    // this file replaces the project's rules wholesale.
+    match /leaderboard/{entry} {
+      allow read: if true;
+      allow create: if request.resource.data.keys().hasAll(['name', 'windows', 'timestamp'])
+                    && request.resource.data.name is string
+                    && request.resource.data.name.size() > 0
+                    && request.resource.data.name.size() <= 20
+                    && request.resource.data.windows is int
+                    && request.resource.data.windows >= 0
+                    && request.resource.data.timestamp is int;
+      allow update, delete: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

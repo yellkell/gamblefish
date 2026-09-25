@@ -1,0 +1,12 @@
+{
+  "projects": {
+    "default": "window-7b629"
+  },
+  "targets": {
+    "window-7b629": {
+      "hosting": {
+        "gamblefish": ["gamblefish"]
+      }
+    }
+  }
+}

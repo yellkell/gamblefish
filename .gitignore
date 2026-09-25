@@ -4,3 +4,7 @@ dist/
 public/world/
 public/props/
 .claude/
+
+# firebase cli
+.firebase/
+*-debug.log
