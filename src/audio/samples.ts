@@ -1,5 +1,5 @@
 /**
- * Tidewater's recorded fishing sounds (CC0, public/audio/CREDITS.md) on ff2's SFX bus.
+ * Tidewater's recorded fishing and shore sounds (CC0, public/audio/CREDITS.md) on ff2's SFX bus.
  *
  * The slices, loudness measurements and mix levels are Tidewater's (vendor/tidewater/src/audio:
  * soundBank.js BANK, and SoundScape.js MIX for the fishing group), so a cast, a plop or a
@@ -33,9 +33,15 @@ export const MIX = {
   coins: -30,
   splash: -30,
   emerge: -38,
+  // the shore (SoundScape MIX, surf group)
+  crash: -15,
+  wash: -20,
+  backwash: -23,
+  surfFar: -31,
+  pierLap: -32,
 } as const;
 
-const NAMES = ['reel_wind', 'reel_drag', 'line_strain', 'rod_swish', 'bail_click', 'line_out', 'plop', 'line_snap', 'fish_splash', 'fish_flop', 'coins', 'splash', 'emerge', 'big_splash'];
+const NAMES = ['reel_wind', 'reel_drag', 'line_strain', 'rod_swish', 'bail_click', 'line_out', 'plop', 'line_snap', 'fish_splash', 'fish_flop', 'coins', 'splash', 'emerge', 'big_splash', 'surf_far', 'surf_crash', 'surf_wash', 'surf_backwash', 'pier_lap'];
 
 const dB = (x: number): number => Math.pow(10, x / 20);
 
@@ -60,6 +66,12 @@ export function loadSamples(): Promise<void> {
   return loading;
 }
 
+/** A decoded sample (null until the bank has loaded), and its measured loudness (LUFS). */
+export function sample(name: string): { buffer: AudioBuffer; lufs: number } | null {
+  const b = buffers.get(name);
+  return b ? { buffer: b, lufs: BANK[name].lufs as number } : null;
+}
+
 export interface Pos {
   x: number;
   y: number;
@@ -68,11 +80,12 @@ export interface Pos {
 
 /**
  * Play one slice of a sprite. `level` is the target loudness (dB, Tidewater's MIX scale);
- * `at` places it in the world (with `ref` metres as the distance the level is measured at).
+ * `at` places it in the world (with `ref` metres as the distance the level is measured at); `out`
+ * sends it to another bus than the SFX fader (the shore's, which goes muffled indoors).
  */
-export function shot(name: string, level: number, opts: { rate?: number; at?: Pos; ref?: number; slice?: number; delay?: number } = {}): void {
+export function shot(name: string, level: number, opts: { rate?: number; at?: Pos; ref?: number; slice?: number; delay?: number; out?: AudioNode } = {}): void {
   const ctx = audioContext();
-  const out = sfxOut();
+  const out = opts.out ?? sfxOut();
   const buf = buffers.get(name);
   if (!ctx || !out || !buf || ctx.state !== 'running') return;
   const e = BANK[name];

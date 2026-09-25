@@ -10,7 +10,8 @@
 
 import { launchXR, SessionMode, World } from '@iwsdk/core';
 import type { Camera } from 'three';
-import { CasinoMusic } from './audio/music.ts';
+import { Music } from './audio/music.ts';
+import { ShoreSound } from './audio/shore.ts';
 import { ensureAudio } from './audio/sfx.ts';
 import { BackpackSystem, backpackDeps, backpackView } from './backpack/BackpackSystem.ts';
 import { FishingSystem, fishingDeps, fishingView } from './fishing/FishingSystem.ts';
@@ -176,10 +177,12 @@ World.create(container, {
     ];
     [-1.5, 0, 1.5].forEach((x, k) => tables.push(new SlotMachine(reels, game, world, { bets: [1, 5, 25], at: [x, z, 0], ...looks[k] })));
   }
-  // the casinos' music (a song off ff2's pub jukebox), heard through their open doors
-  const music = new CasinoMusic(interiors.filter((i) => i.role.role === 'casino'));
+  // the music (ff2's jukebox songs outside, the casinos' own inside) and the sea's sound
+  const music = new Music(interiors.filter((i) => i.role.role === 'casino'));
+  const shore = new ShoreSound(heightfield, json.layout.pier, () => interiorAt(interiors, world.player.position.x, world.player.position.z) !== null);
   villageTick = (dt) => {
     music.update(world.camera);
+    shore.update(ocean.time, dt, world.camera);
     market?.update(dt, world.camera);
     for (const t of tables) t.update(dt, world.camera);
     blink.update(dt);
@@ -191,7 +194,7 @@ World.create(container, {
   world.player.rotation.set(0, s.yaw, 0);
 
   // Dev hook: drive the rig without a headset (`__fish.move.to(x, z, yaw)`).
-  (window as unknown as { __fish: unknown }).__fish = { world, surfaces, move: teleportView, json, game, fishing: fishingView, vegetation, backpack: backpackView, interiors, tables, music };
+  (window as unknown as { __fish: unknown }).__fish = { world, surfaces, move: teleportView, json, game, fishing: fishingView, vegetation, backpack: backpackView, interiors, tables, music, shore };
 
   if (import.meta.env.DEV) void import('./dev/harness.ts').then((m) => m.installHarness(world));
 

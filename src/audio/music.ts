@@ -1,37 +1,67 @@
 /**
- * The casinos' music: songs off FIRE FIGHT 2's pub jukebox (ff2 src/pub/songs), played the way
- * ff2 plays its jukebox (src/audio/musicTrack.ts there):
+ * The island's music: songs off FIRE FIGHT 2's jukebox, played the way ff2 plays its jukebox
+ * (src/audio/musicTrack.ts there):
  *
  *  - through the shared AudioContext, never an <audio> element — on Quest an audible media
  *    element wakes Android's media session, which can take Meta Browser down with it;
  *  - decoded lo-fi, 24 kHz mono, so a whole song is a few MB of PCM rather than ~100;
- *  - the silent head of the file skipped, so the loop doesn't open on a gap.
+ *  - the silent head of the file skipped, so a loop doesn't open on a gap.
  *
- * The song plays IN the casinos. Inside one you hear it full; outside, it comes out of the
- * nearest casino's open door, muffled by the walls and fading with distance, so the Lucky Lure
- * is faintly there from the boardwalk and louder as you walk up to it.
+ * Two players:
+ *  - OUTSIDE, the rotation: the songs in ./songs, in filename order, one after another, round
+ *    and round. Only the one playing is decoded; the next decodes when it ends.
+ *  - IN THE CASINOS, their own song (./casino), on a loop. Inside one you hear only that. Walking
+ *    up to a casino, it spills out of the open door, muffled by the walls and placed at the door,
+ *    and the rotation dips under it.
  *
- * Songs are the files in ./songs, in filename order (drop in more `.mp3` / `.m4a` and they join
- * the rotation); one song just loops.
+ * The backpack's MUSIC button mutes both (the sea and the game's sounds carry on). The choice
+ * is kept in this browser.
  */
 
 import { Vector3 } from 'three';
 import type { Interior } from '../village/interiors.ts';
 import { audioContext, sfxOut } from './sfx.ts';
 
-const SONGS = Object.entries(
-  import.meta.glob('./songs/*.{mp3,m4a}', { eager: true, query: '?url', import: 'default' }) as Record<string, string>,
-)
-  .sort(([a], [b]) => a.localeCompare(b))
-  .map(([, url]) => url);
+const byName = (files: Record<string, string>): string[] =>
+  Object.entries(files)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([, url]) => url);
+const ROTATION = byName(import.meta.glob('./songs/*.{mp3,m4a}', { eager: true, query: '?url', import: 'default' }) as Record<string, string>);
+const CASINO = byName(import.meta.glob('./casino/*.{mp3,m4a}', { eager: true, query: '?url', import: 'default' }) as Record<string, string>)[0];
 
 /** ff2's jukebox decode rate */
 const LOFI_RATE = 24000;
-/** level in a casino, and out of the door at the door (the panner then falls it off) */
+/** the rotation outdoors: under the sea and the fishing */
+const OUTDOOR = 0.13;
+/** the casino song inside, and out of the door at the door (the panner then falls it off) */
 const INSIDE = 0.2;
-const OUTSIDE = 0.34;
-/** past this far from every casino door it's silent */
-const REACH = 60;
+const DOOR = 0.34;
+/** how far from a casino door you start hearing it (and the rotation dips) */
+const SPILL = 16;
+
+const MUTE_KEY = 'gamblefish.music.muted';
+
+/** The mute switch (the backpack's MUSIC button). */
+export const musicView = {
+  muted: readMuted(),
+  toggle(): boolean {
+    this.muted = !this.muted;
+    try {
+      localStorage.setItem(MUTE_KEY, this.muted ? '1' : '0');
+    } catch {
+      /* no storage: it just won't be remembered */
+    }
+    return this.muted;
+  },
+};
+
+function readMuted(): boolean {
+  try {
+    return localStorage.getItem(MUTE_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
 
 interface Loaded {
   buffer: AudioBuffer;
@@ -71,11 +101,13 @@ function audibleFrom(buffer: AudioBuffer): number {
   return 0;
 }
 
-export class CasinoMusic {
+export class Music {
   private readonly doors: Vector3[];
   private started = false;
-  private song = 0;
-  private source: AudioBufferSourceNode | null = null;
+  /** which song of the rotation is on (the dev hook reads it) */
+  song = 0;
+  private master: GainNode | null = null;
+  private rotation: GainNode | null = null;
   private inGain: GainNode | null = null;
   private outGain: GainNode | null = null;
   private muffle: BiquadFilterNode | null = null;
@@ -90,17 +122,21 @@ export class CasinoMusic {
   update(camera: { getWorldPosition(v: Vector3): Vector3 }): void {
     const ctx = audioContext();
     const out = sfxOut();
-    if (!ctx || !out || !SONGS.length || !this.casinos.length) return;
-    // wait for the Enter VR tap to have started the audio, then load the first song
+    if (!ctx || !out) return;
+    // wait for the Enter VR tap to have started the audio
     if (!this.started) {
       if (ctx.state !== 'running') return;
       this.started = true;
       this.build(ctx, out);
-      void this.play(ctx, 0);
+      // one decode at a time: the rotation's first song, then the casinos'
+      void this.playRotation(ctx, 0).then(() => this.playCasino(ctx));
     }
+    const t = ctx.currentTime;
+    this.master!.gain.setTargetAtTime(musicView.muted ? 0 : 1, t, 0.12);
+
     const p = camera.getWorldPosition(this.head);
     const inside = this.casinos.some((i) => i.inside(p.x, p.z));
-    let door = this.doors[0];
+    let door: Vector3 | null = null;
     let d = Infinity;
     for (const q of this.doors) {
       const k = q.distanceTo(p);
@@ -109,24 +145,36 @@ export class CasinoMusic {
         door = q;
       }
     }
-    const t = ctx.currentTime;
-    const fade = Math.max(0, Math.min(1, (REACH - d) / (REACH * 0.4)));
+    // 0 far from every casino .. 1 in its doorway
+    const near = inside ? 1 : Math.max(0, Math.min(1, 1 - d / SPILL)) ** 1.5;
+    this.rotation!.gain.setTargetAtTime(inside ? 0 : OUTDOOR * (1 - 0.85 * near), t, 0.3);
     this.inGain!.gain.setTargetAtTime(inside ? INSIDE : 0, t, 0.15);
-    this.outGain!.gain.setTargetAtTime(inside ? 0 : OUTSIDE * fade, t, 0.15);
+    this.outGain!.gain.setTargetAtTime(inside ? 0 : DOOR * near, t, 0.15);
     // through the walls it's all bass; standing in the doorway you hear the room
     this.muffle!.frequency.setTargetAtTime(650 + 3400 * Math.max(0, 1 - d / 7) ** 2, t, 0.15);
-    this.panner!.positionX.setTargetAtTime(door.x, t, 0.05);
-    this.panner!.positionY.setTargetAtTime(door.y, t, 0.05);
-    this.panner!.positionZ.setTargetAtTime(door.z, t, 0.05);
+    if (door) {
+      this.panner!.positionX.setTargetAtTime(door.x, t, 0.05);
+      this.panner!.positionY.setTargetAtTime(door.y, t, 0.05);
+      this.panner!.positionZ.setTargetAtTime(door.z, t, 0.05);
+    }
   }
 
-  /** source → (inside: straight in) + (outside: walls' low-pass → the door, placed in 3-D) → SFX bus */
+  /**
+   * rotation → master
+   * casino song → (inside: straight in) + (outside: walls' low-pass → the door, in 3-D) → master
+   * master (the mute) → SFX bus
+   */
   private build(ctx: AudioContext, out: AudioNode): void {
-    this.inGain = ctx.createGain();
-    this.inGain.gain.value = 0;
-    this.inGain.connect(out);
-    this.outGain = ctx.createGain();
-    this.outGain.gain.value = 0;
+    const gain = (to: AudioNode, v = 0): GainNode => {
+      const g = ctx.createGain();
+      g.gain.value = v;
+      g.connect(to);
+      return g;
+    };
+    this.master = gain(out, musicView.muted ? 0 : 1);
+    this.rotation = gain(this.master);
+    this.inGain = gain(this.master);
+    this.outGain = gain(this.master);
     this.muffle = ctx.createBiquadFilter();
     this.muffle.type = 'lowpass';
     this.muffle.frequency.value = 650;
@@ -136,27 +184,45 @@ export class CasinoMusic {
     this.panner.distanceModel = 'inverse';
     this.panner.refDistance = 3;
     this.panner.rolloffFactor = 1.1;
-    this.muffle.connect(this.panner).connect(this.outGain).connect(out);
+    this.muffle.connect(this.panner).connect(this.outGain);
   }
 
-  private async play(ctx: AudioContext, i: number): Promise<void> {
+  /** The rotation: this song, then (when it ends) the next one's decode, round and round. */
+  private async playRotation(ctx: AudioContext, i: number): Promise<void> {
+    if (!ROTATION.length) return;
     this.song = i;
-    const loaded = await decode(SONGS[i]);
-    if (!loaded || this.song !== i) return;
+    const loaded = await decode(ROTATION[i]);
+    const next = (i + 1) % ROTATION.length;
+    if (!loaded) {
+      // skip a song that won't decode (don't spin if none will)
+      if (next !== 0) void this.playRotation(ctx, next);
+      return;
+    }
     const src = ctx.createBufferSource();
     src.buffer = loaded.buffer;
-    src.connect(this.inGain!);
-    src.connect(this.muffle!);
-    if (SONGS.length === 1) {
+    src.connect(this.rotation!);
+    if (ROTATION.length === 1) {
       src.loop = true;
       src.loopStart = loaded.head;
       src.loopEnd = loaded.buffer.duration;
     } else {
-      // the next song decodes when this one ends; the old buffer goes with its source
-      src.onended = () => void this.play(ctx, (i + 1) % SONGS.length);
+      // the old buffer goes with its source
+      src.onended = () => void this.playRotation(ctx, next);
     }
     src.start(0, loaded.head);
-    this.source?.disconnect();
-    this.source = src;
+  }
+
+  private async playCasino(ctx: AudioContext): Promise<void> {
+    if (!CASINO) return;
+    const loaded = await decode(CASINO);
+    if (!loaded) return;
+    const src = ctx.createBufferSource();
+    src.buffer = loaded.buffer;
+    src.loop = true;
+    src.loopStart = loaded.head;
+    src.loopEnd = loaded.buffer.duration;
+    src.connect(this.inGain!);
+    src.connect(this.muffle!);
+    src.start(0, loaded.head);
   }
 }

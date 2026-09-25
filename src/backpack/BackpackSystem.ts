@@ -45,12 +45,13 @@ import {
   Vector3,
   type Object3D,
 } from 'three';
+import { musicView } from '../audio/music.ts';
 import { MIX, shot } from '../audio/samples.ts';
 import { mergeChime, uiClick, uiDeny } from '../audio/sfx.ts';
 import type { FishUniforms, Props } from '../fishing/props.ts';
 import { FISH, type GameState } from '../fishing/tidewater.ts';
 import { pulseHand } from '../input/haptics.ts';
-import { pointerView } from '../ui/pointer.ts';
+import { InteractivePanel, pointerView, register } from '../ui/pointer.ts';
 import { locomotion } from '../locomotion/TeleportSystem.ts';
 import { font } from '../ui/fonts.ts';
 import { INK, Panel, roundRect } from '../ui/panel.ts';
@@ -195,6 +196,8 @@ export class BackpackSystem extends createSystem({}) {
   private badges: Sprite[] = [];
   private readonly badgePool = new Map<number, Sprite[]>();
   private releaseNet!: Group;
+  /** the MUSIC on / off switch, on the tray's left (the net is on its right) */
+  private musicButton!: InteractivePanel;
 
   /** the fish in your hand */
   private held: { piece: Piece; model: FishModel; hand: Hand; from: { x: number; y: number; rot: Rot } | null } | null = null;
@@ -227,6 +230,18 @@ export class BackpackSystem extends createSystem({}) {
     tag.position.set(0, 0.06, 0.1);
     this.releaseNet.add(ring, bottom, tag);
     this.tray.group.add(this.releaseNet);
+    // the music switch: a button lying on the tray's left rim, clicked with the pointer
+    this.musicButton = new InteractivePanel([320, 128], [0.17, 0.068]);
+    this.musicButton.mesh.rotation.x = -Math.PI / 2;
+    this.musicButton.paint = () => this.paintMusicButton();
+    this.musicButton.onClick = () => {
+      musicView.toggle();
+      this.paintMusicButton();
+    };
+    this.musicButton.repaintOnFonts(() => this.paintMusicButton());
+    this.paintMusicButton();
+    this.tray.group.add(this.musicButton.mesh);
+    register(this.musicButton);
     backpackView.takeInHand = (id, hand) => this.takeInHand(id, hand);
     backpackView.toggle = () => (backpackView.open ? this.close() : this.open());
     backpackView.system = this;
@@ -374,6 +389,27 @@ export class BackpackSystem extends createSystem({}) {
     h.model.u.uSwim.value = 0.015 + 0.07 * (1 - k) * (0.6 + 0.4 * Math.sin(time * 1.3));
   }
 
+  private paintMusicButton(): void {
+    const b = this.musicButton;
+    const c = b.ctx;
+    const on = !musicView.muted;
+    const [W, H] = b.px;
+    b.clear();
+    b.buttons = [{ id: 'music', x: 0, y: 0, w: W, h: H }];
+    roundRect(c, 6, 6, W - 12, H - 12, 22);
+    c.fillStyle = on ? (b.hover ? '#ffc640' : INK.amber) : b.hover ? 'rgba(40, 52, 60, 0.95)' : INK.glass;
+    c.fill();
+    c.lineWidth = 5;
+    c.strokeStyle = on ? '#1a1206' : INK.rim;
+    c.stroke();
+    c.textAlign = 'center';
+    c.textBaseline = 'middle';
+    c.font = font(700, 50);
+    c.fillStyle = on ? '#1a1206' : INK.dim;
+    c.fillText(on ? '♪ MUSIC ON' : '♪ MUSIC OFF', W / 2, H / 2 + 2, W - 30);
+    b.commit();
+  }
+
   /* ── open / close ────────────────────────────────────────────────────── */
 
   private open(): void {
@@ -384,6 +420,7 @@ export class BackpackSystem extends createSystem({}) {
     this.tray.present(this.camera);
     this.releaseNet.position.set(this.tray.width / 2 + 0.16, 0.01, this.tray.height / 2 - 0.08);
     this.info.mesh.position.set(0, 0.075, -this.tray.height / 2 - 0.1);
+    this.musicButton.mesh.position.set(-this.tray.width / 2 - 0.13, 0.012, this.tray.height / 2 - 0.08);
     this.info.mesh.rotation.set(-0.25, 0, 0);
     this.tray.group.visible = true;
     this.tray.group.scale.setScalar(0.85);
