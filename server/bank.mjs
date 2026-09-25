@@ -48,6 +48,7 @@
  *   FIREBASE_SERVICE_ACCOUNT the service-account JSON (raw or base64)
  *   BANK_CURRENCY            ISO code, default usd
  *   PUBLIC_URL               where paid.html lives (default https://gamblefish.web.app)
+ *   BANK_TAX_CODE            the packs' Stripe tax code (default txcd_10201000, downloaded video games)
  *   BANK_DEV=1               force dev mode (never on a public host)
  */
 
@@ -60,6 +61,8 @@ const PUBLIC_URL = (process.env.PUBLIC_URL || 'https://gamblefish.web.app').repl
 const STRIPE_KEY = process.env.STRIPE_SECRET_KEY || '';
 const WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET || '';
 const FORCE_DEV = process.env.BANK_DEV === '1';
+/** The packs' Stripe tax code: video games, downloaded, permanent rights (the same as ff2's coins). */
+const TAX_CODE = process.env.BANK_TAX_CODE || 'txcd_10201000';
 /** Stripe's minimum session life is 30 minutes; the client calls it expired at 25. */
 const SESSION_TTL_MS = 35 * 60 * 1000;
 const MAX_OPEN_PER_UID = 6;
@@ -418,9 +421,13 @@ async function createCheckout(req, uid, pack) {
           price_data: {
             currency: CURRENCY,
             unit_amount: pack.minor,
+            // the account runs Stripe Tax, which refuses a product without a tax code;
+            // the price on the board is what the buyer pays
+            tax_behavior: 'inclusive',
             product_data: {
               name: packName(pack),
               description: 'In-game coins for Gamble Fish. For play only: no cash value, cannot be withdrawn or exchanged. 18+.',
+              tax_code: TAX_CODE,
             },
           },
         },
