@@ -23,6 +23,10 @@
  *  market, a shop counter, Coral's hands. Hold the fish over one (tray open or not) and a ghost
  *  settles on it with what it's worth there; click to hand it over.
  *
+ *  TABS: BACKPACK and FIELD GUIDE, on the tray's far edge (point and click). The field guide
+ *  (backpack/fieldGuide.ts) is a book of the island's fish that lies open in the tray in place
+ *  of the slots, filling itself in as you catch each species.
+ *
  * The rules (shapes, fitting, merging, value) are backpack/logic.ts; the pieces live on the
  * save's own fish entries, so layout and tiers persist and the market sells at tier value.
  */
@@ -56,6 +60,7 @@ import { locomotion } from '../locomotion/TeleportSystem.ts';
 import { font } from '../ui/fonts.ts';
 import { INK, Panel, roundRect } from '../ui/panel.ts';
 import { bounds, cellsOf, fill, findSpot, fits, GRID_SIZES, merge, MERGE_BONUS, mergePartners, rotate, shapeFor, TIERS, type Piece, type Rot } from './logic.ts';
+import { FieldGuide } from './fieldGuide.ts';
 import { CELL, Tray } from './tray.ts';
 
 type Hand = 'left' | 'right';
@@ -198,6 +203,10 @@ export class BackpackSystem extends createSystem({}) {
   private releaseNet!: Group;
   /** the MUSIC on / off switch, on the tray's left (the net is on its right) */
   private musicButton!: InteractivePanel;
+  /** the tabs on the far edge, and the book the second one opens */
+  private tabs!: InteractivePanel;
+  private guide!: FieldGuide;
+  private tab: 'pack' | 'guide' = 'pack';
 
   /** the fish in your hand */
   private held: { piece: Piece; model: FishModel; hand: Hand; from: { x: number; y: number; rot: Rot } | null } | null = null;
@@ -242,6 +251,18 @@ export class BackpackSystem extends createSystem({}) {
     this.paintMusicButton();
     this.tray.group.add(this.musicButton.mesh);
     register(this.musicButton);
+    // the tabs: BACKPACK | FIELD GUIDE, lying on the tray's far edge
+    this.tabs = new InteractivePanel([720, 120], [0.36, 0.06]);
+    this.tabs.mesh.rotation.x = -Math.PI / 2;
+    this.tabs.paint = () => this.paintTabs();
+    this.tabs.onClick = (id) => this.setTab(id as 'pack' | 'guide');
+    this.tabs.repaintOnFonts(() => this.paintTabs());
+    this.paintTabs();
+    this.tray.group.add(this.tabs.mesh);
+    register(this.tabs);
+    this.guide = new FieldGuide(backpackDeps.state!, backpackDeps.props!, this.renderer);
+    this.guide.group.position.y = 0.03;
+    this.tray.group.add(this.guide.group);
     backpackView.takeInHand = (id, hand) => this.takeInHand(id, hand);
     backpackView.toggle = () => (backpackView.open ? this.close() : this.open());
     backpackView.system = this;
@@ -321,6 +342,7 @@ export class BackpackSystem extends createSystem({}) {
       let m = this.models.get(p.id);
       if (!m) {
         m = this.makeModel(p);
+        m.mesh.visible = this.tab === 'pack';
         this.models.set(p.id, m);
         this.tray.group.add(m.mesh);
       }
@@ -410,6 +432,51 @@ export class BackpackSystem extends createSystem({}) {
     b.commit();
   }
 
+  private paintTabs(): void {
+    const b = this.tabs;
+    const c = b.ctx;
+    const [W, H] = b.px;
+    b.clear();
+    const tabs = [
+      { id: 'pack', label: 'BACKPACK' },
+      { id: 'guide', label: 'FIELD GUIDE' },
+    ];
+    b.buttons = tabs.map((t, i) => ({ id: t.id, x: (i * W) / 2, y: 0, w: W / 2, h: H }));
+    tabs.forEach((t, i) => {
+      const on = this.tab === t.id;
+      roundRect(c, (i * W) / 2 + 6, 6, W / 2 - 12, H - 12, 22);
+      c.fillStyle = on ? INK.amber : b.hover === t.id ? 'rgba(40, 52, 60, 0.95)' : INK.glass;
+      c.fill();
+      c.lineWidth = 4;
+      c.strokeStyle = on ? '#1a1206' : INK.rim;
+      c.stroke();
+      c.textAlign = 'center';
+      c.textBaseline = 'middle';
+      c.font = font(700, 50);
+      c.fillStyle = on ? '#1a1206' : INK.dim;
+      c.fillText(t.label, (i * W) / 2 + W / 4, H / 2 + 2, W / 2 - 40);
+    });
+    b.commit();
+  }
+
+  /** The backpack's slots, or the field guide lying open in their place. */
+  private setTab(t: 'pack' | 'guide'): void {
+    if (t !== this.tab) uiClick();
+    this.tab = t;
+    const pack = t === 'pack';
+    this.tray.showGrid(pack);
+    for (const m of this.models.values()) m.mesh.visible = pack;
+    this.releaseNet.visible = pack;
+    this.info.mesh.visible = pack;
+    if (!pack) {
+      this.clearGhost();
+      this.drop = null;
+      this.overTray = 0;
+    }
+    this.guide.show(!pack);
+    this.paintTabs();
+  }
+
   /* ── open / close ────────────────────────────────────────────────────── */
 
   private open(): void {
@@ -421,6 +488,7 @@ export class BackpackSystem extends createSystem({}) {
     this.releaseNet.position.set(this.tray.width / 2 + 0.16, 0.01, this.tray.height / 2 - 0.08);
     this.info.mesh.position.set(0, 0.075, -this.tray.height / 2 - 0.1);
     this.musicButton.mesh.position.set(-this.tray.width / 2 - 0.13, 0.012, this.tray.height / 2 - 0.08);
+    this.tabs.mesh.position.set(0, 0.012, -this.tray.height / 2 - 0.05);
     // face your eyes, level (the tray itself is tipped 35° toward you: parented as-is, the text
     // leaned away and read skewed)
     this.info.mesh.lookAt(this.camera.getWorldPosition(_v));
@@ -431,6 +499,8 @@ export class BackpackSystem extends createSystem({}) {
     for (const h of ['left', 'right'] as const) this.trig[h] = (this.input.xr.gamepads[h]?.getButtonValue(InputComponent.Trigger) ?? 0) > 0.3;
     this.infoKey = '';
     this.syncModels();
+    // a fish in hand wants the slots; otherwise it opens where you left it
+    this.setTab(this.held ? 'pack' : this.tab);
     // the box's lid: two latches
     shot('bail_click', MIX.bail + 8, { rate: 0.62 });
     shot('bail_click', MIX.bail + 4, { rate: 0.8, delay: 0.07 });
@@ -461,10 +531,12 @@ export class BackpackSystem extends createSystem({}) {
     locomotion.enabled = locomotion.enabled && !backpackView.open;
     this.trackTargets(time);
     if (backpackView.open) {
-      this.track(dt);
       this.handleInput();
-      this.showGhost(time);
-      this.paintInfo();
+      if (this.tab === 'pack') {
+        this.track(dt);
+        this.showGhost(time);
+        this.paintInfo();
+      } else this.guide.update();
     }
     this.poseHeld(time);
     this.animate(dt, time);
@@ -516,6 +588,8 @@ export class BackpackSystem extends createSystem({}) {
       else if (t < 0.3) this.trig[h] = false;
       if (g > 0.6) this.grip[h] = true;
       else if (g < 0.3) this.grip[h] = false;
+      // the field guide is out: the triggers are for its pages (the pointer), not the slots
+      if (this.tab === 'guide') continue;
       const ax = pad?.getAxesValues(InputComponent.Thumbstick);
       if (ax) {
         if (Math.abs(ax.x) < 0.3) this.stick[h] = true;

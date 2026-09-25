@@ -58,6 +58,14 @@ export class Tray {
     return this.rows * CELL;
   }
 
+  /** Show or hide the box and its slots (the field guide lies in their place while it's out). */
+  showGrid(on: boolean): void {
+    this.gridShown = on;
+    this.body.visible = on;
+    this.tiles.visible = on;
+  }
+  private gridShown = true;
+
   /** (Re)build the box for a cols×rows grid (the backpack grows with the hold upgrade). */
   build(cols: number, rows: number): void {
     if (cols === this.cols && rows === this.rows) return;
@@ -65,6 +73,7 @@ export class Tray {
     this.rows = rows;
     this.group.remove(this.body);
     this.body = new Group();
+    this.body.visible = this.gridShown;
     const w = this.width;
     const h = this.height;
     const wood = new MeshLambertMaterial({ color: WOOD });

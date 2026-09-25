@@ -176,7 +176,12 @@ export class CatchCard {
     c.font = font(600, 24);
     c.fillStyle = info.kept ? INK.dim : INK.danger;
     c.fillText('into your backpack…', 28, y + 146);
-    if (info.record && info.prevBestKg > 0) {
+    if (info.newSpecies) {
+      // its page in the backpack's field guide has just filled in
+      c.textAlign = 'right';
+      c.fillStyle = INK.amber;
+      c.fillText('new page in your field guide', 484, y + 146);
+    } else if (info.record && info.prevBestKg > 0) {
       c.textAlign = 'right';
       c.fillStyle = INK.dim;
       c.fillText(`best was ${info.prevBestKg.toFixed(2)} kg`, 484, y + 146);

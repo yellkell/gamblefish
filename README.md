@@ -126,6 +126,12 @@ and the vendors.
   each spot is now a small garden. Rooms are only drawn when you could see into them
   (from inside, or from in front of the doorway), so looking back at town from the
   pier costs about 100 draw calls instead of about 800.
+- **Field guide:** the backpack has a second tab, a book of the island's marine fauna
+  (`src/backpack/fieldGuide.ts`). It has a title page with your progress, two species to
+  a page, and the tarpon and the trophy fish on a page each at the back. A species you
+  haven't caught shows as a shadow with where and when to look. The first one you land
+  fills its entry in: its picture, names, habitat, how many you've caught and your best.
+  Point at the corner arrows to turn the pages.
 - **Wallet:** `src/ui/wallet.ts` puts an odometer-style money counter on both
   wrists. Any change in the balance rings ff2's cash chime, pitched up for
   money in and down for money out.
