@@ -1,0 +1,32 @@
+# THE ISLAND BANK on Render: server/bank.mjs, coins for real money and the
+# account that keeps them (see the header of server/bank.mjs).
+#
+# TO USE THIS: Render dashboard → New → Blueprint → pick this repo. Render reads
+# this file, creates the service and asks for the secrets below (`sync: false`
+# keeps them out of the repo). Without all three the bank stays CLOSED.
+services:
+  - type: web
+    name: gamblefish-bank
+    runtime: node
+    plan: free
+    # server/ is self-contained: its own package.json, nothing from the game.
+    rootDir: server
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      # sk_test_… while testing (Stripe's test cards, no real money), sk_live_… for real.
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      # whsec_… of the Stripe webhook endpoint pointed at <this service>/webhook,
+      # sending checkout.session.completed and checkout.session.async_payment_succeeded.
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+      # The window-7b629 service-account JSON (raw or base64): writes the
+      # ledger and saves, verifies ID tokens, mints login tokens.
+      - key: FIREBASE_SERVICE_ACCOUNT
+        sync: false
+      - key: BANK_CURRENCY
+        value: gbp
+      - key: PUBLIC_URL
+        value: https://gamblefish.web.app

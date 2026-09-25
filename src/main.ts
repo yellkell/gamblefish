@@ -27,6 +27,9 @@ import { buildTerrain } from './world/terrain.ts';
 import { Grass } from './world/grass.ts';
 import { VillageSigns, type BuildingFrame } from './village/signs.ts';
 import { FishMarket } from './village/market.ts';
+import { IslandBank } from './village/bank.ts';
+import { bankDeps, bootBank } from './net/bank.ts';
+import { bootCloudSave } from './net/cloudSave.ts';
 import { RouletteTable } from './casino/RouletteTable.ts';
 import { SlotMachine } from './casino/SlotMachine.ts';
 import { BlackjackTable } from './casino/BlackjackTable.ts';
@@ -135,6 +138,9 @@ World.create(container, {
   const game = createGameState();
   // the backpack's grid is the limit on what you carry now, not the hold's kilograms
   game.fits = () => true;
+  // the account: the cloud save first (a new headset takes the account's), then collect anything bought while away
+  bankDeps.state = game;
+  void bootCloudSave(game).then(() => bootBank());
   const fx = new WaterFx((x, z) => ocean.heightAt(x, z));
   scene.add(fx.group);
   const wallet = new WristWallet(game, [world.player.raySpaces.left, world.player.raySpaces.right]);
@@ -162,6 +168,8 @@ World.create(container, {
   const room = (n: string): Interior | undefined => interiors.find((i) => i.name === n);
   const lure = room('C');
   if (lure) tables.push(new RouletteTable(lure, game, { chips: [1, 5, 25, 100], maxBet: 500, at: [0, -0.6] }));
+  const vault = room('H');
+  if (vault) tables.push(new IslandBank(vault, game, world.renderer));
   const shark = room('G');
   if (shark) tables.push(new BlackjackTable(shark, game, { chips: [5, 10, 25, 100], maxBet: 500, at: [0, -0.9] }));
   const reels = room('B');

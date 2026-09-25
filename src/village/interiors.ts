@@ -49,6 +49,8 @@ export interface Interior {
   /** world-placed group at the building (rotated with it); `contents` is on its floor */
   group: Group;
   contents: Group;
+  /** the hanging lamp (a room's fittings may move it out of the way) */
+  lamp: Group;
   /** inner size (m): across the facade, front to back, floor to ceiling */
   w: number;
   d: number;
@@ -66,7 +68,8 @@ export interface Interior {
 export const FURNITURE: Record<string, [number, number, number, number, number][]> = {
   C: [[0.03, -0.6, 1.72, 0.55, 0.95]], // the roulette table and wheel (casino/RouletteTable TABLE, at z −0.6)
   B: [[0, -1.8, 2.05, 0.33, 1.9]], // three slot machines along the back wall
-  G: [[0, -0.74, 1.06, 0.52, 0.95]], // the blackjack table (half-round, dealer's edge at z −1.25)
+  G: [[0, -0.74, 1.06, 0.52, 0.95]],
+  H: [[0, -0.55, 1.74, 0.33, 1.07]], // the teller's counter (village/bank.ts) // the blackjack table (half-round, dealer's edge at z −1.25)
 };
 
 /** Roles you go inside. */
@@ -326,6 +329,7 @@ export function buildInteriors(frames: BuildingFrame[]): Interior[] {
       role,
       group,
       contents,
+      lamp,
       w,
       d,
       h,

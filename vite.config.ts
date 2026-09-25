@@ -18,5 +18,7 @@ export default defineConfig({
   },
   build: {
     target: 'esnext',
+    // the game, and the page the LOG IN email's link opens on a phone
+    rollupOptions: { input: { main: 'index.html', login: 'login.html' } },
   },
 });

@@ -110,6 +110,8 @@ export interface GameState {
   buy(key: string): unknown;
   onChange(fn: (s: GameState) => void): () => void;
   emit(): void;
+  toJSON(): unknown;
+  fromJSON(d: unknown): boolean;
   load(): boolean;
   save(): void;
   reset(): void;
