@@ -138,7 +138,16 @@ const firstCard = new Array(13).fill(0);
 for (let i = 0; i < 26000; i++) firstCard[new Shoe(1).draw().rank - 1]++;
 const chiB = firstCard.reduce((a, c) => a + (c - 2000) ** 2 / 2000, 0);
 check('26,000 shuffles: the top card is any rank evenly (χ² < 33)', chiB < 33, `χ² ${chiB.toFixed(1)}`);
-const sim = new Shoe(6);
+// dealt from a seeded shuffle: over a million hands the edge still wanders ±0.12% (one σ) from
+// shoe to shoe, which a crypto shoe would carry into this check as a failure every few dozen runs.
+// The fairness of the real shuffle is the χ² check above.
+const seeded = (a) => () => {
+  a = (a + 0x6d2b79f5) | 0;
+  let t = Math.imul(a ^ (a >>> 15), 1 | a);
+  t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+};
+const sim = new Shoe(6, seeded(1));
 let bjStaked = 0;
 let bjBack = 0;
 const HANDS = 1_000_000;
