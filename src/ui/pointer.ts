@@ -15,6 +15,7 @@ import { BufferGeometry, Float32BufferAttribute, Line, LineBasicMaterial, Mesh, 
 import { uiClick, uiHover } from '../audio/sfx.ts';
 import { pulseHand } from '../input/haptics.ts';
 import { Panel } from './panel.ts';
+import { introActive } from '../experience/introGate.ts';
 
 type Hand = 'left' | 'right';
 
@@ -93,6 +94,10 @@ export class PointerSystem extends createSystem({}) {
   }
 
   update(): void {
+    if (introActive()) {
+      for (const c of Object.values(this.cursors)) c.dot.visible = c.beam.visible = false;
+      return;
+    }
     const hovered = new Map<InteractivePanel, string | null>();
     for (const hand of ['left', 'right'] as const) {
       const cur = this.cursors[hand];

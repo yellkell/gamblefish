@@ -56,6 +56,7 @@ import {
   type GameState,
   type Habitat,
 } from './tidewater.ts';
+import { introActive } from '../experience/introGate.ts';
 
 type Hand = 'left' | 'right';
 type RodState = 'stowed' | 'idle' | 'windup' | 'flying' | 'floating' | 'retrieving' | 'fighting' | 'landing';
@@ -245,7 +246,7 @@ export class FishingSystem extends createSystem({}) {
   update(delta: number, time: number): void {
     const dt = Math.min(delta, 0.05);
     const deps = fishingDeps;
-    if (!deps.state || !deps.ocean) return;
+    if (!deps.state || !deps.ocean || introActive()) return;
     this.t += dt;
     void loadSamples();
 

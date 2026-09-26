@@ -5,12 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Fish &amp; Chips — VR</title>
     <style>
+      :root {
+        color-scheme: dark;
+      }
       html,
       body {
         margin: 0;
         height: 100%;
         overflow: hidden;
-        background: #0b1d2a;
+        background: #000;
         font: 500 15px/1.4 system-ui, -apple-system, 'Segoe UI', sans-serif;
         color: #eaf4f8;
       }
@@ -18,82 +21,211 @@
         position: fixed;
         inset: 0;
       }
+
+      /* 1. The publisher card, as ff2 opens: black, "yellkell.com" fades in and out. */
+      #presents {
+        position: fixed;
+        inset: 0;
+        z-index: 2000;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 22px;
+        background: #000;
+        cursor: pointer;
+        animation: presents-out 0.45s ease 3s forwards;
+      }
+      #presents .pub,
+      #presents .sub {
+        opacity: 0;
+        animation: card 3s linear forwards;
+      }
+      #presents .pub {
+        font: 500 clamp(44px, 9vw, 104px) / 1 system-ui, -apple-system, sans-serif;
+        color: #fff;
+        text-shadow: 0 0 30px rgba(255, 255, 255, 0.45);
+      }
+      #presents .sub {
+        font: 400 clamp(13px, 2.2vw, 26px) / 1 system-ui, -apple-system, sans-serif;
+        letter-spacing: 0.9em;
+        text-indent: 0.9em;
+        color: #9aa0a8;
+      }
+      @keyframes card {
+        0% { opacity: 0; }
+        17% { opacity: 1; }
+        83% { opacity: 1; }
+        100% { opacity: 0; }
+      }
+      @keyframes presents-out {
+        to { opacity: 0; visibility: hidden; }
+      }
+
+      /* 2. The splash: the mark over a night sea, breathing in its glow, the loader and the
+            button under it. */
       #landing {
         position: fixed;
-        left: 50%;
-        bottom: 32px;
-        transform: translateX(-50%);
-        width: min(420px, calc(100vw - 32px));
+        inset: 0;
+        z-index: 1000;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: clamp(10px, 3vh, 30px);
+        padding: clamp(16px, 4vw, 40px);
         box-sizing: border-box;
-        padding: 20px 22px;
-        border-radius: 14px;
-        background: rgba(8, 22, 32, 0.78);
-        backdrop-filter: blur(10px);
-        -webkit-backdrop-filter: blur(10px);
-        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.35);
+        background:
+          radial-gradient(ellipse at 50% 42%, rgba(63, 214, 198, 0.16), transparent 60%),
+          radial-gradient(ellipse at 50% 110%, rgba(255, 176, 0, 0.12), transparent 55%),
+          linear-gradient(180deg, #02070c 0%, #06202c 58%, #0a3040 100%);
+        opacity: 0;
+        animation: splash-in 0.9s ease 3.1s forwards;
       }
-      body.in-xr #landing {
+      body.skip-intro #presents {
         display: none;
       }
-      h1 {
-        margin: 0 0 2px;
-        font-size: 22px;
-        letter-spacing: 0.06em;
+      body.skip-intro #landing {
+        animation-delay: 0s;
       }
-      .kicker {
-        margin: 0 0 14px;
-        opacity: 0.75;
+      @keyframes splash-in {
+        from { opacity: 0; transform: scale(1.03); }
+        to { opacity: 1; transform: none; }
+      }
+      body.in-xr #landing,
+      body.in-xr #presents {
+        display: none;
+      }
+      .logo-wrap {
+        position: relative;
+        display: grid;
+        place-items: center;
+        width: min(94vw, 760px);
+      }
+      #logo {
+        position: relative;
+        z-index: 1;
+        width: 100%;
+        height: auto;
+        aspect-ratio: 2 / 1;
+      }
+      .logo-glow {
+        position: absolute;
+        width: 115%;
+        aspect-ratio: 2 / 1.1;
+        border-radius: 50%;
+        pointer-events: none;
+        background:
+          radial-gradient(ellipse at 34% 50%, rgba(63, 214, 198, 0.34) 0%, rgba(63, 214, 198, 0) 58%),
+          radial-gradient(ellipse at 68% 52%, rgba(255, 176, 0, 0.3) 0%, rgba(255, 176, 0, 0) 56%),
+          radial-gradient(circle at 50% 52%, rgba(200, 36, 58, 0.32) 0%, rgba(200, 36, 58, 0) 30%);
+        filter: blur(6px);
+        animation: breathe 2.8s ease-in-out infinite;
+      }
+      @keyframes breathe {
+        0%, 100% { opacity: 0.6; transform: scale(0.95); }
+        50% { opacity: 1; transform: scale(1.06); }
+      }
+      .dock {
+        width: min(360px, 100%);
+        text-align: center;
+      }
+      #status {
         font-size: 13px;
+        letter-spacing: 0.04em;
+        color: rgba(234, 244, 248, 0.7);
       }
       #bar {
-        height: 4px;
+        height: 3px;
         border-radius: 2px;
-        background: rgba(255, 255, 255, 0.15);
+        background: rgba(255, 255, 255, 0.12);
         overflow: hidden;
-        margin: 10px 0 14px;
+        margin: 10px 0 18px;
       }
       #bar-fill {
         height: 100%;
         width: 0;
-        background: #3fd6c6;
+        background: linear-gradient(90deg, #3fd6c6, #ffc93a);
         transition: width 0.15s;
       }
+      /* The button: a sea-glass neon edge on a dark plate, breathing with the mark. */
       #enter-vr {
         width: 100%;
-        padding: 12px;
-        border: 0;
-        border-radius: 10px;
-        font: inherit;
-        font-weight: 700;
-        letter-spacing: 0.08em;
-        background: #3fd6c6;
-        color: #062028;
+        min-height: 64px;
+        border: 2px solid #3fd6c6;
+        border-radius: 12px;
+        color: #c9fff8;
+        background:
+          linear-gradient(180deg, rgba(63, 214, 198, 0.18), rgba(63, 214, 198, 0.02) 60%),
+          linear-gradient(180deg, #0c2430, #06141c);
+        font: 900 1.08rem/1 system-ui, -apple-system, sans-serif;
+        letter-spacing: 0.24em;
+        text-indent: 0.24em;
+        text-shadow: 0 0 14px rgba(63, 214, 198, 0.85);
+        box-shadow: 0 0 16px rgba(63, 214, 198, 0.35), inset 0 0 22px rgba(63, 214, 198, 0.12);
         cursor: pointer;
+        animation: button-breathe 2.8s ease-in-out infinite;
+        transition: color 0.16s, border-color 0.16s, transform 0.16s;
+      }
+      @keyframes button-breathe {
+        0%, 100% { box-shadow: 0 0 12px rgba(63, 214, 198, 0.28), inset 0 0 22px rgba(63, 214, 198, 0.12); }
+        50% { box-shadow: 0 0 26px rgba(63, 214, 198, 0.55), inset 0 0 26px rgba(63, 214, 198, 0.18); }
+      }
+      #enter-vr:hover:not(:disabled),
+      #enter-vr:focus-visible {
+        color: #fff;
+        border-color: #ffc93a;
+        transform: translateY(-1px);
+      }
+      #enter-vr:focus-visible {
+        outline: 3px solid rgba(255, 255, 255, 0.78);
+        outline-offset: 4px;
       }
       #enter-vr:disabled {
-        opacity: 0.4;
-        cursor: default;
+        opacity: 0.45;
+        cursor: wait;
+        animation: none;
       }
       .controls {
-        margin: 12px 0 0;
+        margin: 16px 0 0;
         font-size: 12px;
-        opacity: 0.7;
+        color: rgba(234, 244, 248, 0.55);
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .logo-glow,
+        #enter-vr {
+          animation: none;
+        }
       }
     </style>
   </head>
   <body>
     <div id="scene-container"></div>
-    <div id="landing">
-      <h1>FISH &amp; CHIPS</h1>
-      <p class="kicker">Catch fish, cash in chips. How to Fish, in VR, on Tidewater's island.</p>
-      <div id="status">Starting…</div>
-      <div id="bar"><div id="bar-fill"></div></div>
-      <button id="enter-vr" disabled>ENTER VR</button>
-      <p class="controls">
-        Thumbstick forward: aim a teleport, roll the stick to pick your facing, release to go.
-        Flick sideways: snap turn. Flick back: step back.
-      </p>
+    <div id="presents" aria-hidden="true">
+      <div class="pub">yellkell.com</div>
+      <div class="sub">PRESENTS</div>
     </div>
+    <section id="landing" aria-label="Fish &amp; Chips">
+      <div class="logo-wrap">
+        <div class="logo-glow" aria-hidden="true"></div>
+        <canvas id="logo" width="1280" height="640" role="img" aria-label="FISH &amp; CHIPS: catch fish, cash in chips"></canvas>
+      </div>
+      <div class="dock">
+        <div id="status">Starting…</div>
+        <div id="bar"><div id="bar-fill"></div></div>
+        <button id="enter-vr" disabled>ENTER VR</button>
+        <p class="controls">
+          Thumbstick forward: aim a teleport, roll the stick to pick your facing, release to go.
+          Flick sideways: snap turn. Flick back: step back.
+        </p>
+      </div>
+    </section>
+    <script>
+      // A tap on the publisher card goes straight to the splash.
+      document.getElementById('presents').addEventListener('click', function () {
+        document.body.classList.add('skip-intro');
+      });
+    </script>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

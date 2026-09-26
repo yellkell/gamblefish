@@ -21,6 +21,7 @@
  * is kept in this browser.
  */
 
+import { introDone } from '../experience/introGate.ts';
 import { Vector3 } from 'three';
 import type { Interior } from '../village/interiors.ts';
 import { audioContext, sfxOut } from './sfx.ts';
@@ -246,6 +247,8 @@ export class Music {
     const lv = ctx.createGain();
     lv.gain.value = loaded.level;
     src.connect(lv).connect(this.rotation!);
+    // the first song decodes behind the boot intro's curtain and starts as it drops
+    if (!at) await introDone();
     const start = Math.max(at, ctx.currentTime);
     src.start(start, loaded.head);
     // (the dev hook reads which song is on)
@@ -276,6 +279,7 @@ export class Music {
     src.loopEnd = loaded.buffer.duration;
     const lv = ctx.createGain();
     lv.gain.value = loaded.level;
+    await introDone();
     src.connect(lv);
     lv.connect(this.inGain!);
     lv.connect(this.muffle!);

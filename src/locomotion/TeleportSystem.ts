@@ -38,6 +38,7 @@ import { GROUND, OCTAGON_VERTICES, TELEPORT, TELEPORT_COLOURS } from './config.t
 import { TeleportMarker } from './marker.ts';
 import * as sfx from '../audio/sfx.ts';
 import { simulateArc, type FloorArea, type Surfaces } from '../world/surfaces.ts';
+import { introActive } from '../experience/introGate.ts';
 
 const _origin = new Vector3();
 const _dir = new Vector3();
@@ -196,7 +197,7 @@ export class TeleportSystem extends createSystem({}) {
       teleportPlayer(this.player, p.x, p.z, p.yaw, p.y);
     }
 
-    if (!locomotion.enabled || !locomotion.surfaces) {
+    if (!locomotion.enabled || !locomotion.surfaces || introActive()) {
       this.hide();
       return;
     }

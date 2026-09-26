@@ -63,6 +63,7 @@ import { INK, Panel, roundRect } from '../ui/panel.ts';
 import { bounds, cellsOf, fill, findSpot, fits, GRID_SIZES, merge, MERGE_BONUS, mergePartners, rotate, shapeFor, TIERS, type Piece, type Rot } from './logic.ts';
 import { FieldGuide } from './fieldGuide.ts';
 import { CELL, Tray } from './tray.ts';
+import { introActive } from '../experience/introGate.ts';
 
 type Hand = 'left' | 'right';
 
@@ -522,7 +523,7 @@ export class BackpackSystem extends createSystem({}) {
 
   update(delta: number, time: number): void {
     const dt = Math.min(delta, 0.05);
-    if (!backpackDeps.state) return;
+    if (!backpackDeps.state || introActive()) return;
     for (const h of ['left', 'right'] as const) {
       const pad = this.input.xr.gamepads[h];
       if (pad?.getButtonDown(h === 'right' ? InputComponent.A_Button : InputComponent.X_Button)) {

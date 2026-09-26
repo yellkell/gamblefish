@@ -9,7 +9,7 @@
  */
 
 import { launchXR, SessionMode, World } from '@iwsdk/core';
-import type { Camera } from 'three';
+import type { Camera, PerspectiveCamera } from 'three';
 import { Music } from './audio/music.ts';
 import { ShoreSound } from './audio/shore.ts';
 import { ensureAudio } from './audio/sfx.ts';
@@ -45,6 +45,9 @@ import { Blink } from './fx/blink.ts';
 import { Vegetation } from './world/vegetation.ts';
 import { buildVillage } from './world/village.ts';
 import { buildLamps } from './world/lamps.ts';
+import { runBootIntro } from './experience/bootIntro.ts';
+import { onFontsReady } from './ui/fonts.ts';
+import { drawLogo } from './ui/logo.ts';
 
 /** ff2's fixed-foveation level: sharp centre, cheap rim. */
 const FOVEATION = 0.33;
@@ -55,6 +58,17 @@ let villageTick: (dt: number) => void = () => {};
 const status = document.getElementById('status') as HTMLElement;
 const enter = document.getElementById('enter-vr') as HTMLButtonElement;
 const bar = document.getElementById('bar-fill') as HTMLElement;
+
+// the splash's mark (index.html shows it after the publisher card), repainted once the type is in
+const logo = document.getElementById('logo') as HTMLCanvasElement | null;
+const paintLogo = (): void => {
+  const g = logo?.getContext('2d');
+  if (!g || !logo) return;
+  g.clearRect(0, 0, logo.width, logo.height);
+  drawLogo(g, logo.width, logo.height);
+};
+paintLogo();
+onFontsReady(paintLogo);
 
 async function fetchBuffer(path: string, onProgress: (f: number) => void): Promise<ArrayBuffer> {
   const res = await fetch(import.meta.env.BASE_URL + path);
@@ -237,6 +251,9 @@ World.create(container, {
 
   if (import.meta.env.DEV) void import('./dev/harness.ts').then((m) => m.installHarness(world));
 
+  // the curtain goes up the moment the session starts, before the island's first frame in it
+  world.renderer.xr.addEventListener('sessionstart', () => runBootIntro(world.camera as PerspectiveCamera, world.scene));
+
   status.textContent = navigator.xr ? 'Ready.' : 'WebXR not available in this browser — desktop preview only.';
   enter.disabled = !navigator.xr;
   enter.addEventListener('click', () => {
@@ -247,5 +264,7 @@ World.create(container, {
   // (A timer, not rAF: Quest Browser suspends window rAF while presenting.)
   window.setInterval(() => {
     document.body.classList.toggle('in-xr', !!world.session);
+    // the first session of the page opens on the boot intro (yellkell.com, then the mark)
+    if (world.session) runBootIntro(world.camera as PerspectiveCamera, world.scene);
   }, 250);
 });
