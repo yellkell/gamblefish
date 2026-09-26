@@ -4,7 +4,7 @@
  * the ampersand on it. A fish leaps over the chip, trailing a spray of drops, above a line of
  * surf. A small tagline runs beneath.
  *
- * The leaping fish is the game's own mahi-mahi, skin and all, photographed once its model has
+ * The leaping fish is the game's own sailfish, skin and all, photographed once its model has
  * loaded (setLogoFish); until then the mark is drawn without it, and the page fades it in.
  *
  * Drawn to fit any w × h at a 2 : 1 aspect (the art is laid out on 1280 × 640 and scaled).
@@ -178,11 +178,11 @@ function spray(g: CanvasRenderingContext2D, cx: number): void {
 function leaper(g: CanvasRenderingContext2D, cx: number): void {
   if (!photo) return;
   const img = photo as HTMLCanvasElement;
-  const w = 440;
+  const w = 620;
   const h = (w * img.height) / img.width;
   g.save();
-  g.translate(cx + 56, -200);
-  g.rotate(0.24);
+  g.translate(cx + 70, -178);
+  g.rotate(0.2);
   g.shadowColor = 'rgba(63, 214, 198, 0.8)';
   g.shadowBlur = 34;
   g.drawImage(img, -w / 2, -h / 2, w, h);

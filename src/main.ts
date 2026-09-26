@@ -64,7 +64,7 @@ const enter = document.getElementById('enter-vr') as HTMLButtonElement;
 const bar = document.getElementById('bar-fill') as HTMLElement;
 
 // the splash's mark (index.html shows it after the publisher card), repainted once the type is
-// in; its leaping fish is the real mahi-mahi, laid over it and faded in once the models load
+// in; its leaping fish is the real sailfish, laid over it and faded in once the models load
 const logo = document.getElementById('logo') as HTMLCanvasElement | null;
 const logoFish = document.getElementById('logo-fish') as HTMLCanvasElement | null;
 const paintLogo = (): void => {
@@ -191,9 +191,9 @@ World.create(container, {
   const props = loadProps(propsBuf);
   // the silvery fish reflect the casinos' studio light (a soft, neutral room)
   props.setEnv(casinoEnv(world.renderer));
-  // the mark's leaping fish: the mahi-mahi, mid-thrash, photographed side on
+  // the mark's leaping fish: the sailfish, sail up, mid-thrash, photographed side on
   {
-    const { mesh, uniforms } = props.makeFish('mahi');
+    const { mesh, uniforms } = props.makeFish('sailfish');
     uniforms.uSwim.value = 0.1;
     uniforms.uFreq.value = 1;
     uniforms.uTime.value = 0.12;

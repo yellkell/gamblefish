@@ -69,7 +69,7 @@ and the vendors.
 
 - **On the page:** ff2's publisher card (yellkell.com, PRESENTS) fades in and out, then the
   splash: the FISH & CHIPS mark (`src/ui/logo.ts`: a chip for the ampersand) breathing in its
-  glow. The leaping fish over the chip is the game's own mahi-mahi, photographed once its
+  glow. The leaping fish over the chip is the game's own sailfish, photographed once its
   model loads and faded in. The loader, a neon ENTER VR, and a thumbstick icon sit under it.
 - **In the headset:** the first session of a page load opens on ff2's boot intro
   (`src/experience/bootIntro.ts`): the publisher card, then the same mark, then the curtain
