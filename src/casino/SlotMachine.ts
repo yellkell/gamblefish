@@ -17,8 +17,11 @@
  *    flash and a riser climbs. (It changes nothing about the odds: the stops are already drawn.)
  *  - A WIN is counted up on the meter, blip by blip, while coins pour into the tray and clink as
  *    they land; the winning symbols light up; the money lands in your wallet with the cash chime
- *    at the end of the count. Big wins get a BIG WIN banner, a burst of sparks, bells and a boom.
- *    Pull again (or hit SPIN) to skip the count.
+ *    at the end of the count, and the amount rises over the reels in gold. Every win flashes
+ *    light, rings the floor and throws confetti from the reels, more for bigger wins
+ *    (casino/celebrate.ts), and the winning symbols glow. Three shells or hooks get a NICE WIN
+ *    banner; big wins get a BIG WIN banner, a burst of sparks, bells and a boom. Pull again
+ *    (or hit SPIN) to skip the count.
  *  - A single worm only gives your bet back, so it isn't dressed up as a win: "BAIT BACK".
  *
  * The rules (reels, paytable, the fair draw) are casino/slots.ts.
@@ -55,6 +58,7 @@ import { font } from '../ui/fonts.ts';
 import { Panel, roundRect } from '../ui/panel.ts';
 import { InteractivePanel, register } from '../ui/pointer.ts';
 import type { Interior } from '../village/interiors.ts';
+import { Celebration, type Tier } from './celebrate.ts';
 import { look } from './look.ts';
 import { payOut, refund, stake } from './money.ts';
 import { line, pays, pull, REELS, STOPS, THREE, TWO_WORMS, ONE_WORM, type Symbol } from './slots.ts';
@@ -105,6 +109,7 @@ interface Reel {
   stopped: boolean;
   lastCell: number;
   frame: Mesh; // the win highlight on this reel's payline cell
+  glow: Mesh; // a light behind the winning symbol
 }
 
 interface Coin {
@@ -146,6 +151,9 @@ export class SlotMachine {
   private sparkList: { p: Vector3; v: Vector3; age: number }[] = [];
   private readonly floorGlow: Mesh;
   private readonly whirr = new RollBed();
+  private readonly party: Celebration;
+  private tier: Tier = 1;
+  private bannerSize = 1;
 
   private bet: number;
   private phase: 'idle' | 'spinning' | 'counting' | 'won' = 'idle';
@@ -226,6 +234,7 @@ export class SlotMachine {
 
     // the reels, dividers between them, the win frames
     const frameTex = winFrameTexture();
+    const cellGlow = glowTexture();
     for (let k = 0; k < 3; k++) {
       const sharp = new MeshBasicMaterial({ map: reelTexture(REELS[k], false) });
       const blur = new MeshBasicMaterial({ map: reelTexture(REELS[k], true) });
@@ -238,7 +247,11 @@ export class SlotMachine {
       frame.position.set(REEL_X[k], REEL_Y, FRONT + 0.006);
       frame.visible = false;
       this.body.add(frame);
-      this.reels.push({ mesh, sharp, blur, angle: start, from: start, to: start, stopAt: 0, cum: new Float32Array(1), vel: new Float32Array(1), scale: 0, stopped: true, lastCell: 0, frame });
+      const glow = new Mesh(new PlaneGeometry(REEL_W * 1.5, PITCH * R * 1.9), new MeshBasicMaterial({ map: cellGlow, color: 0xffe07a, transparent: true, blending: AdditiveBlending, depthWrite: false, toneMapped: false }));
+      glow.position.set(REEL_X[k], REEL_Y, FRONT + 0.005);
+      glow.visible = false;
+      this.body.add(glow);
+      this.reels.push({ mesh, sharp, blur, angle: start, from: start, to: start, stopAt: 0, cum: new Float32Array(1), vel: new Float32Array(1), scale: 0, stopped: true, lastCell: 0, frame, glow });
     }
     for (const x of [-0.079, 0.079]) {
       const div = new Mesh(new CylinderGeometry(R + 0.004, R + 0.004, 0.008, 48).rotateZ(Math.PI / 2), black);
@@ -346,6 +359,7 @@ export class SlotMachine {
     this.sparks.count = 0;
     this.sparks.frustumCulled = false;
     g.add(this.sparks);
+    this.party = new Celebration(g, () => 0, () => world.renderer.xr.getSession());
 
     this.paintDisplay();
     this.display.repaintOnFonts(() => this.paintDisplay());
@@ -411,6 +425,7 @@ export class SlotMachine {
       r.stopAt = times[k];
       r.stopped = false;
       r.frame.visible = false;
+      r.glow.visible = false;
       plan(r, times[k], decel[k]);
       const total = r.cum[r.cum.length - 1];
       const want = -stopAngle(this.stops[k]);
@@ -524,7 +539,11 @@ export class SlotMachine {
     else this.whirr.set(0, 0);
     if (this.phase === 'counting') this.updateCount(dt, inside);
     if (this.phase === 'won') this.countT += dt;
-    for (const r of this.reels) if (r.frame.visible) (r.frame.material as MeshBasicMaterial).opacity = 0.55 + 0.45 * Math.sin(this.clock * 9);
+    for (const r of this.reels) {
+      if (r.frame.visible) (r.frame.material as MeshBasicMaterial).opacity = 0.55 + 0.45 * Math.sin(this.clock * 9);
+      if (r.glow.visible) (r.glow.material as MeshBasicMaterial).opacity = 0.55 + 0.3 * Math.sin(this.clock * 9 + 1);
+    }
+    this.party.update(dt, camera);
 
     this.updateBulbs();
     this.updateCoins(dt, inside);
@@ -590,17 +609,23 @@ export class SlotMachine {
       this.countDur = Math.min(6, 0.9 + Math.log2(mult) * 0.75);
       this.coinsDue = Math.min(70, Math.round(3 + mult * 1.1));
       this.coinsPoured = 0;
-      this.message = mult >= 25 ? (syms[0] === 'chest' ? 'JACKPOT!' : 'BIG WIN!') : 'WIN';
-      for (let k = 0; k < reels; k++) this.reels[k].frame.visible = true;
-      if (mult >= 25) {
+      this.tier = mult >= 25 ? 3 : mult >= 8 ? 2 : 1;
+      this.message = mult >= 25 ? (syms[0] === 'chest' ? 'JACKPOT!' : 'BIG WIN!') : mult >= 8 ? 'NICE WIN' : 'WIN';
+      for (let k = 0; k < reels; k++) this.reels[k].frame.visible = this.reels[k].glow.visible = true;
+      // light and confetti out of the reel window (big wins bring their own bells and boom)
+      this.party.win({ at: new Vector3(0, REEL_Y, FRONT + 0.08), tier: this.tier, quiet: this.tier === 3 });
+      if (mult >= 8) {
         this.bannerT = 0;
-        const text = syms[0] === 'chest' ? 'JACKPOT' : 'BIG WIN';
+        this.bannerSize = mult >= 25 ? 1 : 0.75;
+        const text = mult >= 25 ? (syms[0] === 'chest' ? 'JACKPOT' : 'BIG WIN') : 'NICE WIN';
         const mat = this.banner.material;
         if (mat.map?.name !== text) {
           mat.map?.dispose();
           mat.map = bannerTexture(text);
           mat.map.name = text;
         }
+      }
+      if (mult >= 25) {
         bigWinHit();
         slotBells(Math.min(5, 1.5 + mult / 60));
         this.burst(40 + Math.min(60, mult));
@@ -634,7 +659,11 @@ export class SlotMachine {
   private completeCount(): void {
     if (this.phase !== 'counting') return;
     this.meter = this.win;
-    if (this.owed) payOut(this.state, this.owed);
+    if (this.owed) {
+      payOut(this.state, this.owed);
+      // the money lands: the amount rises over the reels
+      this.party.rise(new Vector3(0, REEL_Y + 0.13, FRONT + 0.1), this.owed, this.tier);
+    }
     this.owed = 0;
     this.phase = 'won';
     this.countT = 0;
@@ -729,7 +758,7 @@ export class SlotMachine {
       // punch in, hold with a throb, shrink away
       const k = s < 0.25 ? easeOutBack(s / 0.25) : s < 3.2 ? 1 + 0.05 * Math.sin(s * 10) : Math.max(0, 1 - (s - 3.2) / 0.3);
       this.banner.visible = k > 0.001;
-      this.banner.scale.set(0.6 * k, 0.2 * k, 1);
+      this.banner.scale.set(0.6 * k * this.bannerSize, 0.2 * k * this.bannerSize, 1);
       if (s > 3.5) this.bannerT = -1;
     } else this.banner.visible = false;
     const m = new Matrix4();

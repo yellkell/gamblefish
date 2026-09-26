@@ -7,14 +7,17 @@
  *         it rumbles, slows, drops off the track, ticks over the frets and settles in a pocket.
  *         The result is decided fairly first (crypto RNG) and the ball's launch angle is solved
  *         so its decaying orbit meets that pocket on the turning rotor: what you see is what won.
- *  RESULT The number goes up over the wheel in its colour, the dolly marks it on the felt, losing
- *         chips are swept away, winning stacks are paid and slide over to you — the cash chime
- *         (pitched up), the wrist counters rolling, a fanfare sized to the win.
+ *  RESULT The number pops up over the wheel in its colour, the dolly marks it on the felt, the
+ *         winning spots pulse gold and losing chips are swept away. Each winning stack is paid
+ *         chip by chip beside it, then slides over to you: the cash chime (pitched up), the wrist
+ *         counters rolling, a fanfare, and light, confetti and the amount in gold, sized to the
+ *         win (casino/celebrate.ts). A straight-up hit gets a banner.
  *
  * Rules (payouts, what beats what) are casino/roulette.ts.
  */
 
 import {
+  AdditiveBlending,
   CanvasTexture,
   Color,
   ConeGeometry,
@@ -28,6 +31,7 @@ import {
   MeshBasicMaterial,
   MeshLambertMaterial,
   MeshPhongMaterial,
+  PlaneGeometry,
   RingGeometry,
   Shape,
   SphereGeometry,
@@ -37,14 +41,17 @@ import {
   Vector3,
   type Camera,
 } from 'three';
-import { ballTick, chipClack, RollBed, uiDeny, winFanfare } from '../audio/sfx.ts';
+import type { World } from '@iwsdk/core';
+import { ballTick, chipClack, chipRun, RollBed, uiDeny, winFanfare } from '../audio/sfx.ts';
 import type { GameState } from '../fishing/tidewater.ts';
 import { font } from '../ui/fonts.ts';
 import { INK, roundRect } from '../ui/panel.ts';
 import { InteractivePanel, register } from '../ui/pointer.ts';
 import type { Interior } from '../village/interiors.ts';
+import { Celebration, type Tier } from './celebrate.ts';
+import { breakdown, CHIP_COLOUR } from './chips.ts';
 import { payOut, refund, stake } from './money.ts';
-import { colourOf, settle, spin, WHEEL, type Spot } from './roulette.ts';
+import { colourOf, odds, settle, spin, WHEEL, type Spot } from './roulette.ts';
 
 const TAU = Math.PI * 2;
 const N = WHEEL.length; // 37
@@ -104,7 +111,14 @@ function rounded(x0: number, x1: number, hz: number, r: number): Shape {
   return s;
 }
 
-const CHIP_COLOUR: Record<number, number> = { 1: 0xf2efe6, 5: 0xc23b2e, 25: 0x2f8a4a, 100: 0x1a1a1e, 500: 0x7a3aa8 };
+/** The result's timeline (seconds after the ball settles): the pay lands, losers are raked, the
+ *  winners slide over to you and are gone, and the table opens again. */
+const PAY_AT = 0.7;
+const RAKE_AT = 1.2;
+const SLIDE_AT = 2.5;
+const GONE_AT = 3.3;
+const OPEN_AT = 4.0;
+const CHIP_Y = 0.907;
 
 export interface RouletteOptions {
   chips: number[];
@@ -124,6 +138,8 @@ export class RouletteTable {
   private readonly dolly: Mesh;
   private readonly bowlY: number;
   private readonly roll = new RollBed();
+  private readonly party: Celebration;
+  private readonly glows: Mesh[] = [];
 
   private chip: number;
   private bets = new Map<Spot, number[]>(); // each chip placed, by spot
@@ -144,12 +160,16 @@ export class RouletteTable {
   constructor(
     private readonly room: Interior,
     private readonly state: GameState,
+    world: World,
     private readonly opts: RouletteOptions,
   ) {
     this.chip = opts.chips[0];
     const g = this.group;
     g.position.set(opts.at[0], 0, opts.at[1]);
     room.contents.add(g);
+    // confetti settles on the table top, or on the floor past it
+    const onTable = (x: number, z: number): number => (x > TABLE.x0 && x < TABLE.x1 && Math.abs(z) < TABLE.hz ? CHIP_Y : 0);
+    this.party = new Celebration(g, onTable, () => world.renderer.xr.getSession());
 
     // the table: a wooden base, a padded rail, green felt
     const wood = new MeshLambertMaterial({ color: 0x5a3a22 });
@@ -227,6 +247,17 @@ export class RouletteTable {
     this.dolly = new Mesh(new CylinderGeometry(0.012, 0.02, 0.06, 12), new MeshPhongMaterial({ color: 0xf2f6ff, transparent: true, opacity: 0.85, shininess: 120 }));
     this.dolly.visible = false;
     g.add(this.dolly);
+
+    // the winning spots' glow: a soft gold light laid over each, pulsing (six is the most one
+    // number can win: itself, its colour, odd/even, low/high, its dozen and its column)
+    const glowTex = cellGlowTexture();
+    for (let k = 0; k < 6; k++) {
+      const m = new Mesh(new PlaneGeometry(1, 1).rotateX(-Math.PI / 2), new MeshBasicMaterial({ map: glowTex, color: 0xffc83a, transparent: true, blending: AdditiveBlending, depthWrite: false, toneMapped: false }));
+      m.visible = false;
+      m.renderOrder = 4;
+      g.add(m);
+      this.glows.push(m);
+    }
 
     this.paintFelt();
     this.paintBoard();
@@ -309,24 +340,50 @@ export class RouletteTable {
     this.paintFelt();
   }
 
-  /** Stack each spot's chips on its centre, a little ragged like a real stack. */
+  /**
+   * Stack each spot's chips on its centre, a little ragged like a real stack. In the result, a
+   * winner's pay stands beside it, landing chip by chip from PAY_AT, and from SLIDE_AT both
+   * stacks slide over to you and shrink away.
+   */
   private layChips(): void {
     const m = new Matrix4();
     const c = new Color();
     let n = 0;
-    for (const [spot, list] of this.bets) {
-      const p = this.spotLocal(spot);
-      list.forEach((v, k) => {
+    const result = this.phase === 'result';
+    const s = result ? Math.min(1, Math.max(0, (this.sweep - SLIDE_AT) / (GONE_AT - SLIDE_AT))) : 0;
+    const slide = s * s * (3 - 2 * s);
+    const shrink = Math.max(0.001, 1 - Math.max(0, (s - 0.7) / 0.3));
+    const stack = (values: number[], x: number, z: number, dropAt = -1): void => {
+      const gap = payGap(values.length);
+      values.forEach((v, k) => {
         if (n >= 400) return;
-        m.makeTranslation(p.x + Math.sin(k * 2.3) * 0.002, 0.907 + k * 0.0062, p.z + Math.cos(k * 1.7) * 0.002);
+        let lift = 0;
+        if (dropAt >= 0) {
+          const t = this.sweep - dropAt - k * gap;
+          if (t < 0) return;
+          lift = Math.max(0, 0.09 * (1 - (t / 0.12) ** 2));
+        }
+        m.makeScale(shrink, shrink, shrink).setPosition(x + Math.sin(k * 2.3) * 0.002, CHIP_Y + k * 0.0062 * shrink + lift, z + Math.cos(k * 1.7) * 0.002);
         this.chips.setMatrixAt(n, m);
         this.chips.setColorAt(n, c.setHex(CHIP_COLOUR[v] ?? 0xffffff));
         n++;
       });
+    };
+    for (const [spot, list] of this.bets) {
+      const p = this.spotLocal(spot);
+      const won = result && this.winners.includes(spot);
+      const z = won ? p.z + (TABLE.hz - 0.1 - p.z) * slide : p.z;
+      stack(list, p.x, z);
+      if (won) stack(breakdown(this.payOf(spot)), p.x + 0.052, z, PAY_AT);
     }
     this.chips.count = n;
     this.chips.instanceMatrix.needsUpdate = true;
     if (this.chips.instanceColor) this.chips.instanceColor.needsUpdate = true;
+  }
+
+  /** What a winning spot is paid (its stake back rides on its own stack). */
+  private payOf(spot: Spot): number {
+    return (this.bets.get(spot) ?? []).reduce((a, b) => a + b, 0) * odds(spot);
   }
 
   /** A spot's centre on the felt, in the table group's frame. */
@@ -344,6 +401,7 @@ export class RouletteTable {
     this.phase = 'spinning';
     this.t = 0;
     this.status = 'No more bets';
+    this.layChips(); // settle any stack still mid-drop
     this.lastBets = new Map([...this.bets].map(([s, l]) => [s, [...l]]));
     this.resultIndex = spin();
     this.result = WHEEL[this.resultIndex];
@@ -385,14 +443,41 @@ export class RouletteTable {
     const p = this.spotLocal(`n${this.result}`);
     this.dolly.position.set(p.x, 0.94, p.z);
     this.dolly.visible = true;
+    // the winning spots light up
+    this.glows.forEach((m, k) => {
+      const spot = r.winners[k];
+      const cell = spot && this.cells.find((c) => c.spot === spot);
+      m.visible = !!cell;
+      if (!cell) return;
+      const p = this.spotLocal(spot);
+      m.position.set(p.x, 0.905, p.z);
+      m.scale.set((cell.w / LAY.w) * 2.0 * 1.25, 1, (cell.h / LAY.h) * 0.8 * 1.25);
+    });
     if (r.returned) {
       this.owed = r.returned;
+      const staked = this.total;
+      const straight = r.winners.some((s) => s.startsWith('n'));
+      // the biggest pay is where the eye goes
+      let best = r.winners[0];
+      for (const s of r.winners) if (this.payOf(s) > this.payOf(best)) best = s;
+      const at = this.spotLocal(best).add(new Vector3(0.026, 0.1, 0));
+      const pays = r.winners.map((s) => breakdown(this.payOf(s)).length);
       window.setTimeout(() => {
         if (!this.owed) return;
         this.owed = 0;
         payOut(this.state, r.returned);
-        winFanfare(r.won / Math.max(1, this.total));
-      }, 700);
+        const ratio = r.won / Math.max(1, staked);
+        winFanfare(ratio);
+        const tier: Tier = ratio >= 10 ? 3 : ratio >= 1.5 ? 2 : 1;
+        this.party.win({
+          at,
+          tier,
+          amount: r.won,
+          banner: tier === 3 ? (straight ? 'STRAIGHT UP!' : 'BIG WIN!') : undefined,
+          bannerAt: new Vector3(-0.2, 1.38, 0),
+        });
+        for (const n of pays) chipRun(n, payGap(n));
+      }, PAY_AT * 1000);
     }
     this.phase = 'result';
     this.sweep = 0;
@@ -424,6 +509,7 @@ export class RouletteTable {
     this.number = new Sprite(new SpriteMaterial({ map: t, transparent: true, toneMapped: false }));
     this.number.scale.set(0.001, 0.001, 1);
     this.number.position.set(-1.18, 1.45, 0);
+    this.number.renderOrder = 6;
     this.group.add(this.number);
   }
 
@@ -431,6 +517,7 @@ export class RouletteTable {
 
   update(dt: number, camera: Camera): void {
     const inside = this.room.inside(camera.matrixWorld.elements[12], camera.matrixWorld.elements[14]);
+    this.party.update(dt, camera);
     if (this.phase === 'betting') {
       // the wheel idles round slowly between spins
       this.rotor.rotation.y += dt * 0.25;
@@ -478,17 +565,23 @@ export class RouletteTable {
     this.ball.position.set(Math.cos(pocketAngle(this.resultIndex) + this.rotor.rotation.y) * 0.19, 0.015, -Math.sin(pocketAngle(this.resultIndex) + this.rotor.rotation.y) * 0.19);
     this.sweep += dt;
     if (this.number) {
-      const s = Math.min(1, this.sweep / 0.25);
+      // it punches in past full size and settles, then bobs gently
+      const s = this.sweep < 0.35 ? easeOutBack(this.sweep / 0.35) : 1 + 0.04 * Math.sin(this.sweep * 5);
       this.number.scale.set(0.28 * s, 0.28 * s, 1);
+      this.number.position.y = 1.45 + (this.sweep < 0.35 ? 0 : 0.012 * Math.sin(this.sweep * 2.5));
     }
-    if (this.sweep > 1.2 && this.bets.size) {
+    // the winning spots pulse, then fade as their chips go
+    const fade = Math.max(0, Math.min(1, (GONE_AT + 0.3 - this.sweep) / 0.5));
+    for (const m of this.glows) if (m.visible) (m.material as MeshBasicMaterial).opacity = (0.55 + 0.45 * Math.sin(this.sweep * 9)) * Math.min(1, this.sweep / 0.2) * fade;
+    if (this.sweep > RAKE_AT && this.bets.size) {
       // the croupier's rake: losing chips go, winners stay while they're paid
       for (const s of [...this.bets.keys()]) if (!this.winners.includes(s)) this.bets.delete(s);
-      this.layChips();
     }
-    if (this.sweep > 4.0) {
+    this.layChips();
+    if (this.sweep > OPEN_AT) {
       this.bets.clear();
       this.layChips();
+      for (const m of this.glows) m.visible = false;
       this.dolly.visible = false;
       if (this.number) this.number.parent?.remove(this.number);
       this.number = null;
@@ -608,6 +701,35 @@ export class RouletteTable {
     this.board.buttons = buttons;
     this.board.commit();
   }
+}
+
+/** Seconds between pay chips landing: a quick run, however tall the stack. */
+function payGap(chips: number): number {
+  return Math.min(0.08, 0.6 / Math.max(1, chips));
+}
+
+function easeOutBack(x: number): number {
+  const c1 = 2.2;
+  return 1 + (c1 + 1) * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2);
+}
+
+/** A soft gold light for a winning spot: bright through the middle, feathered at the edges. */
+function cellGlowTexture(): CanvasTexture {
+  const c = document.createElement('canvas');
+  c.width = c.height = 128;
+  const g = c.getContext('2d')!;
+  g.filter = 'blur(10px)';
+  g.fillStyle = '#ffffff';
+  roundRect(g, 22, 22, 84, 84, 14);
+  g.fill();
+  g.filter = 'none';
+  g.strokeStyle = 'rgba(255,255,255,0.9)';
+  g.lineWidth = 5;
+  roundRect(g, 24, 24, 80, 80, 12);
+  g.stroke();
+  const t = new CanvasTexture(c);
+  t.colorSpace = SRGBColorSpace;
+  return t;
 }
 
 /** Angle (rotor frame) of pocket i's centre — the same angle the pocket texture paints it at. */

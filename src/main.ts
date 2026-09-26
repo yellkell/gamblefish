@@ -1,5 +1,5 @@
 /**
- * VR GAMBLE FISH — How to Fish, in VR, on Tidewater's island.
+ * FISH & CHIPS — How to Fish, in VR, on Tidewater's island.
  *
  * Boot: IWSDK world (VR, no built-in locomotion — movement is ff2's club
  * teleport, see locomotion/TeleportSystem.ts), then the baked island
@@ -185,11 +185,11 @@ World.create(container, {
   const tables: { update(dt: number, camera: Camera): void }[] = [];
   const room = (n: string): Interior | undefined => interiors.find((i) => i.name === n);
   const lure = room('C');
-  if (lure) tables.push(new RouletteTable(lure, game, { chips: [1, 5, 25, 100], maxBet: 500, at: [0, -0.6] }));
+  if (lure) tables.push(new RouletteTable(lure, game, world, { chips: [1, 5, 25, 100], maxBet: 500, at: [0, -0.6] }));
   const vault = room('H');
   if (vault) tables.push(new IslandBank(vault, game, world.renderer));
   const shark = room('G');
-  if (shark) tables.push(new BlackjackTable(shark, game, { chips: [5, 10, 25, 100], maxBet: 500, at: [0, -0.9] }));
+  if (shark) tables.push(new BlackjackTable(shark, game, world, { chips: [5, 10, 25, 100], maxBet: 500, at: [0, -0.9] }));
   const reels = room('B');
   if (reels) {
     const z = -reels.d / 2 + 0.28;

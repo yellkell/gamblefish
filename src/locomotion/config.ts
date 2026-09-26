@@ -34,10 +34,11 @@ export const TELEPORT = {
   stepBack: [0.5, 0.34, 0.2],
 } as const;
 
-/** The marker + arc colours: the club's galvanised steel (DECOR.brass) and
- *  the one red it's allowed to burn when a landing is refused. */
+/** The marker + arc colours. The club's galvanised steel (DECOR.brass) went
+ *  grey against the island's sand and sea, so a good landing glows sea-glass
+ *  (the landing page's teal); the club's hazard red still marks a refusal. */
 export const TELEPORT_COLOURS = {
-  ok: 0x9aa4ac,
+  ok: 0x5ee8d8,
   refused: 0xe8352a,
 } as const;
 

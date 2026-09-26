@@ -220,6 +220,30 @@ export function winFanfare(size: number): void {
 }
 
 /**
+ * Glitter over a win: a quick run of high bell tones up a pentatonic scale, longer and higher
+ * for bigger wins (tier 1–3).
+ */
+export function winShimmer(tier: number): void {
+  const steps = [0, 2, 4, 7, 9];
+  const n = [0, 6, 10, 16][tier] ?? 6;
+  for (let i = 0; i < n; i++) {
+    const f = 1047 * Math.pow(2, (steps[i % 5] + 12 * Math.floor(i / 5)) / 12);
+    const at = 0.08 + i * 0.045;
+    tone({ freq: f, type: 'sine', dur: 0.4, gain: 0.045, delay: at });
+    tone({ freq: f * 2.01, type: 'sine', dur: 0.16, gain: 0.014, delay: at });
+  }
+}
+
+/** Pay chips set down one on another: a run of clay clacks, `gap` seconds apart. */
+export function chipRun(n: number, gap = 0.07, delay = 0): void {
+  for (let i = 0; i < Math.min(n, 24); i++) {
+    const at = delay + i * gap;
+    clank(2600 + Math.random() * 500, 0.035, 0.035, at);
+    clank(3300 + Math.random() * 400, 0.02, 0.03, at + 0.018);
+  }
+}
+
+/**
  * The roulette ball rolling round the track: bandpassed noise whose level and pitch follow the
  * ball's speed (a hollow rumble that drops as it slows). `set(0)` silences it.
  */

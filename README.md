@@ -1,4 +1,7 @@
-# VR Gamble Fish
+# Fish & Chips
+
+Fish by day, chips by night: the catch pays for the casino's chips. (The repo, the
+site and the services keep their old `gamblefish` names so links and saves still work.)
 
 A VR adaptation of **How to Fish**, set on **Tidewater's** island
 ([dgreenheck/tidewater](https://github.com/dgreenheck/tidewater), MIT), built on
@@ -157,6 +160,15 @@ and the vendors.
   haven't caught shows as a shadow with where and when to look. The first one you land
   fills its entry in: its picture, names, habitat, how many you've caught and your best.
   Point at the corner arrows to turn the pages.
+- **Winning at the casinos** (`src/casino/celebrate.ts`): every win flashes light, sends
+  a ring across the table and throws confetti and glints, which settle on the felt. The
+  amount rises in gold, and both controllers buzz. All of it scales with the win.
+  - **Roulette:** the winning spots pulse gold. Each winning stack is paid chip by chip
+    beside it, then slides over to you. A straight-up hit gets a STRAIGHT UP! banner.
+  - **Blackjack:** the pay lands chip by chip beside your bet and the hand's label
+    throbs. A natural gets a BLACKJACK! banner and the biggest burst.
+  - **Slots:** the winning symbols glow and the amount rises when the count lands.
+    Three shells or hooks get a NICE WIN banner, on top of the BIG WIN and JACKPOT ones.
 - **Wallet:** `src/ui/wallet.ts` puts an odometer-style money counter on both
   wrists. Any change in the balance rings ff2's cash chime, pitched up for
   money in and down for money out.
@@ -186,8 +198,12 @@ The controls, arc, marker, sound and tuning are identical:
 - **Back flick** steps 0.5 m away from where you're looking, then tries 0.34 and
   0.2 m. It never throws an arc.
 - **Headset recentre** re-plants you where you stood.
-- **Look and sound:** galvanised-steel `#9aa4ac` Line2 ribbon and 0.42× octagon
-  puck, hazard `#e8352a` when refused, and ff2's `uiClick` on the same audio bus.
+- **Look and sound:** a Line2 ribbon and ff2's `uiClick` on the same audio bus. The
+  landing marker (`src/locomotion/marker.ts`) is the club's octagon at 0.42×, drawn in
+  light rather than as a grey puck. It has a glowing rim, a tinted fill, two chevrons
+  that ripple toward your facing, a ring that pings out from the rim, and a low curtain
+  of light on its outline. A good landing is sea-glass `#5ee8d8`; a refused one turns
+  hazard `#e8352a` with stripes. It pops in when you start aiming. It costs two draws.
 
 What had to be new is **where** you may land. The club was a list of flat
 rectangles; the island has terrain and a sea. `src/world/surfaces.ts` answers the

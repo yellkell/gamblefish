@@ -326,7 +326,7 @@ export class IslandBank {
           btn('save-type', 'SAVE MY PURCHASES', 44, 720, 520, 80, BRASS, true, 34);
           btn('login', 'LOG IN (new headset)', 590, 720, 520, 80, '#3fd6c6', true, 34);
         }
-        text('18+ only. Coins are for play in Gamble Fish: no cash value, never withdrawn or exchanged. Payments by Stripe.', 44, 872, 22, INK.dim, 'left', 500, W - 88);
+        text('18+ only. Coins are for play in Fish & Chips: no cash value, never withdrawn or exchanged. Payments by Stripe.', 44, 872, 22, INK.dim, 'left', 500, W - 88);
         break;
       }
       case 'confirm': {
@@ -335,7 +335,7 @@ export class IslandBank {
         text('Before you buy:', 120, 340, 36, BRASS, 'left', 700);
         const lines = [
           '• You are 18 or over.',
-          '• Coins are for play in Gamble Fish only. They have no cash value and',
+          '• Coins are for play in Fish & Chips only. They have no cash value and',
           '   can never be withdrawn, sold or exchanged for money or prizes.',
           '• You pay on your phone through Stripe; this headset never sees your card.',
         ];

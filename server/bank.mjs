@@ -81,7 +81,7 @@ export const PACKS = [
   { id: 'vault', coins: 7000, minor: 1799 },
 ];
 
-const packName = (pack) => `${pack.coins.toLocaleString('en-US')} Gamble Fish coins`;
+const packName = (pack) => `${pack.coins.toLocaleString('en-US')} Fish & Chips coins`;
 
 /* ── the ledger ──────────────────────────────────────────────────────── */
 
@@ -426,7 +426,7 @@ async function createCheckout(req, uid, pack) {
             tax_behavior: 'inclusive',
             product_data: {
               name: packName(pack),
-              description: 'In-game coins for Gamble Fish. For play only: no cash value, cannot be withdrawn or exchanged. 18+.',
+              description: 'In-game coins for Fish & Chips. For play only: no cash value, cannot be withdrawn or exchanged. 18+.',
               tax_code: TAX_CODE,
             },
           },
@@ -487,7 +487,7 @@ function devPayPage(req, s, id, paid) {
     ? `<h1>PAID</h1><p class="big">+${pack.coins}</p><p>are on their way to the headset. You can close this.</p>`
     : `<h1>TEST BANK</h1><p class="big">+${pack.coins}</p><p>${esc(packName(pack))} · ${esc(price(pack.minor))} · <em>no real charge: this is the development bank</em></p>
        <form method="post" action="/dev-pay"><input type="hidden" name="s" value="${esc(id)}"><button>PAY</button></form>`;
-  return `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Gamble Fish: test bank</title>
+  return `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Fish & Chips: test bank</title>
 <style>body{margin:0;background:#0c1418;color:#eaf4f8;font-family:system-ui,sans-serif;display:grid;place-items:center;min-height:100vh;text-align:center}
 main{padding:32px}h1{color:#ffb000;letter-spacing:.08em}.big{font-size:3rem;font-weight:800;margin:.2em 0}
 button{font:inherit;font-weight:800;letter-spacing:.1em;padding:18px 48px;border:0;border-radius:12px;background:#ffb000;color:#221302;font-size:1.2rem}
