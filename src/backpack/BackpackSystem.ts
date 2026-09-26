@@ -62,6 +62,7 @@ import { font } from '../ui/fonts.ts';
 import { INK, Panel, roundRect } from '../ui/panel.ts';
 import { bounds, cellsOf, fill, findSpot, fits, GRID_SIZES, merge, MERGE_BONUS, mergePartners, rotate, shapeFor, TIERS, type Piece, type Rot } from './logic.ts';
 import { FieldGuide } from './fieldGuide.ts';
+import type { ChartSource } from './chart.ts';
 import { CELL, Tray } from './tray.ts';
 import { introActive } from '../experience/introGate.ts';
 
@@ -73,7 +74,13 @@ const TIER_CSS = ['#9aa4ac', '#dfeaf4', '#ffb000', '#ff5fd2'];
 const TIER_GLOW = [0x000000, 0x1c2228, 0x3a2400, 0x2a0a22];
 
 /** What the backpack needs from the game; set by main before registration. */
-export const backpackDeps: { state: GameState | null; props: Props | null } = { state: null, props: null };
+export const backpackDeps: {
+  state: GameState | null;
+  props: Props | null;
+  /** the island for the field guide's chart, and where the player is on it */
+  chart: ChartSource | null;
+  where: (() => { x: number; z: number }) | null;
+} = { state: null, props: null, chart: null, where: null };
 
 /** Somewhere in the world that takes a fish from your hand (Joe's scale, a counter...). */
 export interface DropTarget {
@@ -263,7 +270,7 @@ export class BackpackSystem extends createSystem({}) {
     this.paintTabs();
     this.tray.group.add(this.tabs.mesh);
     register(this.tabs);
-    this.guide = new FieldGuide(backpackDeps.state!, backpackDeps.props!, this.renderer);
+    this.guide = new FieldGuide(backpackDeps.state!, backpackDeps.props!, this.renderer, backpackDeps.chart, backpackDeps.where);
     this.guide.group.position.y = 0.03;
     this.tray.group.add(this.guide.group);
     backpackView.takeInHand = (id, hand) => this.takeInHand(id, hand);

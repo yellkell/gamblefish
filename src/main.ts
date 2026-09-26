@@ -9,7 +9,7 @@
  */
 
 import { launchXR, SessionMode, World } from '@iwsdk/core';
-import type { Camera, PerspectiveCamera } from 'three';
+import { Vector3, type Camera, type PerspectiveCamera } from 'three';
 import { Music } from './audio/music.ts';
 import { ShoreSound } from './audio/shore.ts';
 import { ensureAudio } from './audio/sfx.ts';
@@ -184,6 +184,8 @@ World.create(container, {
   world.registerSystem(FishingSystem);
   backpackDeps.state = game;
   backpackDeps.props = fishingDeps.props;
+  backpackDeps.chart = { heightAt: (x, z) => heightfield.heightAt(x, z), layout: json.layout, buildings: frames };
+  backpackDeps.where = () => world.camera.getWorldPosition(new Vector3());
   world.registerSystem(BackpackSystem);
 
   // stepping through a doorway: a blink hides the door you can't see open
