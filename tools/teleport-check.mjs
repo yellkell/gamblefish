@@ -65,7 +65,7 @@ console.log('\n1. the tuning (ff2 src/rave/club/config.ts TELEPORT)');
 const ff2 = { engage: 0.5, release: 0.35, launchSpeed: 7.5, gravity: 9.8, arcPoints: 48, arcStep: 0.035, snapAngle: (35 * Math.PI) / 180, snapEngage: 0.7, snapReset: 0.3 };
 for (const [k, v] of Object.entries(ff2)) check(`TELEPORT.${k}`, TELEPORT[k] === v, TELEPORT[k]);
 check('stepBack probes', JSON.stringify(TELEPORT.stepBack) === '[0.5,0.34,0.2]');
-check('colours', TELEPORT_COLOURS.ok === 0x9aa4ac && TELEPORT_COLOURS.refused === 0xe8352a);
+check('colours: sea-glass for a good landing, ff2 hazard red for a refused one', TELEPORT_COLOURS.ok === 0x5ee8d8 && TELEPORT_COLOURS.refused === 0xe8352a);
 const flat = aim(0, 0, 0, 0, 45);
 console.log(`       (reference: max throw from 1.2 m at 45° ≈ ${f2(flat.dist)} m over open water)`);
 

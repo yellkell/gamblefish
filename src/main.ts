@@ -1,5 +1,5 @@
 /**
- * VR GAMBLE FISH — How to Fish, in VR, on Tidewater's island.
+ * FISH & CHIPS — How to Fish, in VR, on Tidewater's island.
  *
  * Boot: IWSDK world (VR, no built-in locomotion — movement is ff2's club
  * teleport, see locomotion/TeleportSystem.ts), then the baked island
@@ -9,7 +9,7 @@
  */
 
 import { launchXR, SessionMode, World } from '@iwsdk/core';
-import type { Camera } from 'three';
+import { Vector3, type Camera, type PerspectiveCamera } from 'three';
 import { Music } from './audio/music.ts';
 import { ShoreSound } from './audio/shore.ts';
 import { ensureAudio } from './audio/sfx.ts';
@@ -20,7 +20,7 @@ import { createGameState } from './fishing/tidewater.ts';
 import { WristWallet } from './ui/wallet.ts';
 import { WaterFx } from './fx/water.ts';
 import { locomotion, teleportView, TeleportSystem } from './locomotion/TeleportSystem.ts';
-import { decodeTerrain, type WorldJson } from './world/data.ts';
+import { decodeTerrain, type BoxCollider, type WorldJson } from './world/data.ts';
 import { Heightfield } from './world/heightfield.ts';
 import { Ocean } from './world/ocean.ts';
 import { createSky } from './world/sky.ts';
@@ -34,6 +34,7 @@ import { bankDeps, bootBank } from './net/bank.ts';
 import { bootCloudSave } from './net/cloudSave.ts';
 import { RouletteTable } from './casino/RouletteTable.ts';
 import { SlotMachine } from './casino/SlotMachine.ts';
+import { casinoEnv } from './casino/look.ts';
 import { BlackjackTable } from './casino/BlackjackTable.ts';
 import { PointerSystem } from './ui/pointer.ts';
 import { buildInteriors, interiorAt, openColliders, type Interior } from './village/interiors.ts';
@@ -45,6 +46,12 @@ import { Blink } from './fx/blink.ts';
 import { Vegetation } from './world/vegetation.ts';
 import { buildVillage } from './world/village.ts';
 import { buildLamps } from './world/lamps.ts';
+import { runBootIntro } from './experience/bootIntro.ts';
+import { cutGates } from './woodworks/gates.ts';
+import { WoodSystem, woodDeps, woodView } from './woodworks/woodSystem.ts';
+import { onFontsReady } from './ui/fonts.ts';
+import { drawLogo, drawLogoFish, hasLogoFish, setLogoFish } from './ui/logo.ts';
+import { thumbnail } from './ui/thumbnail.ts';
 
 /** ff2's fixed-foveation level: sharp centre, cheap rim. */
 const FOVEATION = 0.33;
@@ -55,6 +62,26 @@ let villageTick: (dt: number) => void = () => {};
 const status = document.getElementById('status') as HTMLElement;
 const enter = document.getElementById('enter-vr') as HTMLButtonElement;
 const bar = document.getElementById('bar-fill') as HTMLElement;
+
+// the splash's mark (index.html shows it after the publisher card), repainted once the type is
+// in; its leaping fish is the real sailfish, laid over it and faded in once the models load
+const logo = document.getElementById('logo') as HTMLCanvasElement | null;
+const logoFish = document.getElementById('logo-fish') as HTMLCanvasElement | null;
+const paintLogo = (): void => {
+  const g = logo?.getContext('2d');
+  if (g && logo) {
+    g.clearRect(0, 0, logo.width, logo.height);
+    drawLogo(g, logo.width, logo.height, true, false);
+  }
+  const f = logoFish?.getContext('2d');
+  if (f && logoFish && hasLogoFish()) {
+    f.clearRect(0, 0, logoFish.width, logoFish.height);
+    drawLogoFish(f, logoFish.width, logoFish.height);
+    logoFish.classList.add('in');
+  }
+};
+paintLogo();
+onFontsReady(paintLogo);
 
 async function fetchBuffer(path: string, onProgress: (f: number) => void): Promise<ArrayBuffer> {
   const res = await fetch(import.meta.env.BASE_URL + path);
@@ -145,7 +172,8 @@ World.create(container, {
   const frames = (json as unknown as { buildings: BuildingFrame[] }).buildings ?? [];
   const interiors = buildInteriors(frames);
   for (const i of interiors) scene.add(i.group);
-  const surfaces = new Surfaces(heightfield, { boxes: openColliders(json.colliders.boxes, frames), cylinders: json.colliders.cylinders });
+  // (the pier head's rails open at the gateways of the walks you can build: woodworks/gates.ts)
+  const surfaces = new Surfaces(heightfield, { boxes: cutGates(openColliders(json.colliders.boxes, frames)), cylinders: json.colliders.cylinders });
   locomotion.surfaces = surfaces;
   if (grass) grass.floorOver = (x, z, m) => surfaces.deckOver(x, z, m);
   world.registerSystem(TeleportSystem);
@@ -160,12 +188,29 @@ World.create(container, {
   const fx = new WaterFx((x, z) => ocean.heightAt(x, z), ocean.swell);
   scene.add(fx.group);
   const wallet = new WristWallet(game, [world.player.raySpaces.left, world.player.raySpaces.right]);
-  Object.assign(fishingDeps, { props: loadProps(propsBuf), state: game, ocean, terrain: heightfield, surfaces, layout: json.layout, wallet, fx });
+  const props = loadProps(propsBuf);
+  // the silvery fish reflect the casinos' studio light (a soft, neutral room)
+  props.setEnv(casinoEnv(world.renderer));
+  // the mark's leaping fish: the sailfish, sail up, mid-thrash, photographed side on
+  {
+    const { mesh, uniforms } = props.makeFish('sailfish');
+    uniforms.uSwim.value = 0.1;
+    uniforms.uFreq.value = 1;
+    uniforms.uTime.value = 0.12;
+    mesh.rotation.y = Math.PI / 2;
+    setLogoFish(thumbnail(world.renderer, mesh, { w: 1024, h: 420, dir: new Vector3(0.06, 0.1, 1).normalize() }));
+    mesh.material.dispose();
+    paintLogo();
+  }
+  Object.assign(fishingDeps, { props, state: game, ocean, terrain: heightfield, surfaces, layout: json.layout, wallet, fx });
   // point-and-click panels first: a hand on a button claims its trigger before fishing sees it
   world.registerSystem(PointerSystem);
   world.registerSystem(FishingSystem);
   backpackDeps.state = game;
   backpackDeps.props = fishingDeps.props;
+  backpackDeps.chart = { heightAt: (x, z) => heightfield.heightAt(x, z), layout: json.layout, buildings: frames };
+  backpackDeps.where = () => world.camera.getWorldPosition(new Vector3());
+  backpackDeps.walks = () => woodView.walks?.() ?? {};
   world.registerSystem(BackpackSystem);
 
   // stepping through a doorway: a blink hides the door you can't see open
@@ -176,7 +221,18 @@ World.create(container, {
 
   // what bites, and when, follows the island's day
   fishingDeps.hour = () => sky.state.hour;
-  fishingDeps.indoors = () => interiorAt(interiors, world.player.position.x, world.player.position.z) !== null;
+  // indoors, or with the axe out among the trees, the rod goes over your shoulder
+  fishingDeps.indoors = () => interiorAt(interiors, world.player.position.x, world.player.position.z) !== null || woodView.axeOut;
+
+  // the woodworks: the timber yard, the woodlot and the walks off the pier head
+  Object.assign(woodDeps, {
+    state: game,
+    ground: (x: number, z: number) => heightfield.heightAt(x, z),
+    addBox: (b: BoxCollider) => surfaces.addBox(b),
+    env: casinoEnv(world.renderer),
+    busy: () => backpackView.open || interiorAt(interiors, world.player.position.x, world.player.position.z) !== null,
+  });
+  world.registerSystem(WoodSystem);
 
   // the village's people and counters
   const stall = frames.find((b) => b.name === 'stall');
@@ -185,11 +241,11 @@ World.create(container, {
   const tables: { update(dt: number, camera: Camera): void }[] = [];
   const room = (n: string): Interior | undefined => interiors.find((i) => i.name === n);
   const lure = room('C');
-  if (lure) tables.push(new RouletteTable(lure, game, { chips: [1, 5, 25, 100], maxBet: 500, at: [0, -0.6] }));
+  if (lure) tables.push(new RouletteTable(lure, game, world, { chips: [1, 5, 25, 100], maxBet: 500, at: [0, -0.6] }));
   const vault = room('H');
   if (vault) tables.push(new IslandBank(vault, game, world.renderer));
   const shark = room('G');
-  if (shark) tables.push(new BlackjackTable(shark, game, { chips: [5, 10, 25, 100], maxBet: 500, at: [0, -0.9] }));
+  if (shark) tables.push(new BlackjackTable(shark, game, world, { chips: [5, 10, 25, 100], maxBet: 500, at: [0, -0.9] }));
   const reels = room('B');
   if (reels) {
     const z = -reels.d / 2 + 0.28;
@@ -233,9 +289,12 @@ World.create(container, {
   world.player.rotation.set(0, s.yaw, 0);
 
   // Dev hook: drive the rig without a headset (`__fish.move.to(x, z, yaw)`).
-  (window as unknown as { __fish: unknown }).__fish = { world, surfaces, move: teleportView, json, game, fishing: fishingView, vegetation, backpack: backpackView, interiors, tables, music, shore, sky, homeShops, gearShops, villa, fx, props: fishingDeps.props };
+  (window as unknown as { __fish: unknown }).__fish = { world, surfaces, move: teleportView, json, game, fishing: fishingView, vegetation, backpack: backpackView, interiors, tables, music, shore, sky, homeShops, gearShops, villa, fx, props: fishingDeps.props, wood: woodView };
 
   if (import.meta.env.DEV) void import('./dev/harness.ts').then((m) => m.installHarness(world));
+
+  // the curtain goes up the moment the session starts, before the island's first frame in it
+  world.renderer.xr.addEventListener('sessionstart', () => runBootIntro(world.camera as PerspectiveCamera, world.scene));
 
   status.textContent = navigator.xr ? 'Ready.' : 'WebXR not available in this browser — desktop preview only.';
   enter.disabled = !navigator.xr;
@@ -247,5 +306,7 @@ World.create(container, {
   // (A timer, not rAF: Quest Browser suspends window rAF while presenting.)
   window.setInterval(() => {
     document.body.classList.toggle('in-xr', !!world.session);
+    // the first session of the page opens on the boot intro (yellkell.com, then the mark)
+    if (world.session) runBootIntro(world.camera as PerspectiveCamera, world.scene);
   }, 250);
 });

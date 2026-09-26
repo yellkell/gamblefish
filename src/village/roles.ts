@@ -52,10 +52,5 @@ export const ROLES: Record<string, BuildingRole> = {
   // ── your place, and theirs ──
   S1: { role: 'home', title: 'HOME', sub: 'sweet shack', colour: '#8c7a62', does: 'your house' },
   L: { role: 'love', title: LOVE_INTEREST.name.toUpperCase(), sub: 'Villa Mar', colour: '#e8506a', does: 'the love interest' },
-
-  // ── sheds: outbuildings of their neighbours ──
-  shed1: { role: 'outbuilding', title: 'STORE', colour: '#6b5a48', does: 'storage' },
-  shed2: { role: 'outbuilding', title: 'STORE', colour: '#6b5a48', does: 'storage' },
-  shed3: { role: 'outbuilding', title: 'STORE', colour: '#6b5a48', does: 'storage' },
-  shed4: { role: 'outbuilding', title: 'STORE', colour: '#6b5a48', does: 'storage' },
+  // (the four sheds, Tidewater's outhouses, are left out of the village: tools/bake-world.mjs)
 };

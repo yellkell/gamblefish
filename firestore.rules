@@ -1,7 +1,7 @@
 rules_version = '2';
 
 /**
- * GAMBLE FISH: the Firestore behind gamblefish.web.app (a project shared with
+ * FISH & CHIPS: the Firestore behind gamblefish.web.app (a project shared with
  * the WINDOWS game: its leaderboard rule is below, unchanged).
  *
  * Everything here is written by the bank server (server/bank.mjs) with admin

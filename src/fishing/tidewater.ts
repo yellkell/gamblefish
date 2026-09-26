@@ -13,6 +13,7 @@ import * as GearJs from '../../vendor/tidewater/src/game/Gear.js';
 import { registerGear } from './gear.ts';
 import { biting, registerTimedFish } from './timedFish.ts';
 import { registerTrophyFish, trophyOdds, type Rig } from './trophyFish.ts';
+import { registerSharkFish, sharkOdds, sharkUnlocked } from './shark.ts';
 
 export interface FishInfo {
   name: string;
@@ -34,6 +35,8 @@ export type Habitat = Record<HabitatKey, number>;
 // reads it; the village's gear joins its upgrade tracks before any save is made or loaded
 registerTimedFish(Table.FISH as Record<string, unknown>, Table.FISH_IDS as string[]);
 registerTrophyFish(Table.FISH as Record<string, unknown>, Table.FISH_IDS as string[]);
+// the great white, last in the table (fishing/shark.ts)
+registerSharkFish(Table.FISH as Record<string, unknown>, Table.FISH_IDS as string[]);
 registerGear(GearJs.UPGRADES as unknown as Parameters<typeof registerGear>[0]);
 
 export const FISH = Table.FISH as unknown as Record<string, FishInfo>;
@@ -45,18 +48,20 @@ export const habitatAt = BitesJs.habitatAt as (w: { depth: number; reefDist: num
 const activity = BitesJs.activity as (pref: string, hour: number) => number;
 /**
  * Tidewater's weighted pick of what bites here (Bites.js pickSpecies), with the timed fish kept
- * to their hours (fishing/timedFish.ts) and the trophy fish to the rigs that can take them
- * (fishing/trophyFish.ts: no rig, no trophies).
+ * to their hours (fishing/timedFish.ts), the trophy fish to the rigs that can take them
+ * (fishing/trophyFish.ts: no rig, no trophies) and the shark to a full field guide and deep
+ * water (fishing/shark.ts).
  */
 export function pickSpecies(h: Habitat, hour: number, rng: () => number = Math.random, rig?: Rig): string | null {
   let total = 0;
   const w: number[] = [];
   const luck = rig ? (gearStats(rig.gear).luck ?? 1) : 1;
+  const shark = sharkUnlocked(rig?.log, FISH_IDS);
   for (const id of FISH_IDS) {
     const f = FISH[id];
     let hw = 0;
     for (const k in f.habitat) hw += (f.habitat[k as HabitatKey] ?? 0) * h[k as HabitatKey];
-    const x = hw * f.rarity * activity(f.time, hour) * biting(id, hour) * trophyOdds(id, hour, rig, luck);
+    const x = hw * f.rarity * activity(f.time, hour) * biting(id, hour) * trophyOdds(id, hour, rig, luck) * sharkOdds(id, rig?.depth ?? 0, shark, (rig?.log?.[id]?.count ?? 0) > 0);
     w.push(x);
     total += x;
   }
@@ -146,6 +151,8 @@ export interface GameState {
   upgrades: Record<string, number>;
   /** what you've bought for your shack (village/homeGoods.ts ids), in the order you bought it */
   home: string[];
+  /** the woodworks (woodworks/): logs in your backpack, the axe, how far each walk is built */
+  woodworks: Woodworks;
   readonly stats: GearStats;
   readonly holdKg: number;
   readonly holdValue: number;
@@ -178,23 +185,45 @@ function prefixedStorage(): Pick<Storage, 'getItem' | 'setItem'> | null {
   }
 }
 
+export interface Woodworks {
+  wood: number;
+  axe: boolean;
+  /** steps laid on each walk (woodworks/gates.ts WALKS) */
+  built: Record<string, number>;
+}
+
+const freshWoodworks = (): Woodworks => ({ wood: 0, axe: false, built: {} });
+
+function readWoodworks(d: unknown): Woodworks {
+  const w = (d as { woodworks?: Partial<Woodworks> }).woodworks;
+  const out = freshWoodworks();
+  if (!w || typeof w !== 'object') return out;
+  out.wood = Math.max(0, Math.floor(Number(w.wood) || 0));
+  out.axe = w.axe === true;
+  if (w.built && typeof w.built === 'object') for (const [k, v] of Object.entries(w.built)) out.built[k] = Math.max(0, Math.floor(Number(v) || 0));
+  return out;
+}
+
 export function createGameState(): GameState {
   const s = new (GameStateJs as unknown as new (storage: unknown) => GameState)(prefixedStorage());
   // our own field on Tidewater's save: the shack's things ride along in the same JSON (local and
   // cloud), and a save from before them just has none
   s.home = [];
+  s.woodworks = freshWoodworks();
   const toJSON = s.toJSON.bind(s);
   const fromJSON = s.fromJSON.bind(s);
   const reset = s.reset.bind(s);
-  s.toJSON = () => ({ ...(toJSON() as object), home: s.home });
+  s.toJSON = () => ({ ...(toJSON() as object), home: s.home, woodworks: s.woodworks });
   s.fromJSON = (d: unknown) => {
     if (!fromJSON(d)) return false;
     const home = (d as { home?: unknown }).home;
     s.home = Array.isArray(home) ? home.filter((x): x is string => typeof x === 'string') : [];
+    s.woodworks = readWoodworks(d);
     return true;
   };
   s.reset = () => {
     s.home = []; // first: Tidewater's reset saves and emits
+    s.woodworks = freshWoodworks();
     reset();
   };
   s.load();

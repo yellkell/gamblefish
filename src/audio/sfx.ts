@@ -220,6 +220,30 @@ export function winFanfare(size: number): void {
 }
 
 /**
+ * Glitter over a win: a quick run of high bell tones up a pentatonic scale, longer and higher
+ * for bigger wins (tier 1–3).
+ */
+export function winShimmer(tier: number): void {
+  const steps = [0, 2, 4, 7, 9];
+  const n = [0, 6, 10, 16][tier] ?? 6;
+  for (let i = 0; i < n; i++) {
+    const f = 1047 * Math.pow(2, (steps[i % 5] + 12 * Math.floor(i / 5)) / 12);
+    const at = 0.08 + i * 0.045;
+    tone({ freq: f, type: 'sine', dur: 0.4, gain: 0.045, delay: at });
+    tone({ freq: f * 2.01, type: 'sine', dur: 0.16, gain: 0.014, delay: at });
+  }
+}
+
+/** Pay chips set down one on another: a run of clay clacks, `gap` seconds apart. */
+export function chipRun(n: number, gap = 0.07, delay = 0): void {
+  for (let i = 0; i < Math.min(n, 24); i++) {
+    const at = delay + i * gap;
+    clank(2600 + Math.random() * 500, 0.035, 0.035, at);
+    clank(3300 + Math.random() * 400, 0.02, 0.03, at + 0.018);
+  }
+}
+
+/**
  * The roulette ball rolling round the track: bandpassed noise whose level and pitch follow the
  * ball's speed (a hollow rumble that drops as it slows). `set(0)` silences it.
  */
@@ -334,4 +358,42 @@ export function bigWinHit(): void {
   tone({ freq: 70, to: 38, type: 'sine', dur: 0.6, gain: 0.5 });
   [523, 659, 784, 1047].forEach((f) => tone({ freq: f, type: 'triangle', dur: 1.2, gain: 0.07 }));
   clank(1800, 0.1, 1.2);
+}
+
+/* ── the woodworks (woodworks/) ─────────────────────────────────────────── */
+
+/** An axe biting into a trunk: a deep knock, the crack of the fibres, a spray of chips. */
+export function chopThunk(k = 1): void {
+  tone({ freq: 140 + Math.random() * 30, to: 70, type: 'sine', dur: 0.14, gain: 0.34 * k });
+  tone({ freq: 320, to: 180, type: 'triangle', dur: 0.06, gain: 0.12 * k });
+  whooshNoise(0.08, 0.22 * k, 2600, 900);
+  clank(900 + Math.random() * 200, 0.05 * k, 0.07, 0.01);
+}
+
+/** The trunk giving way: a long groaning creak. */
+export function treeCreak(): void {
+  tone({ freq: 90, to: 140, type: 'sawtooth', dur: 0.9, gain: 0.05 });
+  tone({ freq: 133, to: 96, type: 'sawtooth', dur: 1.1, gain: 0.04, delay: 0.25 });
+  whooshNoise(0.8, 0.05, 700, 300, 0.1);
+}
+
+/** The tree coming down: a boom and a rush of leaves. */
+export function treeCrash(): void {
+  tone({ freq: 60, to: 32, type: 'sine', dur: 0.7, gain: 0.55 });
+  whooshNoise(0.9, 0.28, 1600, 400);
+  clank(420, 0.08, 0.3, 0.05);
+}
+
+/** A log landing on others (the backpack, a crate). */
+export function logThunk(): void {
+  tone({ freq: 180 + Math.random() * 60, to: 90, type: 'triangle', dur: 0.1, gain: 0.2 });
+  clank(700 + Math.random() * 200, 0.03, 0.06);
+}
+
+/** A plank laid on the walk and nailed: a clap and two taps of the hammer. */
+export function plankLay(): void {
+  tone({ freq: 210, to: 120, type: 'triangle', dur: 0.09, gain: 0.26 });
+  whooshNoise(0.05, 0.1, 2000, 800);
+  clank(1600, 0.05, 0.08, 0.14);
+  clank(1650, 0.05, 0.08, 0.26);
 }

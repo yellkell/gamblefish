@@ -1,4 +1,7 @@
-# VR Gamble Fish
+# Fish & Chips
+
+Fish by day, chips by night: the catch pays for the casino's chips. (The repo, the
+site and the services keep their old `gamblefish` names so links and saves still work.)
 
 A VR adaptation of **How to Fish**, set on **Tidewater's** island
 ([dgreenheck/tidewater](https://github.com/dgreenheck/tidewater), MIT), built on
@@ -48,6 +51,8 @@ JavaScript, though, and that does carry over:
   - `village.bin` — the village, pier and boardwalks as merged, vertex-coloured meshes.
     The pier's handrails are laid end to end. Tidewater overlaps each bay's rails
     over the posts, and the overlapping faces flickered.
+    The four outhouses are left out, and gateways for the woodworks' walks are cut in the
+    pier head's rails.
   - `world.json` — the layout and Tidewater's collision world.
 - The runtime (`src/world/`) rebuilds all of this in three.js for Quest:
   - LOD terrain chunks.
@@ -59,6 +64,16 @@ JavaScript, though, and that does carry over:
 
 Not carried over yet: vegetation (palms), the boat, the reef and the swimming fish,
 and the vendors.
+
+## Opening
+
+- **On the page:** ff2's publisher card (yellkell.com, PRESENTS) fades in and out, then the
+  splash: the FISH & CHIPS mark (`src/ui/logo.ts`: a chip for the ampersand) breathing in its
+  glow. The leaping fish over the chip is the game's own sailfish, photographed once its
+  model loads and faded in. The loader, a neon ENTER VR, and a thumbstick icon sit under it.
+- **In the headset:** the first session of a page load opens on ff2's boot intro
+  (`src/experience/bootIntro.ts`): the publisher card, then the same mark, then the curtain
+  drops. While it's up the controls wait and the first song decodes, starting as it drops.
 
 ## Fishing (How to Fish's loop, Tidewater's rules)
 
@@ -155,8 +170,47 @@ and the vendors.
   (`src/backpack/fieldGuide.ts`). It has a title page with your progress, two species to
   a page, and the tarpon and the trophy fish on a page each at the back. A species you
   haven't caught shows as a shadow with where and when to look. The first one you land
-  fills its entry in: its picture, names, habitat, how many you've caught and your best.
+  fills its entry in: its picture, names, habitat, how many you've caught and your best, and a
+  true DID YOU KNOW? fact. Opposite the title page is a chart of the bay drawn from the terrain
+  (`src/backpack/chart.ts`), showing depths, the drop-off, the reef, the pier, and numbered shops
+  with a key, plus a dot for where you're standing. The great white has the last page.
   Point at the corner arrows to turn the pages.
+- **Winning at the casinos** (`src/casino/celebrate.ts`): every win flashes light, sends
+  a ring across the table and throws confetti and glints, which settle on the felt. The
+  amount rises in gold, and both controllers buzz. All of it scales with the win.
+  - **Roulette:** the winning spots pulse gold. Each winning stack is paid chip by chip
+    beside it, then slides over to you. A straight-up hit gets a STRAIGHT UP! banner.
+  - **Blackjack:** the pay lands chip by chip beside your bet and the hand's label
+    throbs. A natural gets a BLACKJACK! banner and the biggest burst.
+  - **Slots:** the winning symbols glow and the amount rises when the count lands.
+    Three shells or hooks get a NICE WIN banner, on top of the BIG WIN and JACKPOT ones.
+- **The fish's skin** (`src/fishing/fishSkin.ts`): Tidewater's WGSL fish material, ported to
+  GLSL on three's standard material. It adds scales in colour and relief, each species'
+  markings, the lateral line and gill cover, see-through ray-striped fins, eyes with an iris
+  and cornea, and the silvery sheen. The bake keeps each vertex's anatomy data for it, and
+  seats the eye domes on the head so none stand off it.
+- **The great white** (`src/fishing/shark.ts`, `src/fishing/sharkShow.ts`): the last catch.
+  Once every other page of the field guide is filled, it takes baits in 6 m of water or more.
+  - Every few seconds it breaches and runs. A ring lights on the rod's foregrip: grab it with
+    your other hand and hold on until the run breaks. One-handed it strips line, and reeling
+    against a run snaps it.
+  - Three held runs beat it. It rolls up alongside you under a GREAT WHITE! banner, and you let
+    it go for a bounty.
+  - Its skin is its own pattern: denticles, scars, gill slits, snout pores and teeth.
+- **The woodworks** (`src/woodworks/`): build your own way out to the reef and deep water.
+  - **Timber yard:** an open stall on the beach west of the pier foot. It sells the AXE
+    ($120), a bundle of 10 logs ($40) and a cart of 50 ($180) for when you'd rather not chop.
+  - **Woodlot:** six almond trees behind the yard. Once you own the axe, walk up to them and
+    it's in your hand. Swing it into a trunk: four good blows and the tree creaks, falls away
+    from you, and its 4 logs fly into your backpack. A sapling grows back from the stump
+    about a minute later. The backpack tray shows your log count.
+  - **The walks:** two build crates stand on the pier head. Put wood in and a walk lays itself
+    out plank by plank through a gateway in the rail. The **reef walk** (48 logs) runs 60 m out
+    to a platform over the reef's edge. Finishing it unlocks the **deep walk** (44 logs), which
+    runs past the drop-off to a platform over 14 m of water. Each walk appears on the field guide's
+    chart, named, once it's finished. Wood, the axe and the walks are saved.
+- **ALWAYS DAY:** a switch under MUSIC in the backpack holds the island in the early
+  afternoon. The fish that only bite at night won't bite while it's on.
 - **Wallet:** `src/ui/wallet.ts` puts an odometer-style money counter on both
   wrists. Any change in the balance rings ff2's cash chime, pitched up for
   money in and down for money out.
@@ -186,8 +240,12 @@ The controls, arc, marker, sound and tuning are identical:
 - **Back flick** steps 0.5 m away from where you're looking, then tries 0.34 and
   0.2 m. It never throws an arc.
 - **Headset recentre** re-plants you where you stood.
-- **Look and sound:** galvanised-steel `#9aa4ac` Line2 ribbon and 0.42× octagon
-  puck, hazard `#e8352a` when refused, and ff2's `uiClick` on the same audio bus.
+- **Look and sound:** a Line2 ribbon and ff2's `uiClick` on the same audio bus. The
+  landing marker (`src/locomotion/marker.ts`) is the club's octagon at 0.42×, drawn in
+  light rather than as a grey puck. It has a glowing rim, a tinted fill, two chevrons
+  that ripple toward your facing, a ring that pings out from the rim, and a low curtain
+  of light on its outline. A good landing is sea-glass `#5ee8d8`; a refused one turns
+  hazard `#e8352a` with stripes. It pops in when you start aiming. It costs two draws.
 
 What had to be new is **where** you may land. The club was a list of flat
 rectangles; the island has terrain and a sea. `src/world/surfaces.ts` answers the
@@ -215,6 +273,7 @@ same questions as ff2's `TELEPORT_AREAS`, `floorYAt` and `crossesWall`:
 | `src/world/` | baked data reader, heightfield, surfaces (pure), terrain, ocean, sky, village |
 | `src/audio/` | ff2's synth SFX bus and cash chime; Tidewater's sampled fishing and shore sounds; the music |
 | `src/fishing/` | the rod, cast, bites, fight, landing, catch card, tension gauge |
+| `src/woodworks/` | the axe, woodlot and timber yard; the reef and deep walks and their build crates |
 | `src/ui/` | ff2's Rajdhani type kit and coin symbol, canvas panels, the wrist wallet |
 | `src/dev/harness.ts` | dev-only emulator driver |
 | `tools/bake-world.mjs` | Tidewater → `public/world/` |

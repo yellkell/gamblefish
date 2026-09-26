@@ -50,6 +50,36 @@ const NIGHT_PACE = 2.5;
 /** where a new session starts: the late afternoon the island was lit for before */
 const START_HOUR = 16.5;
 
+/** the hour the island holds at when it's kept in daylight (the backpack's ALWAYS DAY switch) */
+const DAY_HOLD = 14;
+const DAY_KEY = 'gamblefish.day.always';
+
+/**
+ * The backpack's ALWAYS DAY switch: while it's on the clock runs forward (a quick sunrise if it's
+ * night) to the early afternoon and holds there. Off, the day goes on from wherever it is. Kept
+ * between visits.
+ */
+export const dayView = {
+  always: readAlways(),
+  toggle(): boolean {
+    this.always = !this.always;
+    try {
+      localStorage.setItem(DAY_KEY, this.always ? '1' : '0');
+    } catch {
+      /* private mode: it just won't be remembered */
+    }
+    return this.always;
+  },
+};
+
+function readAlways(): boolean {
+  try {
+    return typeof localStorage !== 'undefined' && localStorage.getItem(DAY_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
 /** sunrise, sunset (h) and how high the sun climbs; the moon's arc is the same, half a day on */
 const SUNRISE = 6;
 const SUNSET = 18.5;
@@ -247,8 +277,15 @@ export function createSky(scene: Scene): Sky {
     state,
     dome,
     update(dt: number): void {
-      const pace = 1 + (NIGHT_PACE - 1) * state.night.value;
-      state.hour = (state.hour + (dt * pace * 24) / (DAY_MINUTES * 60)) % 24;
+      if (dayView.always) {
+        // run the clock forward to the afternoon (a sunrise in a few seconds), then hold it there
+        const ahead = (((DAY_HOLD - state.hour) % 24) + 24) % 24;
+        if (ahead > 0.01 && ahead < 23.99) state.hour = (state.hour + Math.min(ahead, dt * 3.5)) % 24;
+        else state.hour = DAY_HOLD;
+      } else {
+        const pace = 1 + (NIGHT_PACE - 1) * state.night.value;
+        state.hour = (state.hour + (dt * pace * 24) / (DAY_MINUTES * 60)) % 24;
+      }
       apply();
     },
     setHour(h: number): void {

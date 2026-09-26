@@ -14,6 +14,7 @@ import type { LastCatch } from './tidewater.ts';
 import { FISH } from './tidewater.ts';
 import { TIMED } from './timedFish.ts';
 import { TROPHY } from './trophyFish.ts';
+import { SHARK_ID } from './shark.ts';
 
 export interface GaugeState {
   label: string;
@@ -82,7 +83,9 @@ export class RodGauge {
 
 /** A message that settles in front of you, lazily following your gaze, then fades. */
 export class Toast {
-  readonly panel = new Panel([512, 112], [0.5, 0.109], { depthTest: false });
+  // twice the old canvas, same size in the world: a short message is one line, a long one wraps
+  // onto two or three lines instead of being squeezed into one
+  readonly panel = new Panel([1024, 320], [0.62, 0.194], { depthTest: false });
   private t = 0;
   private dur = 0;
   private readonly pos = new Vector3();
@@ -92,15 +95,24 @@ export class Toast {
   show(text: string, seconds = 2, colour: string = INK.hot): void {
     const c = this.panel.ctx;
     this.panel.clear();
-    c.font = font(700, 56);
-    const tw = Math.min(496, c.measureText(text).width + 48);
-    roundRect(c, (512 - tw) / 2, 8, tw, 96, 20);
+    const maxW = 940;
+    let size = 92;
+    let lines: string[] = [];
+    for (; size >= 48; size -= 4) {
+      c.font = font(700, size);
+      lines = wrapLines(c, text, maxW);
+      if (lines.length <= (size > 72 ? 1 : size > 58 ? 2 : 3)) break;
+    }
+    const lh = size * 1.08;
+    const tw = Math.min(1000, Math.max(...lines.map((l) => c.measureText(l).width)) + 72);
+    const th = lines.length * lh + 44;
+    roundRect(c, (1024 - tw) / 2, (320 - th) / 2, tw, th, 36);
     c.fillStyle = INK.glass;
     c.fill();
     c.fillStyle = colour;
     c.textAlign = 'center';
     c.textBaseline = 'middle';
-    c.fillText(text, 256, 58, 480);
+    lines.forEach((l, i) => c.fillText(l, 512, 160 + (i - (lines.length - 1) / 2) * lh, maxW));
     this.panel.commit();
     this.t = 0;
     this.dur = seconds;
@@ -145,16 +157,17 @@ export class CatchCard {
     c.fill();
     c.lineWidth = 4;
     const trophy = TROPHY[info.species];
-    c.strokeStyle = trophy ? '#ffd45a' : info.record || info.newSpecies ? INK.amber : INK.rim;
-    c.lineWidth = trophy ? 7 : 4;
+    const shark = info.species === SHARK_ID;
+    c.strokeStyle = trophy || shark ? '#ffd45a' : info.record || info.newSpecies ? INK.amber : INK.rim;
+    c.lineWidth = trophy || shark ? 7 : 4;
     c.stroke();
     c.textBaseline = 'alphabetic';
     c.textAlign = 'left';
     let y = 62;
-    if (info.newSpecies || info.record || trophy) {
+    if (info.newSpecies || info.record || trophy || shark) {
       c.font = font(700, 28);
       c.fillStyle = INK.amber;
-      c.fillText([trophy ? '★ TROPHY FISH' : '', info.newSpecies ? 'NEW SPECIES' : info.record ? 'NEW RECORD' : ''].filter(Boolean).join('  ·  '), 28, 46);
+      c.fillText([trophy ? '★ TROPHY FISH' : shark ? '★ THE LAST CATCH' : '', info.newSpecies ? 'NEW SPECIES' : info.record ? 'NEW RECORD' : ''].filter(Boolean).join('  ·  '), 28, 46);
       y = 92;
     }
     c.font = font(700, 50);
@@ -163,28 +176,55 @@ export class CatchCard {
     c.font = font(500, 24);
     c.fillStyle = INK.dim;
     // a fish that keeps its own hours says which, a trophy what it took
-    const when = TIMED[info.species]?.when ?? trophy?.when;
-    c.fillText(when ? `${f.sci}  ·  ${when}` : f.sci, 28, y + 32, 456);
-    c.font = font(700, 44);
+    const when = TIMED[info.species]?.when ?? trophy?.when ?? (shark ? 'held through every run' : undefined);
+    const both = when ? `${f.sci}  ·  ${when}` : f.sci;
+    c.font = font(500, 22);
+    if (!when || c.measureText(both).width <= 456) fitLine(c, both, 28, y + 32, 456, 500, 24, 20);
+    else {
+      // the name on one line, what it took on the next
+      fitLine(c, f.sci, 28, y + 30, 456, 500, 22, 18);
+      fitLine(c, when, 28, y + 56, 456, 500, 20, 16);
+    }
+    // the numbers: length, weight and value on one line, the type shrinking until they fit
+    const cm = `${info.cm} cm`;
+    const kg = `${info.kg.toFixed(info.kg >= 100 ? 0 : 2)} kg`;
+    const value = `$${info.value.toLocaleString('en-US')}`;
+    let size = 44;
+    const gap = 26;
+    const width = (): number => {
+      c.font = font(700, size);
+      return c.measureText(cm).width + c.measureText(kg).width + c.measureText(value).width + gap * 2;
+    };
+    while (size > 26 && width() > 456) size -= 2;
+    c.font = font(700, size);
     c.fillStyle = INK.hot;
-    c.fillText(`${info.cm} cm`, 28, y + 100);
-    c.fillText(`${info.kg.toFixed(2)} kg`, 196, y + 100);
+    c.textAlign = 'left';
+    c.fillText(cm, 28, y + 106);
+    c.fillText(kg, 28 + c.measureText(cm).width + gap, y + 106);
     c.fillStyle = INK.amber;
     c.textAlign = 'right';
-    c.fillText(`$${info.value}`, 484, y + 100);
-    c.textAlign = 'left';
+    c.fillText(value, 484, y + 106);
+
+    // the last line: where it went, and what it means for the book; two lines if one won't hold both
+    const left = shark ? 'released: the bounty is yours' : 'into your backpack…';
+    const leftColour = shark ? INK.amber : info.kept ? INK.dim : INK.danger;
+    let right = '';
+    let rightColour: string = INK.amber;
+    if (shark) right = info.newSpecies ? 'field guide complete' : '';
+    else if (info.newSpecies) right = 'new page in your field guide';
+    else if (info.record && info.prevBestKg > 0) {
+      right = `best was ${info.prevBestKg.toFixed(2)} kg`;
+      rightColour = INK.dim;
+    }
     c.font = font(600, 24);
-    c.fillStyle = info.kept ? INK.dim : INK.danger;
-    c.fillText('into your backpack…', 28, y + 146);
-    if (info.newSpecies) {
-      // its page in the backpack's field guide has just filled in
+    c.textAlign = 'left';
+    c.fillStyle = leftColour;
+    c.fillText(left, 28, y + 148, 456);
+    if (right) {
+      const fits = c.measureText(left).width + c.measureText(right).width + 24 <= 456;
       c.textAlign = 'right';
-      c.fillStyle = INK.amber;
-      c.fillText('new page in your field guide', 484, y + 146);
-    } else if (info.record && info.prevBestKg > 0) {
-      c.textAlign = 'right';
-      c.fillStyle = INK.dim;
-      c.fillText(`best was ${info.prevBestKg.toFixed(2)} kg`, 484, y + 146);
+      c.fillStyle = rightColour;
+      c.fillText(right, 484, fits ? y + 148 : y + 176, 456);
     }
     this.panel.commit();
     this.group.visible = true;
@@ -193,4 +233,29 @@ export class CatchCard {
   hide(): void {
     this.group.visible = false;
   }
+}
+
+/** Break `text` into lines no wider than `maxW` in the current font. */
+function wrapLines(c: CanvasRenderingContext2D, text: string, maxW: number): string[] {
+  const out: string[] = [];
+  let line = '';
+  for (const w of text.split(' ').filter(Boolean)) {
+    const next = line ? `${line} ${w}` : w;
+    if (c.measureText(next).width > maxW && line) {
+      out.push(line);
+      line = w;
+    } else line = next;
+  }
+  if (line) out.push(line);
+  return out;
+}
+
+/** One line: the type steps down to `min` px to fit, then it ends in an ellipsis rather than squeezing. */
+function fitLine(c: CanvasRenderingContext2D, text: string, x: number, y: number, maxW: number, weight: 500 | 600 | 700, size: number, min: number): void {
+  let s = size;
+  c.font = font(weight, s);
+  while (s > min && c.measureText(text).width > maxW) c.font = font(weight, (s -= 1));
+  let t = text;
+  while (t.length > 1 && c.measureText(t).width > maxW) t = t.slice(0, -2) + '…';
+  c.fillText(t, x, y);
 }

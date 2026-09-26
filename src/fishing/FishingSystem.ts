@@ -20,6 +20,11 @@
  *                   with its card beside it; it goes in the cooler (trigger or B/Y, or wait).
  *  REEL IN          With nothing biting, reel (trigger or crank) to skim the bobber back. Let go
  *                   and it sits where it is and fish can find it again.
+ *  THE GREAT WHITE  The last catch (fishing/shark.ts): once the field guide is full it takes a
+ *                   bait in deep water. It breaches as each run begins; grab the rod's foregrip
+ *                   with your OTHER hand too and hold on (fishing/sharkShow.ts shows where) until
+ *                   the run breaks. Three held runs beat it; it rolls up alongside, and you let
+ *                   it go for the bounty.
  *
  * Teleporting with the line out brings it in.
  */
@@ -30,7 +35,9 @@ import { Line2 } from 'three/examples/jsm/lines/Line2.js';
 import { LineGeometry } from 'three/examples/jsm/lines/LineGeometry.js';
 import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
 import { Bed, loadSamples, MIX, setListener, shot, surfaceThrash, waterEntrySmall, waterExitFish, waterExitSmall } from '../audio/samples.ts';
-import { catchSting } from '../audio/sfx.ts';
+import { bigWinHit, catchSting, winFanfare } from '../audio/sfx.ts';
+import { Celebration } from '../casino/celebrate.ts';
+import { payOut } from '../casino/money.ts';
 import type { WaterFx } from '../fx/water.ts';
 import { backpackView } from '../backpack/BackpackSystem.ts';
 import { pointerView } from '../ui/pointer.ts';
@@ -46,16 +53,21 @@ import type { Surfaces } from '../world/surfaces.ts';
 import { CatchCard, RodGauge, Toast } from './hud.ts';
 import type { FishUniforms, Props } from './props.ts';
 import { LINE_PER_CRANK, Rod } from './rod.ts';
+import { SHARK_ID, SharkFight, sharkUnlocked, RUNS } from './shark.ts';
+import { GRIP_Y, SharkShow } from './sharkShow.ts';
 import {
   biteDelay,
   CatchMinigame,
   FISH,
+  FISH_IDS,
+  fishLengthCm,
   habitatAt,
   pickSpecies,
   rollWeight,
   type GameState,
   type Habitat,
 } from './tidewater.ts';
+import { introActive } from '../experience/introGate.ts';
 
 type Hand = 'left' | 'right';
 type RodState = 'stowed' | 'idle' | 'windup' | 'flying' | 'floating' | 'retrieving' | 'fighting' | 'landing';
@@ -172,6 +184,13 @@ export class FishingSystem extends createSystem({}) {
   private autoEquipped = false;
   private readonly lastRig = new Vector3();
 
+  private shark!: SharkShow;
+  private party!: Celebration;
+  /** the other hand on the foregrip, against a shark's run */
+  private holding = false;
+  private sharkLanding = false;
+  private holdBuzzT = 0;
+
   private gauge!: RodGauge;
   private toast!: Toast;
   private card!: CatchCard;
@@ -202,6 +221,10 @@ export class FishingSystem extends createSystem({}) {
     this.scene.add(this.toast.panel.mesh);
     this.card = new CatchCard();
     this.scene.add(this.card.group);
+    const sea = (x: number, z: number): number => fishingDeps.ocean!.heightAt(x, z);
+    this.shark = new SharkShow(this.scene, props, sea, () => fishingDeps.fx);
+    this.rod.mesh.add(this.shark.ring);
+    this.party = new Celebration(this.scene, sea, () => this.renderer.xr.getSession());
 
     fishingView.state = () => this.state;
     fishingView.bite = () => this.bite;
@@ -245,7 +268,7 @@ export class FishingSystem extends createSystem({}) {
   update(delta: number, time: number): void {
     const dt = Math.min(delta, 0.05);
     const deps = fishingDeps;
-    if (!deps.state || !deps.ocean) return;
+    if (!deps.state || !deps.ocean || introActive()) return;
     this.t += dt;
     void loadSamples();
 
@@ -294,6 +317,7 @@ export class FishingSystem extends createSystem({}) {
     if (up) this.triggerHeld = false;
 
     this.updateCrankHand(dt);
+    this.updateHold();
     const reelIn = Math.max(held > FISHING.triggerOff ? held : 0, Math.min(1.3, this.handCrankRate / FISHING.crankFull));
 
     switch (this.state) {
@@ -331,7 +355,8 @@ export class FishingSystem extends createSystem({}) {
         // take it off the hook: grip it with your free hand (or the rod's trigger / the card timing out)
         const free = this.other(this.hand);
         const grabbed = this.squeeze(free) > 0.6 && this.landing && this.grip(free).getWorldPosition(_h).distanceTo(this.landing.mesh.position) < 0.45;
-        if (grabbed || (this.t > 1 && down) || this.t > FISHING.cardSeconds) this.endLanding(free);
+        const lasts = this.sharkLanding ? FISHING.cardSeconds + 5 : FISHING.cardSeconds;
+        if (grabbed || (this.t > (this.sharkLanding ? 3 : 1) && down) || this.t > lasts) this.endLanding(free);
         break;
       }
     }
@@ -339,6 +364,7 @@ export class FishingSystem extends createSystem({}) {
 
     this.updateRod(dt, time);
     this.updateBobber(dt, reelIn);
+    this.updateShark(dt, time);
     this.updateLanding(dt, time);
     this.updateLine();
     this.updateSound(dt);
@@ -481,7 +507,7 @@ export class FishingSystem extends createSystem({}) {
     if (b.t > 0) return;
     if (b.phase === 'wait') {
       // the rig: what the trophy fish look at (fishing/trophyFish.ts)
-      const species = pickSpecies(this.habitat(), hourNow(), Math.random, { depth: this.depth(), gear: fishingDeps.state!.upgrades });
+      const species = pickSpecies(this.habitat(), hourNow(), Math.random, { depth: this.depth(), gear: fishingDeps.state!.upgrades, log: fishingDeps.state!.log });
       if (!species) {
         b.t = 8;
         return;
@@ -518,12 +544,21 @@ export class FishingSystem extends createSystem({}) {
   private strike(): void {
     const b = this.bite!;
     const g = fishingDeps.state!.stats;
-    this.fight = new CatchMinigame({ species: b.species!, kg: b.kg!, lineKg: g.lineKg, reelSpeed: g.reelSpeed, distance: Math.max(3, this.lineOut) });
+    const shark = b.species === SHARK_ID;
+    this.fight = shark
+      ? Object.assign(new SharkFight(b.kg!, Math.max(3, this.lineOut)), { reelSpeed: g.reelSpeed })
+      : new CatchMinigame({ species: b.species!, kg: b.kg!, lineKg: g.lineKg, reelSpeed: g.reelSpeed, distance: Math.max(3, this.lineOut) });
     this.bite = null;
     this.fishPos.copy(this.bob);
     this.lastDist = this.fight.distance;
     this.setState('fighting');
-    this.toast.show('Fish on!', 1.2, INK.amber);
+    if (shark) {
+      this.shark.len = fishLengthCm(SHARK_ID, b.kg!) / 100;
+      this.shark.hook(this.bob, this.rod.tip);
+      this.toast.show('Something HUGE has it…', 2.6, INK.danger);
+      this.buzz(this.hand, 1, 400);
+      this.buzz(this.other(this.hand), 0.6, 300);
+    } else this.toast.show('Fish on!', 1.2, INK.amber);
     this.buzz(this.hand, 1, 220);
   }
 
@@ -534,7 +569,9 @@ export class FishingSystem extends createSystem({}) {
     const base = fishingDeps.state!.stats.reelSpeed;
     const reeling = reelIn > 0.15;
     f.reelSpeed = base * Math.min(1.25, Math.max(0.4, 0.4 + 0.8 * reelIn));
-    const st = f.update(dt, reeling);
+    const shark = f instanceof SharkFight ? f : null;
+    const st = shark ? shark.update(dt, reeling, this.holding) : f.update(dt, reeling);
+    if (shark) this.sharkBeats(shark, dt);
 
     // line speed → the crank (unless your hand is on it) and the drag slipping
     const dOut = f.distance - this.lastDist;
@@ -545,8 +582,8 @@ export class FishingSystem extends createSystem({}) {
     this.rod.crankRate += (Math.max(rateT, this.cranking ? this.handCrankRate : 0) - this.rod.crankRate) * (1 - Math.exp(-dt * 10));
     this.dragSpeed = dOut > 0 ? dOut / dt : 0;
 
-    // the fish thrashes at the surface as each run starts
-    if (f.surge > 0.6 && !this.splashed) {
+    // the fish thrashes at the surface as each run starts (the shark breaches instead)
+    if (!shark && f.surge > 0.6 && !this.splashed) {
       const strength = Math.min(1, 0.3 + f.kg / 8);
       surfaceThrash(this.bob, strength);
       fishingDeps.fx?.splash(this.bob, 0.35 + strength * 0.6);
@@ -556,7 +593,7 @@ export class FishingSystem extends createSystem({}) {
 
     // the pull, in your hand
     this.hapticT -= dt;
-    if (this.hapticT <= 0) {
+    if (!shark && this.hapticT <= 0) {
       this.hapticT = 0.1;
       const k = f.tension > 1 ? 1 : 0.06 + 0.55 * Math.min(1, f.tension) + 0.2 * f.surge;
       this.buzz(this.hand, k, 110);
@@ -567,8 +604,20 @@ export class FishingSystem extends createSystem({}) {
     this.dip = 0;
     this.dragSpeed = 0;
     const name = FISH[f.species].name;
+    if (shark) {
+      if (st === 'caught') this.landShark(f.kg);
+      else {
+        this.shark.stop();
+        this.toast.show(st === 'snapped' ? 'SNAP! Never reel against its run' : 'It took all your line, and was gone', 3, INK.danger);
+        if (st === 'snapped') shot('line_snap', MIX.lineSnap, { rate: 0.9 });
+        this.buzz(this.hand, 1, 120);
+        this.reelInNow();
+      }
+      return;
+    }
     if (st === 'caught') {
       const state = fishingDeps.state!;
+      const wasUnlocked = sharkUnlocked(state.log, FISH_IDS);
       this.caughtId = state.addFish(f.species, f.kg, hourNow())?.id ?? null;
       waterExitFish(this.bob, f.kg);
       fishingDeps.fx?.splash(this.bob, 0.7 + Math.min(1, f.kg / 8) * 0.6);
@@ -577,6 +626,9 @@ export class FishingSystem extends createSystem({}) {
       const info = state.lastCatch;
       window.setTimeout(() => catchSting(!!info && (info.newSpecies || info.record)), 450);
       this.startLanding(f.species, f.kg);
+      // that was the last page but one: the great white is out there now
+      if (!wasUnlocked && sharkUnlocked(state.log, FISH_IDS))
+        window.setTimeout(() => this.toast.show('The book is full… but something huge is circling in the deep past the drop-off', 6, INK.danger), 3500);
     } else if (st === 'snapped') {
       this.toast.show('Snap! The line broke', 2.4, INK.danger);
       shot('line_snap', MIX.lineSnap, { rate: 0.95 + Math.random() * 0.1 });
@@ -627,6 +679,117 @@ export class FishingSystem extends createSystem({}) {
     }
     this.handCrankRate += (rate - this.handCrankRate) * (1 - Math.exp(-dt * 8));
     if (!this.cranking) this.handCrankRate *= Math.exp(-dt * 10);
+  }
+
+  /* ── the great white ─────────────────────────────────────────────────── */
+
+  /**
+   * Your other hand on the rod's foregrip (just above your rod hand), gripping: that's what holds
+   * a shark's run. It only counts while the run wants it, and it takes the hand off the crank.
+   */
+  private updateHold(): void {
+    const f = this.fight;
+    const want = this.state === 'fighting' && f instanceof SharkFight && (f.phase === 'warn' || f.phase === 'run');
+    if (!want) {
+      this.holding = false;
+      return;
+    }
+    const off = this.other(this.hand);
+    const hand = this.grip(off).getWorldPosition(_h);
+    const grip = _v.set(0, GRIP_Y, 0).applyMatrix4(this.rod.mesh.matrix);
+    const d = grip.distanceTo(hand);
+    const was = this.holding;
+    this.holding = this.squeeze(off) > 0.5 && d < (was ? 0.2 : 0.14) && d < this.rod.crankCentre(_w).distanceTo(hand) + 0.05;
+    if (this.holding) {
+      this.cranking = false;
+      this.handCrankRate = 0;
+      if (!was) this.buzz(off, 0.8, 60);
+    }
+  }
+
+  /** The shark's moments: the turn, the breach, a run held or lost, beaten. And the haptics. */
+  private sharkBeats(f: SharkFight, dt: number): void {
+    const off = this.other(this.hand);
+    for (const e of f.events.splice(0)) {
+      if (e === 'warn') {
+        this.toast.show('HE’S RUNNING! Grab the rod with your other hand and HOLD ON', 2.4, INK.danger);
+        this.buzz(off, 0.7, 120);
+      } else if (e === 'breach') {
+        this.shark.breach();
+        this.buzz(this.hand, 1, 300);
+        this.buzz(off, 1, 300);
+      } else if (e === 'broken') {
+        const left = RUNS - f.broken;
+        this.toast.show(`Run broken! ${left} more ${left === 1 ? 'run' : 'runs'} and he’s yours — reel!`, 2.6, INK.good);
+        catchSting(false);
+      } else if (e === 'lost') {
+        this.toast.show('It’s stripping line. Both hands on the rod when it runs!', 2.6, INK.amber);
+      } else if (e === 'beaten') {
+        this.toast.show('He’s beaten! Reel him in!', 2.6, INK.good);
+        catchSting(true);
+      }
+    }
+    // the fight in both hands: the run through the rod, the grip in the other
+    this.holdBuzzT -= dt;
+    if (this.holdBuzzT > 0) return;
+    this.holdBuzzT = 0.1;
+    if (f.phase === 'run') {
+      this.buzz(this.hand, 1, 110);
+      if (this.holding) this.buzz(off, 0.85, 110);
+    } else if (f.phase === 'warn') {
+      this.buzz(this.hand, 0.7, 90);
+      // a tap in the free hand: here, now
+      if (Math.floor(f.t * 5) % 2 === 0) this.buzz(off, 0.45, 50);
+    } else {
+      this.buzz(this.hand, 0.1 + 0.5 * Math.min(1, f.tension), 100);
+    }
+  }
+
+  /** Beaten and alongside: into the log, a bounty, the party; then you let it go. */
+  private landShark(kg: number): void {
+    const state = fishingDeps.state!;
+    const entry = state.addFish(SHARK_ID, kg, hourNow());
+    // it's too big for any backpack: it goes back, and the bounty is paid for it
+    if (entry) state.release(entry.id);
+    const info = state.lastCatch;
+    const bounty = info?.value ?? 0;
+    this.sharkLanding = true;
+    this.setState('landing');
+    this.bobVel.set(0, 0, 0);
+    this.camera.getWorldPosition(_w);
+    const toward = _x.copy(_w).sub(this.bob).setY(0).normalize();
+    // it rolls up four and a half metres out along the line, side on to you (clear of the piles)
+    const at = _w.clone().addScaledVector(toward, -4.5);
+    at.y = this.bob.y;
+    this.shark.alongside(at, toward);
+    if (info) this.card.show(info);
+    this.buzz(this.hand, 1, 400);
+    this.buzz(this.other(this.hand), 1, 400);
+    catchSting(true);
+    bigWinHit();
+    window.setTimeout(() => winFanfare(40), 350);
+    this.party.win({ at: at.clone().add(new Vector3(0, 1.2, 0)), tier: 3, amount: bounty, banner: 'GREAT WHITE!', bannerAt: at.clone().add(new Vector3(0, 2.9, 0)), quiet: true, scale: 3 });
+    window.setTimeout(() => payOut(state, bounty), 900);
+    this.toast.show('Landed! The great white — the last fish in the book', 4, INK.amber);
+  }
+
+  private updateShark(dt: number, time: number): void {
+    const f = this.fight;
+    this.party.update(dt, this.camera);
+    if (this.shark.active) this.shark.update(dt, time, this.bob, this.rod.tip);
+    const show = this.state === 'fighting' && f instanceof SharkFight && (f.phase === 'warn' || f.phase === 'run');
+    this.shark.updateRing(show, this.holding, f instanceof SharkFight ? f.holdProgress : 0, time);
+    if (this.sharkLanding) {
+      // the line to its jaw; the card up in front of you, off to the side of it
+      const m = this.shark.mesh;
+      this.bob.set(0, 0, 0.47).applyMatrix4(m.matrixWorld);
+      this.camera.getWorldPosition(_w);
+      this.camera.getWorldDirection(_v).setY(0).normalize();
+      _x.set(-_v.z, 0, _v.x);
+      this.card.group.position.copy(_w).addScaledVector(_v, 0.75).addScaledVector(_x, 0.28);
+      this.card.group.position.y -= 0.22;
+      this.card.group.lookAt(_w);
+    }
   }
 
   /* ── landing ─────────────────────────────────────────────────────────── */
@@ -688,6 +851,15 @@ export class FishingSystem extends createSystem({}) {
   }
 
   private endLanding(into: Hand | null = null): void {
+    if (this.sharkLanding) {
+      // let it go
+      this.sharkLanding = false;
+      this.shark.release();
+      this.card.hide();
+      this.toast.show('Back it goes. The island is yours.', 3, INK.amber);
+      if (this.state === 'landing') this.reelInNow();
+      return;
+    }
     const L = this.landing;
     if (L) {
       this.scene.remove(L.mesh);
@@ -721,6 +893,8 @@ export class FishingSystem extends createSystem({}) {
         if (f) {
           bendT = 0.06 + 0.3 * Math.min(f.tension, 1.1) + 0.05 * f.surge;
           loadT = Math.min(1, f.tension * 1.1);
+          // a shark's run bows it into the cork
+          if (f instanceof SharkFight && f.phase === 'run') ((bendT += 0.14), (loadT = 1));
         }
         towards = this.bob;
         break;
@@ -954,7 +1128,13 @@ export class FishingSystem extends createSystem({}) {
         label = 'REELING IN';
         break;
       case 'fighting':
-        if (f && f.tension > f.band[1]) {
+        if (f instanceof SharkFight && (f.phase === 'warn' || f.phase === 'run')) {
+          label = this.holding ? `HOLD ON!  ${Math.round(f.holdProgress * 100)}%` : 'GRAB THE ROD!';
+          colour = this.holding ? INK.good : INK.danger;
+        } else if (f instanceof SharkFight && f.phase === 'beaten') {
+          label = 'REEL IT IN!';
+          colour = INK.good;
+        } else if (f && f.tension > f.band[1]) {
           label = 'EASE OFF!';
           colour = INK.danger;
         } else {

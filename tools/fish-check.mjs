@@ -4,7 +4,9 @@
  * strips the types) over a day: each timed fish (fishing/timedFish.ts) bites only in its window,
  * and does bite in it, at a spot it lives in; Tidewater's own fish keep biting round the clock.
  * Each trophy fish (fishing/trophyFish.ts) never bites without every piece of gear it needs and
- * its depth of water, does bite with them, and bites more with a luck charm.
+ * its depth of water, does bite with them, and bites more with a luck charm. The great white
+ * (fishing/shark.ts) waits for a full field guide and deep water, and is only beaten by holding
+ * its runs two-handed.
  *
  *   node tools/fish-check.mjs
  */
@@ -12,6 +14,7 @@
 import { FISH, FISH_IDS, UPGRADES, fishValue, fishLengthCm, pickSpecies } from '../src/fishing/tidewater.ts';
 import { TIMED, biting } from '../src/fishing/timedFish.ts';
 import { TROPHY } from '../src/fishing/trophyFish.ts';
+import { SHARK_DEPTH, SHARK_ID, SharkFight, RUNS } from '../src/fishing/shark.ts';
 
 const results = [];
 const check = (name, ok, detail) => {
@@ -24,7 +27,7 @@ const hm = (h) => `${Math.floor(h)}:${String(Math.round((h % 1) * 60)).padStart(
 const spot = (habitat) => ({ shallows: 0, reef: 0, pier: 0, bay: 0, deep: 0, ...habitat });
 
 console.log('\nthe table');
-check('28 species: Tidewater\'s 18, 5 that keep their hours and 5 trophies', FISH_IDS.length === 28 && [...Object.keys(TIMED), ...Object.keys(TROPHY)].every((id) => FISH_IDS.includes(id)));
+check('29 species: Tidewater\'s 18, 5 that keep their hours, 5 trophies and the great white, last', FISH_IDS.length === 29 && [...Object.keys(TIMED), ...Object.keys(TROPHY)].every((id) => FISH_IDS.includes(id)) && FISH_IDS.at(-1) === SHARK_ID);
 for (const id of [...Object.keys(TIMED), ...Object.keys(TROPHY)]) {
   const f = FISH[id];
   const kg = (f.kg[0] + f.kg[1]) / 2;
@@ -84,6 +87,48 @@ console.log('\nthe trophy fish (2,000 bites at each spot)');
       check(`${FISH[id].name}: only at night`, off === 0, `${off} at noon`);
     }
   }
+}
+
+console.log('\nthe great white');
+{
+  const top = Object.fromEntries(Object.entries(UPGRADES).map(([k, t]) => [k, t.levels.length - 1]));
+  const deep = spot({ deep: 1 });
+  const all = Object.fromEntries(FISH_IDS.filter((id) => id !== SHARK_ID).map((id) => [id, { count: 1 }]));
+  const oneShort = { ...all };
+  delete oneShort.tarpon;
+  const count = (rig) => {
+    let n = 0;
+    for (let i = 0; i < 2000; i++) if (pickSpecies(deep, 12, rng, rig) === SHARK_ID) n++;
+    return n;
+  };
+  const locked = count({ depth: 12, gear: top, log: oneShort }) + count({ depth: 12, gear: top }) + count(undefined);
+  check('never before every other fish is in the book', locked === 0, `${locked} bites`);
+  const shallow = count({ depth: SHARK_DEPTH - 0.5, gear: top, log: all });
+  check(`never in less than ${SHARK_DEPTH} m of water`, shallow === 0, `${shallow} bites`);
+  const open = count({ depth: 12, gear: { rod: 0, reel: 0, line: 0, bait: 0, charm: 0 }, log: all });
+  check('with a full book, it takes a bait in deep water often, on any gear', open > 300, `${open} of 2,000`);
+  const f = FISH[SHARK_ID];
+  const cm = fishLengthCm(SHARK_ID, 700);
+  check('a 700 kg great white is about 4.2 m', cm > 390 && cm < 450, `${Math.round(cm)} cm`);
+
+  // the fight: 1/60 s steps, reeling between runs, the other hand on the rod (or not) in a run
+  const fight = (twoHands, reelInRuns) => {
+    const s = new SharkFight(700, 25, rng);
+    for (let i = 0; i < 60 * 240 && s.state === 'fighting'; i++) {
+      const run = s.phase === 'run';
+      s.update(1 / 60, run ? reelInRuns : s.tension < 0.8, run && twoHands);
+    }
+    return s;
+  };
+  const held = fight(true, false);
+  check(`held two-handed, ${RUNS} runs are broken and it's landed`, held.state === 'caught' && held.broken === RUNS, `${held.state}, ${held.broken} runs`);
+  const oneHand = fight(false, false);
+  check('one-handed, it never tires: it takes all the line', oneHand.state === 'escaped' && oneHand.broken === 0, `${oneHand.state}`);
+  const reeled = fight(false, true);
+  check('reeling against a run snaps the line', reeled.state === 'snapped', reeled.state);
+  const both = fight(true, true);
+  check('two hands on it, reeling through the run is safe', both.state === 'caught', both.state);
+  check(`its value is a bounty ($${fishValue(SHARK_ID, 700)})`, fishValue(SHARK_ID, 700) > 5000 && f.price > 0);
 }
 
 const failed = results.filter((r) => !r).length;

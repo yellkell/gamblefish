@@ -6,8 +6,10 @@
  *  PLAY   Cards slide off the shoe one by one, the dealer's second face down. Your total floats
  *         over your hand. HIT, STAND, DOUBLE, SPLIT; HINT tells you what basic strategy says.
  *  DEALER The hole card turns over and the dealer draws to 17, a card at a time.
- *  PAY    Losing chips are raked away, winners get paid alongside and slide over to you; the cash
- *         chime and the wrist counters. Then the cards are swept to the discard tray.
+ *  PAY    Losing chips are raked away. A winner's pay is stacked beside it chip by chip, then it
+ *         all slides over to you, with the cash chime and the wrist counters. The win goes up in
+ *         light, confetti and gold over your hand, bigger for a blackjack (casino/celebrate.ts).
+ *         Then the cards are swept to the discard tray.
  *
  * Rules (and the shuffle) are casino/blackjack.ts; the table only shows what the rules decide.
  */
@@ -34,7 +36,8 @@ import {
   Vector3,
   type Camera,
 } from 'three';
-import { cardFlip, cardSlide, chipClack, uiDeny, winFanfare } from '../audio/sfx.ts';
+import type { World } from '@iwsdk/core';
+import { cardFlip, cardSlide, chipClack, chipRun, uiDeny, winFanfare } from '../audio/sfx.ts';
 import type { GameState } from '../fishing/tidewater.ts';
 import { font } from '../ui/fonts.ts';
 import { INK, roundRect } from '../ui/panel.ts';
@@ -42,6 +45,8 @@ import { InteractivePanel, register } from '../ui/pointer.ts';
 import type { Interior } from '../village/interiors.ts';
 import { basic, isNatural, Round, Shoe, total, type Action, type Card, type Outcome } from './blackjack.ts';
 import { CardMesh } from './cards.ts';
+import { Celebration, type Tier } from './celebrate.ts';
+import { breakdown, CHIP_COLOUR } from './chips.ts';
 import { payOut, refund, stake } from './money.ts';
 
 const FELT_Y = 0.903;
@@ -49,7 +54,10 @@ const EDGE_Z = -0.35; // the straight (dealer's) edge; the table's arc swings to
 const SHOE = new Vector3(0.62, 0.99, -0.2);
 const DISCARD = new Vector3(-0.64, 0.95, -0.2);
 const GAP = 0.42; // seconds between cards
-const CHIP_COLOUR: Record<number, number> = { 1: 0xf2efe6, 5: 0xc23b2e, 10: 0x2f5ac2, 25: 0x2f8a4a, 100: 0x1a1a1e, 500: 0x7a3aa8 };
+const TABLE_R = 1.02;
+/** When a winning hand's pay starts landing (after settling), and when the stacks slide to you. */
+const PAY_AT = 0.3;
+const SLIDE_AT = 1.7;
 
 export interface BlackjackOptions {
   chips: number[];
@@ -76,6 +84,7 @@ export class BlackjackTable {
   private readonly shoe = new Shoe(6);
   private round: Round | null = null;
   private readonly live = new Map<Card, Live>();
+  private readonly party: Celebration;
 
   private phase: 'betting' | 'dealing' | 'player' | 'settled' = 'betting';
   private bet = 0;
@@ -90,18 +99,22 @@ export class BlackjackTable {
   constructor(
     private readonly room: Interior,
     private readonly state: GameState,
+    world: World,
     private readonly opts: BlackjackOptions,
   ) {
     const g = this.group;
     g.position.set(opts.at[0], 0, opts.at[1]);
     room.contents.add(g);
+    // confetti lands on the felt over the table's half-round, on the floor past it
+    const onTable = (x: number, z: number): number => (z >= EDGE_Z && x * x + (z - EDGE_Z) ** 2 < TABLE_R * TABLE_R ? FELT_Y + 0.002 : 0);
+    this.party = new Celebration(g, onTable, () => world.renderer.xr.getSession());
 
     // the table: a half-round slab on a pedestal, a padded rail round the curve
     const wood = new MeshLambertMaterial({ color: 0x5a3a22 });
     const slab = new Shape();
-    slab.moveTo(1.02, EDGE_Z);
-    slab.absarc(0, EDGE_Z, 1.02, 0, Math.PI, false);
-    slab.lineTo(1.02, EDGE_Z);
+    slab.moveTo(TABLE_R, EDGE_Z);
+    slab.absarc(0, EDGE_Z, TABLE_R, 0, Math.PI, false);
+    slab.lineTo(TABLE_R, EDGE_Z);
     const top = new Mesh(new ExtrudeGeometry(slab, { depth: 0.06, bevelEnabled: false }).rotateX(Math.PI / 2), wood);
     top.position.y = 0.9;
     const ped = new Mesh(new CylinderGeometry(0.14, 0.24, 0.84, 12), wood);
@@ -262,6 +275,7 @@ export class BlackjackTable {
     this.layoutCards(dt);
     this.layoutChips();
     this.updateLabels();
+    this.party.update(dt, camera);
   }
 
   private spawn(card: Card, faceDown: boolean, loud: boolean): void {
@@ -289,7 +303,28 @@ export class BlackjackTable {
     const words: Record<Outcome, string> = { blackjack: 'Blackjack!', win: 'You win', push: 'Push', lose: 'Dealer wins', bust: 'Bust' };
     const net = back - staked;
     this.status = this.results.map((s) => words[s.outcome]).join(' · ') + (net > 0 ? ` — +$${net}` : net < 0 ? ` — −$${-net}` : '');
-    if (net > 0) winFanfare(this.results.some((s) => s.outcome === 'blackjack') ? 8 : 2);
+    const blackjack = this.results.some((s) => s.outcome === 'blackjack');
+    if (net > 0) {
+      winFanfare(blackjack ? 8 : 2);
+      // the party goes up over the best hand; its pay lands chip by chip (layoutChips)
+      let best = 0;
+      this.results.forEach((s, k) => {
+        if (s.returned - r.hands[k].bet > this.results[best].returned - r.hands[best].bet) best = k;
+      });
+      const tier: Tier = blackjack ? 3 : net >= staked ? 2 : 1;
+      const x = this.handX(best);
+      this.party.win({
+        at: new Vector3(x, FELT_Y + 0.12, 0.42),
+        tier,
+        amount: net,
+        banner: blackjack ? 'BLACKJACK!' : undefined,
+        bannerAt: new Vector3(0, 1.36, -0.05),
+      });
+    }
+    this.results.forEach((s, k) => {
+      const pay = s.returned - r.hands[k].bet;
+      if (pay > 0) chipRun(breakdown(pay).length, this.payGap(pay), PAY_AT + k * 0.35);
+    });
     this.phase = 'settled';
     this.settleT = 0;
     this.paintBoard();
@@ -304,6 +339,16 @@ export class BlackjackTable {
   }
 
   /* ── layout ─────────────────────────────────────────────────────── */
+
+  private handX(k: number): number {
+    const n = this.round?.hands.length ?? 1;
+    return (k - (n - 1) / 2) * 0.36;
+  }
+
+  /** Seconds between pay chips landing: a quick run, however tall the stack. */
+  private payGap(amount: number): number {
+    return Math.min(0.08, 0.7 / Math.max(1, breakdown(amount).length));
+  }
 
   /** Where each card on the table should be, from the round's hands. */
   private targets(): Map<Card, Vector3> {
@@ -361,31 +406,44 @@ export class BlackjackTable {
     const m = new Matrix4();
     const c = new Color();
     let n = 0;
-    const put = (amount: number, x: number, z: number): void => {
+    // a stack of `amount`; with `dropAt`, its chips land one by one from then on, each falling
+    // onto the one before
+    const put = (amount: number, x: number, z: number, dropAt = -1, size = 1): void => {
       let y = FELT_Y + 0.003;
-      for (const v of breakdown(amount)) {
+      const gap = this.payGap(amount);
+      breakdown(amount).forEach((v, i) => {
         if (n >= 160) return;
-        m.makeTranslation(x + Math.sin(n * 2.3) * 0.002, y, z + Math.cos(n * 1.7) * 0.002);
+        let lift = 0;
+        if (dropAt >= 0) {
+          const t = this.settleT - dropAt - i * gap;
+          if (t < 0) return;
+          lift = Math.max(0, 0.09 * (1 - (t / 0.12) ** 2));
+        }
+        m.makeScale(size, size, size).setPosition(x + Math.sin(n * 2.3) * 0.002, y + lift, z + Math.cos(n * 1.7) * 0.002);
         this.chips.setMatrixAt(n, m);
         this.chips.setColorAt(n++, c.setHex(CHIP_COLOUR[v] ?? 0xffffff));
-        y += 0.0065;
-      }
+        y += 0.0065 * size;
+      });
     };
     const r = this.round;
     if (this.phase === 'betting') put(this.bet, 0, 0.5);
     else if (r) {
       const hands = r.hands.length;
-      const slide = this.phase === 'settled' ? Math.min(1, Math.max(0, (this.settleT - 1.2) / 0.6)) : 0;
+      const s = this.phase === 'settled' ? Math.min(1, Math.max(0, (this.settleT - SLIDE_AT) / 0.6)) : 0;
+      const slide = s * s * (3 - 2 * s);
       r.hands.forEach((h, k) => {
         const x = (k - (hands - 1) / 2) * 0.36;
         const res = this.results[k];
         const lost = res && res.returned === 0;
-        const dz = lost ? -0.9 * slide : 0.5 * slide;
+        // the rake takes losers back past the dealer; winners come to the rail in front of you
+        // and shrink away there (into your wallet)
+        const dz = lost ? -0.9 * slide : 0.1 * slide;
         if (slide >= 1) return;
+        const size = lost ? 1 : Math.max(0.001, 1 - Math.max(0, (s - 0.6) / 0.4));
         const base = h.doubled ? h.bet / 2 : h.bet;
-        put(base, x, 0.5 + dz);
-        if (h.doubled) put(base, x + 0.06, 0.5 + dz);
-        if (res && res.returned > h.bet) put(res.returned - h.bet, x - 0.06, 0.5 + dz);
+        put(base, x, 0.5 + dz, -1, size);
+        if (h.doubled) put(base, x + 0.06, 0.5 + dz, -1, size);
+        if (res && res.returned > h.bet) put(res.returned - h.bet, x - 0.06, 0.5 + dz, PAY_AT + k * 0.35, size);
       });
     }
     this.chips.count = n;
@@ -406,8 +464,10 @@ export class BlackjackTable {
       const text = res ? { blackjack: 'BLACKJACK', win: 'WIN', push: 'PUSH', lose: 'LOSE', bust: 'BUST' }[res.outcome] : t.total > 21 ? 'BUST' : !h.split && isNatural(cards) ? 'BLACKJACK' : `${t.soft && t.total < 21 ? 'soft ' : ''}${t.total}`;
       const colour = res ? (res.returned > h.bet ? INK.good : res.returned === h.bet ? INK.hot : INK.danger) : t.total > 21 ? INK.danger : r && r.active === k && this.phase === 'player' ? INK.amber : INK.hot;
       l.set(text, colour);
-      const x = (k - (r!.hands.length - 1) / 2) * 0.36;
-      l.sprite.position.set(x + 0.02, 1.02, 0.34);
+      l.sprite.position.set(this.handX(k) + 0.02, 1.02, 0.34);
+      // a winning hand's label throbs while it's paid
+      const throb = res && res.returned > h.bet && this.phase === 'settled' ? 1.12 + 0.08 * Math.sin(this.settleT * 9) : 1;
+      l.sprite.scale.set(0.24 * throb, 0.06 * throb, 1);
     });
     if (!r) return this.dealerLabel.set('');
     const up = this.revealed ? shownCards(r.dealer) : shownCards(r.dealer).slice(0, 1);
@@ -492,18 +552,6 @@ export class BlackjackTable {
     this.board.buttons = buttons;
     this.board.commit();
   }
-}
-
-/** An amount as chips, biggest first (bottom of the stack). */
-function breakdown(amount: number): number[] {
-  const out: number[] = [];
-  let left = Math.round(amount);
-  for (const v of [500, 100, 25, 10, 5, 1])
-    while (left >= v && out.length < 20) {
-      out.push(v);
-      left -= v;
-    }
-  return out;
 }
 
 /** A little floating readout (a hand's total, the dealer's). */

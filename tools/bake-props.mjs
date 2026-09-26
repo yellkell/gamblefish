@@ -30,7 +30,7 @@ const url = (p) => 'file:///' + resolve(TW, p).replace(/\\/g, '/');
 if (process.argv.includes('--if-missing') && existsSync(resolve(OUT, 'props.bin'))) process.exit(0);
 
 const { SPECIES, SKIN } = await import(url('world/fish/FishSpecies.js'));
-const { fishGeometry, PART } = await import(url('world/fish/FishGeometry.js'));
+const { fishGeometry, PART, section, surfaceX } = await import(url('world/fish/FishGeometry.js'));
 const { FISH, FISH_IDS } = await import(url('game/FishTable.js'));
 // the fish that keep their own hours (src/fishing/timedFish.ts): into the table, with bodies
 const { registerTimedFish, registerTimedModels } = await import('../src/fishing/timedFish.ts');
@@ -40,6 +40,11 @@ registerTimedModels(SPECIES, SKIN);
 const { registerTrophyFish, registerTrophyModels } = await import('../src/fishing/trophyFish.ts');
 registerTrophyFish(FISH, FISH_IDS);
 registerTrophyModels(SPECIES, SKIN);
+// and the great white (src/fishing/shark.ts)
+const { registerSharkFish, registerSharkModel, SHARK_ID } = await import('../src/fishing/shark.ts');
+const { sharkGeometry } = await import('../src/fishing/sharkGeometry.ts');
+registerSharkFish(FISH, FISH_IDS);
+registerSharkModel(SPECIES, SKIN);
 
 // the rod module, with its builders exported
 const rodSrc = readFileSync(resolve(TW, 'game/FishingRod.js'), 'utf8');
@@ -100,20 +105,63 @@ const smooth = (e0, e1, x) => {
   return t * t * (3 - 2 * t);
 };
 
+/**
+ * Keep each eye inside the head. On several of Tidewater's anatomies the eye reaches right up
+ * to the dorsal outline (the red snapper, the glasseye, the tuna, the tarpon, the billfish), so
+ * in a close VR view it sat on top of the head like a bead. The eye is moved down until its top
+ * is at most three-quarters of the way up the head there, and made smaller only if that isn't
+ * enough (it never drops below a sixth of the way up).
+ */
+const fitted = new Set();
+function fitEye(S) {
+  if (fitted.has(S)) return;
+  fitted.add(S);
+  const E = S.eye;
+  const T = section(S, E.u).T;
+  const top = 0.75 * T;
+  if (E.y + E.r <= top) return;
+  const y = Math.max(T / 6, top - E.r);
+  const r = Math.min(E.r, top - y);
+  S.eye = { ...E, y, r };
+}
+
 for (const id of FISH_IDS) {
   const model = FISH[id].model;
   const S = SPECIES[model];
   const K = SKIN[model];
-  const g = fishGeometry(S, { lod: 1, pose: 'swim', eyes: true });
+  // the great white has a body of its own (src/fishing/sharkGeometry.ts): a pointed snout, jaws
+  // that open, teeth; everything else is built by Tidewater's fish builder
+  const shark = id === SHARK_ID ? sharkGeometry() : null;
+  if (!shark) fitEye(S);
+  const g = shark
+    ? { attributes: { position: { count: shark.position.length / 3, array: shark.position }, aData: { array: shark.data }, normal: { array: shark.normal } }, index: { array: shark.index } }
+    : fishGeometry(S, { lod: 1, pose: 'swim', eyes: true });
   const n = g.attributes.position.count;
   const P = g.attributes.position.array;
   const D = g.attributes.aData.array;
+  if (shark) arrays[`fish.${id}.jaw`] = new Uint8Array(shark.jaw);
   const back = lin(K.back);
   const flank = lin(K.flank);
   const belly = lin(K.belly);
   const fin = lin(K.fin);
   const edge = lin(K.edge);
   const iris = lin(S.iris);
+  // Seat the eye domes on the head. Tidewater lays each dome down as a flat disc at the eye's
+  // centre, so wherever the head narrows fast under it (the billfish, a snout that tapers, an
+  // enlarged eye) its rim stood off in the air and the eye looked like it was on a stalk. Each
+  // dome vertex is put back on the body surface under it, plus the dome's own bulge.
+  for (let i = 0; i < n; i++) {
+    if (Math.floor(D[i * 4 + 1] + 1e-4) !== PART.EYE) continue;
+    const x = P[i * 3];
+    const y = P[i * 3 + 1];
+    const z = P[i * 3 + 2];
+    const uu = Math.min(1, Math.max(0, (0.5 - z) / S.body));
+    const c = section(S, uu);
+    const rho = Math.min(1, Math.hypot(D[i * 4 + 2], D[i * 4 + 3]));
+    // a low cornea: proud enough to catch the light, never a bulb
+    const bulge = 0.16 * S.eye.r * (1 - rho * rho) + 0.03 * S.eye.r;
+    P[i * 3] = Math.sign(x) * (surfaceX(c, y) + bulge);
+  }
   const col = new Uint8Array(n * 4);
   const along = new Uint8Array(n);
   for (let i = 0; i < n; i++) {
@@ -143,14 +191,43 @@ for (const id of FISH_IDS) {
     col[i * 4 + 3] = part >= PART.DORSAL1 && part <= PART.FINLET ? 1 : 0; // fin flag (flutter)
     along[i] = Math.round(sat(u) * 255);
   }
+  // the skin shader's inputs (src/fishing/fishSkin.ts): per vertex Tidewater's aData (u, part +
+  // jaw, across / t, height / w), per species its table rows (FishMaterial.js buildTable)
+  arrays[`fish.${id}.data`] = new Float32Array(D);
+  const L = S.body;
+  const rows = shark
+    ? [
+        ...back, 0,
+        ...flank, 0,
+        ...belly, K.rough,
+        ...fin, 0,
+        ...edge, 0,
+        ...iris, 0,
+        // eye (z, y, r) and where the gill slits start; then the pectoral's armpit and the jaw's hinge
+        shark.eye.z, shark.eye.y, shark.eye.r, shark.gills,
+        shark.axil[0], shark.axil[1], shark.hinge[0], shark.hinge[1],
+      ]
+    : [
+    ...back, S.metal * 0.55,
+    ...flank, S.irid ?? 0,
+    ...belly, K.rough,
+    ...fin, S.mouth.tip,
+    ...edge, S.scales,
+    ...iris, S.scaleVis,
+    0.5 - S.eye.u * L, S.eye.y, S.eye.r, 0.5 - S.opercle * L,
+    S.lateral, S.arch, 0.5 - S.mouth.corner * L, S.mouth.y,
+  ];
+  if (shark) meta.shark = { hinge: shark.hinge };
   arrays[`fish.${id}.position`] = new Float32Array(P);
   arrays[`fish.${id}.normal`] = toInt8(g.attributes.normal.array);
   arrays[`fish.${id}.color`] = col;
   arrays[`fish.${id}.along`] = along;
   const idx = g.index.array;
   arrays[`fish.${id}.index`] = n > 65535 ? new Uint32Array(idx) : new Uint16Array(idx);
-  meta.fish[id] = { vertices: n, triangles: idx.length / 3, metal: S.metal ?? 0 };
+  meta.fish[id] = { vertices: n, triangles: idx.length / 3, metal: S.metal ?? 0, pattern: S.pattern, rows };
 }
+
+meta.part = PART;
 
 mkdirSync(OUT, { recursive: true });
 const buf = pack(arrays, meta);

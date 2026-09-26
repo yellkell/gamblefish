@@ -25,6 +25,7 @@
 import { launchXR, SessionMode, type World } from '@iwsdk/core';
 import { Euler, PerspectiveCamera, Quaternion, SRGBColorSpace, Vector3, WebGLRenderTarget } from 'three';
 import { fishingView } from '../fishing/FishingSystem.ts';
+import { introDone } from '../experience/introGate.ts';
 
 interface IwerVec {
   set(...a: number[]): unknown;
@@ -210,6 +211,7 @@ export function installHarness(world: World): void {
       if (!world.session) launchXR(world, { sessionMode: SessionMode.ImmersiveVR });
       for (let i = 0; i < 50 && !world.session; i++) await sleep(100);
       await sleep(300);
+      await introDone(); // the boot intro's six seconds
       return !!world.session;
     },
     stand(x: number, z: number, yaw: number, y?: number): void {
