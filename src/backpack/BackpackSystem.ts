@@ -51,6 +51,7 @@ import {
   type Object3D,
 } from 'three';
 import { musicView } from '../audio/music.ts';
+import { dayView } from '../world/sky.ts';
 import { MIX, shot } from '../audio/samples.ts';
 import { mergeChime, uiClick, uiDeny } from '../audio/sfx.ts';
 import type { FishUniforms, Props } from '../fishing/props.ts';
@@ -212,6 +213,8 @@ export class BackpackSystem extends createSystem({}) {
   private releaseNet!: Group;
   /** the MUSIC on / off switch, on the tray's left (the net is on its right) */
   private musicButton!: InteractivePanel;
+  /** ALWAYS DAY, under the music switch */
+  private dayButton!: InteractivePanel;
   /** the tabs off the left rim, and the book the second one opens */
   private tabs!: InteractivePanel;
   private guide!: FieldGuide;
@@ -260,6 +263,18 @@ export class BackpackSystem extends createSystem({}) {
     this.paintMusicButton();
     this.tray.group.add(this.musicButton.mesh);
     register(this.musicButton);
+    // the daylight switch, just under it
+    this.dayButton = new InteractivePanel([320, 128], [0.17, 0.068]);
+    this.dayButton.mesh.rotation.x = -Math.PI / 2;
+    this.dayButton.paint = () => this.paintDayButton();
+    this.dayButton.onClick = () => {
+      dayView.toggle();
+      this.paintDayButton();
+    };
+    this.dayButton.repaintOnFonts(() => this.paintDayButton());
+    this.paintDayButton();
+    this.tray.group.add(this.dayButton.mesh);
+    register(this.dayButton);
     // the tabs: BACKPACK over FIELD GUIDE, lying off the tray's left rim (on its far edge they
     // were under the box's wall and behind the fish readout that stands there)
     this.tabs = new InteractivePanel([320, 272], [0.17, 0.1445]);
@@ -421,6 +436,27 @@ export class BackpackSystem extends createSystem({}) {
     h.model.u.uSwim.value = 0.015 + 0.07 * (1 - k) * (0.6 + 0.4 * Math.sin(time * 1.3));
   }
 
+  private paintDayButton(): void {
+    const b = this.dayButton;
+    const c = b.ctx;
+    const on = dayView.always;
+    const [W, H] = b.px;
+    b.clear();
+    b.buttons = [{ id: 'day', x: 0, y: 0, w: W, h: H }];
+    roundRect(c, 6, 6, W - 12, H - 12, 22);
+    c.fillStyle = on ? (b.hover ? '#9ee8ff' : '#6ad0f4') : b.hover ? 'rgba(40, 52, 60, 0.95)' : INK.glass;
+    c.fill();
+    c.lineWidth = 5;
+    c.strokeStyle = on ? '#06202c' : INK.rim;
+    c.stroke();
+    c.textAlign = 'center';
+    c.textBaseline = 'middle';
+    c.font = font(700, 44);
+    c.fillStyle = on ? '#06202c' : INK.dim;
+    c.fillText(on ? '☀ ALWAYS DAY' : '☾ DAY & NIGHT', W / 2, H / 2 + 2, W - 30);
+    b.commit();
+  }
+
   private paintMusicButton(): void {
     const b = this.musicButton;
     const c = b.ctx;
@@ -498,6 +534,7 @@ export class BackpackSystem extends createSystem({}) {
     this.releaseNet.position.set(this.tray.width / 2 + 0.16, 0.01, this.tray.height / 2 - 0.08);
     this.info.mesh.position.set(0, 0.075, -this.tray.height / 2 - 0.1);
     this.musicButton.mesh.position.set(-this.tray.width / 2 - 0.13, 0.012, this.tray.height / 2 - 0.08);
+    this.dayButton.mesh.position.set(-this.tray.width / 2 - 0.13, 0.012, this.tray.height / 2 - 0.08 + 0.078);
     this.tabs.mesh.position.set(-this.tray.width / 2 - 0.13, 0.012, -this.tray.height / 2 + 0.078);
     // face your eyes, level (the tray itself is tipped 35° toward you: parented as-is, the text
     // leaned away and read skewed)
