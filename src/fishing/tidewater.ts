@@ -151,6 +151,8 @@ export interface GameState {
   upgrades: Record<string, number>;
   /** what you've bought for your shack (village/homeGoods.ts ids), in the order you bought it */
   home: string[];
+  /** the woodworks (woodworks/): logs in your backpack, the axe, how far each walk is built */
+  woodworks: Woodworks;
   readonly stats: GearStats;
   readonly holdKg: number;
   readonly holdValue: number;
@@ -183,23 +185,45 @@ function prefixedStorage(): Pick<Storage, 'getItem' | 'setItem'> | null {
   }
 }
 
+export interface Woodworks {
+  wood: number;
+  axe: boolean;
+  /** steps laid on each walk (woodworks/gates.ts WALKS) */
+  built: Record<string, number>;
+}
+
+const freshWoodworks = (): Woodworks => ({ wood: 0, axe: false, built: {} });
+
+function readWoodworks(d: unknown): Woodworks {
+  const w = (d as { woodworks?: Partial<Woodworks> }).woodworks;
+  const out = freshWoodworks();
+  if (!w || typeof w !== 'object') return out;
+  out.wood = Math.max(0, Math.floor(Number(w.wood) || 0));
+  out.axe = w.axe === true;
+  if (w.built && typeof w.built === 'object') for (const [k, v] of Object.entries(w.built)) out.built[k] = Math.max(0, Math.floor(Number(v) || 0));
+  return out;
+}
+
 export function createGameState(): GameState {
   const s = new (GameStateJs as unknown as new (storage: unknown) => GameState)(prefixedStorage());
   // our own field on Tidewater's save: the shack's things ride along in the same JSON (local and
   // cloud), and a save from before them just has none
   s.home = [];
+  s.woodworks = freshWoodworks();
   const toJSON = s.toJSON.bind(s);
   const fromJSON = s.fromJSON.bind(s);
   const reset = s.reset.bind(s);
-  s.toJSON = () => ({ ...(toJSON() as object), home: s.home });
+  s.toJSON = () => ({ ...(toJSON() as object), home: s.home, woodworks: s.woodworks });
   s.fromJSON = (d: unknown) => {
     if (!fromJSON(d)) return false;
     const home = (d as { home?: unknown }).home;
     s.home = Array.isArray(home) ? home.filter((x): x is string => typeof x === 'string') : [];
+    s.woodworks = readWoodworks(d);
     return true;
   };
   s.reset = () => {
     s.home = []; // first: Tidewater's reset saves and emits
+    s.woodworks = freshWoodworks();
     reset();
   };
   s.load();

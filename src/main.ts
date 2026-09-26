@@ -20,7 +20,7 @@ import { createGameState } from './fishing/tidewater.ts';
 import { WristWallet } from './ui/wallet.ts';
 import { WaterFx } from './fx/water.ts';
 import { locomotion, teleportView, TeleportSystem } from './locomotion/TeleportSystem.ts';
-import { decodeTerrain, type WorldJson } from './world/data.ts';
+import { decodeTerrain, type BoxCollider, type WorldJson } from './world/data.ts';
 import { Heightfield } from './world/heightfield.ts';
 import { Ocean } from './world/ocean.ts';
 import { createSky } from './world/sky.ts';
@@ -47,6 +47,8 @@ import { Vegetation } from './world/vegetation.ts';
 import { buildVillage } from './world/village.ts';
 import { buildLamps } from './world/lamps.ts';
 import { runBootIntro } from './experience/bootIntro.ts';
+import { cutGates } from './woodworks/gates.ts';
+import { WoodSystem, woodDeps, woodView } from './woodworks/woodSystem.ts';
 import { onFontsReady } from './ui/fonts.ts';
 import { drawLogo, drawLogoFish, hasLogoFish, setLogoFish } from './ui/logo.ts';
 import { thumbnail } from './ui/thumbnail.ts';
@@ -170,7 +172,8 @@ World.create(container, {
   const frames = (json as unknown as { buildings: BuildingFrame[] }).buildings ?? [];
   const interiors = buildInteriors(frames);
   for (const i of interiors) scene.add(i.group);
-  const surfaces = new Surfaces(heightfield, { boxes: openColliders(json.colliders.boxes, frames), cylinders: json.colliders.cylinders });
+  // (the pier head's rails open at the gateways of the walks you can build: woodworks/gates.ts)
+  const surfaces = new Surfaces(heightfield, { boxes: cutGates(openColliders(json.colliders.boxes, frames)), cylinders: json.colliders.cylinders });
   locomotion.surfaces = surfaces;
   if (grass) grass.floorOver = (x, z, m) => surfaces.deckOver(x, z, m);
   world.registerSystem(TeleportSystem);
@@ -207,6 +210,7 @@ World.create(container, {
   backpackDeps.props = fishingDeps.props;
   backpackDeps.chart = { heightAt: (x, z) => heightfield.heightAt(x, z), layout: json.layout, buildings: frames };
   backpackDeps.where = () => world.camera.getWorldPosition(new Vector3());
+  backpackDeps.walks = () => woodView.walks?.() ?? {};
   world.registerSystem(BackpackSystem);
 
   // stepping through a doorway: a blink hides the door you can't see open
@@ -217,7 +221,18 @@ World.create(container, {
 
   // what bites, and when, follows the island's day
   fishingDeps.hour = () => sky.state.hour;
-  fishingDeps.indoors = () => interiorAt(interiors, world.player.position.x, world.player.position.z) !== null;
+  // indoors, or with the axe out among the trees, the rod goes over your shoulder
+  fishingDeps.indoors = () => interiorAt(interiors, world.player.position.x, world.player.position.z) !== null || woodView.axeOut;
+
+  // the woodworks: the timber yard, the woodlot and the walks off the pier head
+  Object.assign(woodDeps, {
+    state: game,
+    ground: (x: number, z: number) => heightfield.heightAt(x, z),
+    addBox: (b: BoxCollider) => surfaces.addBox(b),
+    env: casinoEnv(world.renderer),
+    busy: () => backpackView.open || interiorAt(interiors, world.player.position.x, world.player.position.z) !== null,
+  });
+  world.registerSystem(WoodSystem);
 
   // the village's people and counters
   const stall = frames.find((b) => b.name === 'stall');
@@ -274,7 +289,7 @@ World.create(container, {
   world.player.rotation.set(0, s.yaw, 0);
 
   // Dev hook: drive the rig without a headset (`__fish.move.to(x, z, yaw)`).
-  (window as unknown as { __fish: unknown }).__fish = { world, surfaces, move: teleportView, json, game, fishing: fishingView, vegetation, backpack: backpackView, interiors, tables, music, shore, sky, homeShops, gearShops, villa, fx, props: fishingDeps.props };
+  (window as unknown as { __fish: unknown }).__fish = { world, surfaces, move: teleportView, json, game, fishing: fishingView, vegetation, backpack: backpackView, interiors, tables, music, shore, sky, homeShops, gearShops, villa, fx, props: fishingDeps.props, wood: woodView };
 
   if (import.meta.env.DEV) void import('./dev/harness.ts').then((m) => m.installHarness(world));
 

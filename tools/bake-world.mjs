@@ -89,6 +89,19 @@ const walkIn = () => house && hasInterior(house.name);
 // caps the post at the end of a run), and the top rails sit level, without the per-bay wobble.
 const { PIER } = await import(url('world/Pier.js'));
 const RAIL = { top: PIER.deck + 0.95 + 0.022, mid: PIER.deck + 0.48 };
+// the gateways the walks you build leave the pier head by (src/woodworks/gates.ts): the head's
+// rails stop either side of each
+const { WALKS } = await import('../src/woodworks/gates.ts');
+/** a laid rail's stretch [a0, a1] along its line, less any gateway on that line */
+const gapped = (alongX, c, a0, a1) => {
+  let out = [[a0, a1]];
+  for (const w of WALKS) {
+    const g = w.gate;
+    if (g.alongX !== alongX || Math.abs(c - g.line) > 0.3) continue;
+    out = out.flatMap(([p, q]) => (q <= g.from || p >= g.to ? [[p, q]] : [...(g.from - p > 0.05 ? [[p, g.from]] : []), ...(q - g.to > 0.05 ? [[g.to, q]] : [])]));
+  }
+  return out;
+};
 const railsLaid = { top: [], mid: [] };
 /** a harbour-frame piece inside the pier's footprint */
 const onPier = (B, x, z) => B.stack.length === 0 && x > PIER.headX0 - 0.5 && x < PIER.headX1 + 0.5 && z > PIER.zStart - 0.5 && z < PIER.zEnd + 0.5;
@@ -195,10 +208,14 @@ const clipRail = (kind, alongX, a0, a1, c, half) => {
       const c = alongX ? z : x;
       const ab = clipRail(top ? 'top' : 'mid', alongX, (alongX ? x : z) - len / 2, (alongX ? x : z) + len / 2, c, Math.min(sx, sz) / 2);
       if (!ab) return;
-      const m = (ab[0] + ab[1]) / 2;
-      const L = ab[1] - ab[0];
       const o2 = top ? { ...o, rx: 0, rz: 0 } : o;
-      return box.call(this, key, alongX ? m : x, top ? RAIL.top : y, alongX ? z : m, alongX ? L : sx, sy, alongX ? sz : L, o2);
+      let out;
+      for (const [p, q] of gapped(alongX, c, ab[0], ab[1])) {
+        const m = (p + q) / 2;
+        const L = q - p;
+        out = box.call(this, key, alongX ? m : x, top ? RAIL.top : y, alongX ? z : m, alongX ? L : sx, sy, alongX ? sz : L, o2);
+      }
+      return out;
     }
     // Tidewater's slipway ties (1.1 m, one set per rail)
     if (inBoathouse(this) && sx === 1.1 && sy === 0.09 && sz === 0.16) return;

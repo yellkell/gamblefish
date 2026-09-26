@@ -25,6 +25,7 @@ import { InteractivePanel, register } from '../ui/pointer.ts';
 import { silhouette, thumbnail } from '../ui/thumbnail.ts';
 import { SHARK_ID } from '../fishing/shark.ts';
 import { drawChart, KEY, CHART, type ChartSource } from './chart.ts';
+import { WALKS } from '../woodworks/gates.ts';
 
 /** a line or two about each one, in the book's voice */
 const NOTES: Record<string, string> = {
@@ -123,6 +124,8 @@ export class FieldGuide {
     renderer: WebGLRenderer,
     private readonly chartSource: ChartSource | null = null,
     private readonly where: (() => { x: number; z: number }) | null = null,
+    /** how far each walk off the pier head is built (0..1) */
+    private readonly walks: (() => Record<string, number>) | null = null,
   ) {
     const regular = FISH_IDS.filter((id) => !BIG.includes(id) && id !== SHARK_ID);
     this.pages = [{ kind: 'title' }, { kind: 'chart' }];
@@ -462,6 +465,36 @@ export class FieldGuide {
     label('DROP-OFF · 6 m', 128, 100, 20);
     label('DEEP WATER', 20, 140, 24);
     label('THE PIER', L.pier.x + 26, (L.pier.zStart + L.pier.zEnd) / 2 + 12, 20);
+    // the walks off the pier head, as far as they're built (dotted where they're still to come)
+    const built = this.walks?.() ?? {};
+    for (const w of WALKS) {
+      const len = w.bays * w.bay + w.head[1];
+      const k = built[w.id] ?? 0;
+      const [x0, y0] = px(w.gate.x, w.gate.z);
+      const [x1, y1] = px(w.gate.x + w.dir[0] * len, w.gate.z + w.dir[1] * len);
+      c.lineCap = 'round';
+      c.setLineDash([4, 7]);
+      c.lineWidth = 3;
+      c.strokeStyle = 'rgba(107, 74, 42, 0.55)';
+      c.beginPath();
+      c.moveTo(x0, y0);
+      c.lineTo(x1, y1);
+      c.stroke();
+      c.setLineDash([]);
+      if (k > 0) {
+        c.lineWidth = 6;
+        c.strokeStyle = '#6b4a2a';
+        c.beginPath();
+        c.moveTo(x0, y0);
+        c.lineTo(x0 + (x1 - x0) * k, y0 + (y1 - y0) * k);
+        c.stroke();
+      }
+      if (k >= 1) {
+        c.fillStyle = '#6b4a2a';
+        c.fillRect(x1 - 6, y1 - 6, 12, 12);
+      }
+    }
+    c.lineCap = 'butt';
     // you are here
     const me = this.where?.();
     if (me && me.x > CHART.x0 && me.x < CHART.x1 && me.z > CHART.z0 && me.z < CHART.z1) {

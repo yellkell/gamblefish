@@ -81,7 +81,8 @@ export const backpackDeps: {
   /** the island for the field guide's chart, and where the player is on it */
   chart: ChartSource | null;
   where: (() => { x: number; z: number }) | null;
-} = { state: null, props: null, chart: null, where: null };
+  walks: (() => Record<string, number>) | null;
+} = { state: null, props: null, chart: null, where: null, walks: null };
 
 /** Somewhere in the world that takes a fish from your hand (Joe's scale, a counter...). */
 export interface DropTarget {
@@ -215,6 +216,8 @@ export class BackpackSystem extends createSystem({}) {
   private musicButton!: InteractivePanel;
   /** ALWAYS DAY, under the music switch */
   private dayButton!: InteractivePanel;
+  /** the logs you're carrying (woodworks/), off the tray's right rim */
+  private woodTag!: InteractivePanel;
   /** the tabs off the left rim, and the book the second one opens */
   private tabs!: InteractivePanel;
   private guide!: FieldGuide;
@@ -275,6 +278,14 @@ export class BackpackSystem extends createSystem({}) {
     this.paintDayButton();
     this.tray.group.add(this.dayButton.mesh);
     register(this.dayButton);
+    // the logs you carry, a tag off the right rim across from the tabs
+    this.woodTag = new InteractivePanel([320, 128], [0.17, 0.068]);
+    this.woodTag.mesh.rotation.x = -Math.PI / 2;
+    this.woodTag.paint = () => this.paintWoodTag();
+    this.woodTag.repaintOnFonts(() => this.paintWoodTag());
+    this.paintWoodTag();
+    this.tray.group.add(this.woodTag.mesh);
+    backpackDeps.state!.onChange(() => this.paintWoodTag());
     // the tabs: BACKPACK over FIELD GUIDE, lying off the tray's left rim (on its far edge they
     // were under the box's wall and behind the fish readout that stands there)
     this.tabs = new InteractivePanel([320, 272], [0.17, 0.1445]);
@@ -285,7 +296,7 @@ export class BackpackSystem extends createSystem({}) {
     this.paintTabs();
     this.tray.group.add(this.tabs.mesh);
     register(this.tabs);
-    this.guide = new FieldGuide(backpackDeps.state!, backpackDeps.props!, this.renderer, backpackDeps.chart, backpackDeps.where);
+    this.guide = new FieldGuide(backpackDeps.state!, backpackDeps.props!, this.renderer, backpackDeps.chart, backpackDeps.where, backpackDeps.walks);
     this.guide.group.position.y = 0.03;
     this.tray.group.add(this.guide.group);
     backpackView.takeInHand = (id, hand) => this.takeInHand(id, hand);
@@ -436,6 +447,47 @@ export class BackpackSystem extends createSystem({}) {
     h.model.u.uSwim.value = 0.015 + 0.07 * (1 - k) * (0.6 + 0.4 * Math.sin(time * 1.3));
   }
 
+  private paintWoodTag(): void {
+    const b = this.woodTag;
+    const c = b.ctx;
+    const [W, H] = b.px;
+    const n = backpackDeps.state?.woodworks.wood ?? 0;
+    b.clear();
+    b.buttons = [];
+    roundRect(c, 6, 6, W - 12, H - 12, 22);
+    c.fillStyle = 'rgba(46, 30, 18, 0.94)';
+    c.fill();
+    c.lineWidth = 5;
+    c.strokeStyle = '#c8a26a';
+    c.stroke();
+    // a little stack of logs
+    for (const [x, y] of [
+      [58, 82],
+      [92, 82],
+      [75, 52],
+    ]) {
+      c.fillStyle = '#8a6440';
+      c.beginPath();
+      c.arc(x, y, 17, 0, Math.PI * 2);
+      c.fill();
+      c.fillStyle = '#e0c090';
+      c.beginPath();
+      c.arc(x, y, 11, 0, Math.PI * 2);
+      c.fill();
+      c.strokeStyle = '#8a6440';
+      c.lineWidth = 2;
+      c.beginPath();
+      c.arc(x, y, 5, 0, Math.PI * 2);
+      c.stroke();
+    }
+    c.textAlign = 'left';
+    c.textBaseline = 'middle';
+    c.font = font(700, 48);
+    c.fillStyle = '#ffd89a';
+    c.fillText(`${n} LOG${n === 1 ? '' : 'S'}`, 128, H / 2 + 2, W - 140);
+    b.commit();
+  }
+
   private paintDayButton(): void {
     const b = this.dayButton;
     const c = b.ctx;
@@ -535,6 +587,7 @@ export class BackpackSystem extends createSystem({}) {
     this.info.mesh.position.set(0, 0.075, -this.tray.height / 2 - 0.1);
     this.musicButton.mesh.position.set(-this.tray.width / 2 - 0.13, 0.012, this.tray.height / 2 - 0.08);
     this.dayButton.mesh.position.set(-this.tray.width / 2 - 0.13, 0.012, this.tray.height / 2 - 0.08 + 0.078);
+    this.woodTag.mesh.position.set(this.tray.width / 2 + 0.13, 0.012, -this.tray.height / 2 + 0.078);
     this.tabs.mesh.position.set(-this.tray.width / 2 - 0.13, 0.012, -this.tray.height / 2 + 0.078);
     // face your eyes, level (the tray itself is tipped 35° toward you: parented as-is, the text
     // leaned away and read skewed)

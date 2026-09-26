@@ -51,6 +51,8 @@ JavaScript, though, and that does carry over:
   - `village.bin` — the village, pier and boardwalks as merged, vertex-coloured meshes.
     The pier's handrails are laid end to end. Tidewater overlaps each bay's rails
     over the posts, and the overlapping faces flickered.
+    The four outhouses are left out, and gateways for the woodworks' walks are cut in the
+    pier head's rails.
   - `world.json` — the layout and Tidewater's collision world.
 - The runtime (`src/world/`) rebuilds all of this in three.js for Quest:
   - LOD terrain chunks.
@@ -195,6 +197,18 @@ and the vendors.
   - Three held runs beat it. It rolls up alongside you under a GREAT WHITE! banner, and you let
     it go for a bounty.
   - Its skin is its own pattern: denticles, scars, gill slits, snout pores and teeth.
+- **The woodworks** (`src/woodworks/`): build your own way out to the reef and deep water.
+  - **Timber yard:** an open stall on the beach west of the pier foot. It sells the AXE
+    ($120), a bundle of 10 logs ($40) and a cart of 50 ($180) for when you'd rather not chop.
+  - **Woodlot:** six almond trees behind the yard. Once you own the axe, walk up to them and
+    it's in your hand. Swing it into a trunk: four good blows and the tree creaks, falls away
+    from you, and its 4 logs fly into your backpack. A sapling grows back from the stump
+    about a minute later. The backpack tray shows your log count.
+  - **The walks:** two build crates stand on the pier head. Put wood in and a walk lays itself
+    out plank by plank through a gateway in the rail. The **reef walk** (48 logs) runs 60 m out
+    to a platform over the reef's edge. Finishing it unlocks the **deep walk** (44 logs), which
+    runs past the drop-off to a platform over 14 m of water. The chart in the field guide shows
+    both walks, planned or built. Wood, the axe and the walks are saved.
 - **ALWAYS DAY:** a switch under MUSIC in the backpack holds the island in the early
   afternoon. The fish that only bite at night won't bite while it's on.
 - **Wallet:** `src/ui/wallet.ts` puts an odometer-style money counter on both
@@ -259,6 +273,7 @@ same questions as ff2's `TELEPORT_AREAS`, `floorYAt` and `crossesWall`:
 | `src/world/` | baked data reader, heightfield, surfaces (pure), terrain, ocean, sky, village |
 | `src/audio/` | ff2's synth SFX bus and cash chime; Tidewater's sampled fishing and shore sounds; the music |
 | `src/fishing/` | the rod, cast, bites, fight, landing, catch card, tension gauge |
+| `src/woodworks/` | the axe, woodlot and timber yard; the reef and deep walks and their build crates |
 | `src/ui/` | ff2's Rajdhani type kit and coin symbol, canvas panels, the wrist wallet |
 | `src/dev/harness.ts` | dev-only emulator driver |
 | `tools/bake-world.mjs` | Tidewater → `public/world/` |
