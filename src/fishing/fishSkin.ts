@@ -295,7 +295,7 @@ export function fishSkinSurface(P: Record<string, number>): string {
     c = mix(c, vec3(0.1, 0.09, 0.1), slits * bodyK * 0.8);
     bumpH -= slits * bodyK * 0.0012 * L;
     // the black spot in the pectoral's armpit
-    float axil = (1.0 - smoothstep(0.008, 0.016, length(vec2((z - (0.5 - 0.32 * 0.8 - 0.012)) * 0.8, y + 0.052)))) * bodyK;
+    float axil = (1.0 - smoothstep(0.007, 0.015, length(vec2((z - lat.x) * 0.8, y - lat.y)))) * bodyK;
     c = mix(c, vec3(0.03, 0.03, 0.035), axil * 0.9);
     // pores on the snout (the ampullae), freckling the underside and sides in front of the eye
     vec2 pc = vec2(z, y) * 260.0;
@@ -303,21 +303,6 @@ export function fishSkinSurface(P: Record<string, number>): string {
     float pore = (1.0 - smoothstep(0.12, 0.22, length(fract(pc) - 0.5 - (vec2(fishHash(pcell), fishHash(pcell + 4.0)) - 0.5) * 0.5)))
       * step(0.55, fishHash(pcell + 9.0)) * smoothstep(eye.x - 0.02, eye.x + 0.03, z) * bodyK;
     c *= 1.0 - pore * 0.55;
-    // teeth: a row of white triangles just under the upper lip, from the corner of the mouth forward
-    float mz = clamp((z - lat.z) / (0.5 - lat.z), 0.0, 1.0);
-    float lipY = mix(lat.w, r3.w, mz);
-    // serrated triangles hanging from the upper jaw, the lower row's tips showing between them
-    float inMouth = step(lat.z + 0.006, z) * (1.0 - smoothstep(0.47, 0.485, z)) * bodyK;
-    float tri = 1.0 - abs(fract(z * 105.0) * 2.0 - 1.0);
-    float tri2 = 1.0 - abs(fract(z * 105.0 + 0.5) * 2.0 - 1.0);
-    float below = lipY - y;
-    float tooth = step(0.0012, below) * step(below, 0.0012 + 0.0095 * tri);
-    float lower = step(0.0012 + 0.0105, below) * step(below, 0.0012 + 0.0125) * step(0.4, tri2);
-    float gum = 1.0 - smoothstep(0.0, 0.0014, abs(below - 0.0006));
-    c = mix(c, vec3(0.35, 0.12, 0.14), gum * inMouth * 0.9);
-    c = mix(c, vec3(0.93, 0.91, 0.84) * mix(0.85, 1.0, tri), max(tooth, lower) * inMouth);
-    // a shadow in the gape between the rows
-    c *= 1.0 - step(0.0012, below) * step(below, 0.0012 + 0.0115) * (1.0 - max(tooth, lower)) * inMouth * 0.75;
     // black tips under the pectorals, dark trailing edges on the rest of the fins
     float tip = part == ${pa('PECTORAL')} ? smoothstep(0.7, 0.95, t) : 0.0;
     c = mix(c, vec3(0.02, 0.02, 0.025), tip);
@@ -351,20 +336,22 @@ export function fishSkinSurface(P: Record<string, number>): string {
   float hz = lat.z; float hy = lat.w; float tipY = r3.w;
   float mt = clamp((z - hz) / (0.5 - hz), 0.0, 1.0);
   float yLip = mix(hy, tipY, mt);
-  float lips = (1.0 - smoothstep(0.0015, 0.0035, abs(y - yLip))) * step(hz - 0.004, z) * bodyK;
+  float lips = (1.0 - smoothstep(0.0015, 0.0035, abs(y - yLip))) * step(hz - 0.004, z) * bodyK * (shark ? 0.0 : 1.0);
   c *= 1.0 - lips * 0.55;
   float maxZ = hz + 0.006 - (y - hy) * 0.35;
   float maxilla = (1.0 - smoothstep(0.001, 0.0025, abs(z - maxZ))) * smoothstep(hy - 0.002, hy + 0.002, y) * smoothstep(hy + 0.04, hy + 0.025, y) * bodyK;
   if (!shark) c *= 1.0 - maxilla * 0.3;
   float nostril = (1.0 - smoothstep(0.1, 0.2, length(vec2(z - eye.x - eye.z * 1.7, y - eye.y - eye.z * 0.25)) / eye.z)) * bodyK;
-  c *= 1.0 - nostril * 0.6;
+  if (!shark) c *= 1.0 - nostril * 0.6;
 
   // ---- the painted eye, and the eye dome
   float er = length(vec2(z - eye.x, y - eye.y)) / eye.z;
   float painted = (1.0 - smoothstep(0.95, 1.1, er)) * bodyK;
-  vec3 eyeC = shark ? vec3(0.006, 0.006, 0.008) : fishEyeCol(er, atan(y - eye.y, z - eye.x), irisC);
+  vec3 eyeC = shark ? mix(vec3(0.004, 0.004, 0.006), vec3(0.05, 0.06, 0.08), smoothstep(0.75, 1.0, er)) : fishEyeCol(er, atan(y - eye.y, z - eye.x), irisC);
   c = mix(c, eyeC, painted);
   metal *= 1.0 - painted;
+  // the shark's flat black eye is wet glass
+  if (shark) rough = mix(rough, 0.05, painted);
   float gloss = 0.0;
   if (part == ${pa('EYE')}) {
     float r = length(vec2(t, w));
@@ -376,10 +363,19 @@ export function fishSkinSurface(P: Record<string, number>): string {
     metal = 0.0;
     gloss = 1.0;
   } else if (part == ${pa('MOUTH')}) {
-    vec3 lip = pat == 2.0 ? vec3(0.6, 0.08, 0.06) : vec3(0.5, 0.3, 0.3);
-    c = mix(lip, vec3(0.03, 0.012, 0.012), smoothstep(0.05, 0.85, t));
+    vec3 lip = pat == 2.0 ? vec3(0.6, 0.08, 0.06) : shark ? vec3(0.42, 0.1, 0.12) : vec3(0.5, 0.3, 0.3);
+    c = mix(lip, shark ? vec3(0.06, 0.012, 0.016) : vec3(0.03, 0.012, 0.012), smoothstep(0.05, 0.85, t));
+    // wet folds down the shark's throat
+    if (shark) c *= 0.8 + 0.2 * sin(z * 400.0);
     metal = 0.0;
-    rough = 0.35;
+    rough = 0.3;
+  } else if (part == ${SHARK_PATTERN}.0) {
+    // a tooth: yellowed at the root, white enamel to the tip, a little light through the edge
+    c = mix(vec3(0.78, 0.72, 0.58), vec3(0.97, 0.96, 0.92), smoothstep(0.0, 0.55, t));
+    rough = 0.22;
+    metal = 0.0;
+    transl = 0.35;
+    gloss = 0.5;
   }
 
   // ---- iridescent sheen on silvery skin at grazing angles

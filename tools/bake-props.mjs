@@ -41,7 +41,8 @@ const { registerTrophyFish, registerTrophyModels } = await import('../src/fishin
 registerTrophyFish(FISH, FISH_IDS);
 registerTrophyModels(SPECIES, SKIN);
 // and the great white (src/fishing/shark.ts)
-const { registerSharkFish, registerSharkModel } = await import('../src/fishing/shark.ts');
+const { registerSharkFish, registerSharkModel, SHARK_ID } = await import('../src/fishing/shark.ts');
+const { sharkGeometry } = await import('../src/fishing/sharkGeometry.ts');
 registerSharkFish(FISH, FISH_IDS);
 registerSharkModel(SPECIES, SKIN);
 
@@ -127,12 +128,18 @@ function fitEye(S) {
 for (const id of FISH_IDS) {
   const model = FISH[id].model;
   const S = SPECIES[model];
-  fitEye(S);
   const K = SKIN[model];
-  const g = fishGeometry(S, { lod: 1, pose: 'swim', eyes: true });
+  // the great white has a body of its own (src/fishing/sharkGeometry.ts): a pointed snout, jaws
+  // that open, teeth; everything else is built by Tidewater's fish builder
+  const shark = id === SHARK_ID ? sharkGeometry() : null;
+  if (!shark) fitEye(S);
+  const g = shark
+    ? { attributes: { position: { count: shark.position.length / 3, array: shark.position }, aData: { array: shark.data }, normal: { array: shark.normal } }, index: { array: shark.index } }
+    : fishGeometry(S, { lod: 1, pose: 'swim', eyes: true });
   const n = g.attributes.position.count;
   const P = g.attributes.position.array;
   const D = g.attributes.aData.array;
+  if (shark) arrays[`fish.${id}.jaw`] = new Uint8Array(shark.jaw);
   const back = lin(K.back);
   const flank = lin(K.flank);
   const belly = lin(K.belly);
@@ -188,7 +195,19 @@ for (const id of FISH_IDS) {
   // jaw, across / t, height / w), per species its table rows (FishMaterial.js buildTable)
   arrays[`fish.${id}.data`] = new Float32Array(D);
   const L = S.body;
-  const rows = [
+  const rows = shark
+    ? [
+        ...back, 0,
+        ...flank, 0,
+        ...belly, K.rough,
+        ...fin, 0,
+        ...edge, 0,
+        ...iris, 0,
+        // eye (z, y, r) and where the gill slits start; then the pectoral's armpit and the jaw's hinge
+        shark.eye.z, shark.eye.y, shark.eye.r, shark.gills,
+        shark.axil[0], shark.axil[1], shark.hinge[0], shark.hinge[1],
+      ]
+    : [
     ...back, S.metal * 0.55,
     ...flank, S.irid ?? 0,
     ...belly, K.rough,
@@ -198,6 +217,7 @@ for (const id of FISH_IDS) {
     0.5 - S.eye.u * L, S.eye.y, S.eye.r, 0.5 - S.opercle * L,
     S.lateral, S.arch, 0.5 - S.mouth.corner * L, S.mouth.y,
   ];
+  if (shark) meta.shark = { hinge: shark.hinge };
   arrays[`fish.${id}.position`] = new Float32Array(P);
   arrays[`fish.${id}.normal`] = toInt8(g.attributes.normal.array);
   arrays[`fish.${id}.color`] = col;

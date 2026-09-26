@@ -15,10 +15,9 @@
  *    Let it take all the line and it's gone;
  *  - break three runs and it's beaten. Reel it in alongside the pier.
  *
- * Its body is made Tidewater's way (like the trophy fish): an anatomy fed to its own fish
- * builder, a fusiform body with a conical snout, a tall triangular first dorsal, long sickle
- * pectorals, a near-symmetric crescent tail and a tiny second dorsal and anal fin. The skin is
- * pattern 21 in fishing/fishSkin.ts. Plain data plus a class, so Node runs this file as it is.
+ * Its body is its own (fishing/sharkGeometry.ts: a pointed snout, a jaw that opens, real
+ * teeth), painted by pattern 21 in fishing/fishSkin.ts; the anatomy registered here only keeps
+ * the bake's colour pass happy. Plain data plus a class, so Node runs this file as it is.
  */
 
 export const SHARK_ID = 'shark';

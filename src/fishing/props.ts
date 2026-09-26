@@ -18,6 +18,7 @@ import {
   MeshLambertMaterial,
   MeshPhongMaterial,
   MeshStandardMaterial,
+  Vector2,
   Vector4,
   type IUniform,
   type Texture,
@@ -58,6 +59,8 @@ export interface FishUniforms {
   uTime: IUniform<number>;
   uSwim: IUniform<number>; // body-wave amplitude (fraction of length)
   uFreq: IUniform<number>; // tail beats per second
+  /** how far the lower jaw hangs open (rad; only the shark has a jaw that opens) */
+  uJaw: IUniform<number>;
 }
 
 export interface Props {
@@ -131,16 +134,23 @@ const ROD_VERTEX = /* glsl */ `
 `;
 
 const FISH_VERTEX = /* glsl */ `
+  // the lower jaw swings open about its hinge (the shark's: no other fish has a jaw attribute)
+  float ja = uJaw * jaw;
+  float cj = cos(ja);
+  float sj = sin(ja);
+  vec2 qj = vec2(position.z - uHinge.x, position.y - uHinge.y);
+  vec3 P0 = jaw > 0.0 ? vec3(position.x, uHinge.y - qj.x * sj + qj.y * cj, uHinge.x + qj.x * cj + qj.y * sj) : position;
+  vec3 N0 = jaw > 0.0 ? vec3(normal.x, -normal.z * sj + normal.y * cj, normal.z * cj + normal.y * sj) : normal;
   // body wave: grows toward the tail, travelling backward; fins flutter on top
   float u = along;
   float env = 0.12 + u * u;
   float ph = u * 5.2 - uTime * uFreq * 6.2831853;
   float side = uSwim * env * sin(ph) + fin * 0.012 * sin(uTime * 23.0 + u * 30.0);
-  vec3 fishP = position + vec3(side, 0.0, 0.0);
+  vec3 fishP = P0 + vec3(side, 0.0, 0.0);
   // x' = x + side(z), with u running 0 (snout, z = +0.5) .. 1 (tail): normals by the inverse
   // transpose of that shear, n' = (nx, ny, nz + nx * dside/du)
   float dside = uSwim * (2.0 * u * sin(ph) + env * 5.2 * cos(ph));
-  vec3 objectNormal = normalize(vec3(normal.x, normal.y, normal.z + normal.x * dside));
+  vec3 objectNormal = normalize(vec3(N0.x, N0.y, N0.z + N0.x * dside));
   vFishData = data;
   vFishLocal = position;
   vFishL = length(modelMatrix[0].xyz);
@@ -175,6 +185,7 @@ function geometry(arrays: Record<string, Typed>, name: string, extra: Record<str
 export function loadProps(buf: ArrayBuffer): Props {
   const { arrays, meta } = unpack(buf);
   const fishMeta = (meta as { fish: Record<string, { metal: number; pattern: number; rows: number[] }> }).fish;
+  const sharkHinge = (meta as { shark?: { hinge: [number, number] } }).shark?.hinge ?? [0, 0];
   const part = (meta as { part: Record<string, number> }).part;
   const surface = fishSkinSurface(part);
   let env: Texture | null = null;
@@ -223,20 +234,20 @@ export function loadProps(buf: ArrayBuffer): Props {
     makeFish(species: string) {
       let g = fishGeo.get(species);
       if (!g) {
-        g = geometry(arrays, `fish.${species}`, { along: [1, true], data: [4, false] });
+        g = geometry(arrays, `fish.${species}`, { along: [1, true], data: [4, false], ...(arrays[`fish.${species}.jaw`] ? { jaw: [1, true] as [number, boolean] } : {}) });
         fishGeo.set(species, g);
       }
-      const uniforms: FishUniforms = { uTime: { value: 0 }, uSwim: { value: 0.06 }, uFreq: { value: 2 } };
+      const uniforms: FishUniforms = { uTime: { value: 0 }, uSwim: { value: 0.06 }, uFreq: { value: 2 }, uJaw: { value: 0 } };
       const fm = fishMeta[species];
       const rows = Array.from({ length: 8 }, (_, i) => new Vector4().fromArray(fm?.rows ?? [], i * 4));
-      const skin = { uRows: { value: rows }, uPattern: { value: fm?.pattern ?? 0 }, uSeed: { value: Math.random() } };
+      const skin = { uRows: { value: rows }, uPattern: { value: fm?.pattern ?? 0 }, uSeed: { value: Math.random() }, uHinge: { value: new Vector2(sharkHinge[0], sharkHinge[1]) } };
       const mat = new MeshStandardMaterial({ side: DoubleSide, envMap: env, envMapIntensity: 0.9 });
       mat.onBeforeCompile = (shader) => {
         Object.assign(shader.uniforms, uniforms, skin);
         shader.vertexShader = shader.vertexShader
           .replace(
             '#include <common>',
-            '#include <common>\nattribute float along;\nattribute float fin;\nattribute vec4 data;\nuniform float uTime;\nuniform float uSwim;\nuniform float uFreq;\nvarying vec4 vFishData;\nvarying vec3 vFishLocal;\nvarying float vFishL;',
+            '#include <common>\nattribute float along;\nattribute float fin;\nattribute vec4 data;\nattribute float jaw;\nuniform float uTime;\nuniform float uSwim;\nuniform float uFreq;\nuniform float uJaw;\nuniform vec2 uHinge;\nvarying vec4 vFishData;\nvarying vec3 vFishLocal;\nvarying float vFishL;',
           )
           .replace('#include <beginnormal_vertex>', FISH_VERTEX)
           .replace('#include <begin_vertex>', 'vec3 transformed = fishP;');

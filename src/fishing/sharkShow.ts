@@ -175,6 +175,8 @@ export class SharkShow {
       m.rotation.set(0.04, Math.atan2(this.heading.x, this.heading.z), Math.sin(time * 1.1) * 0.06);
       this.u.uSwim.value = 0.05;
       this.u.uFreq.value = 0.7;
+      // the mouth hangs a little open as it swims, as theirs do
+      this.u.uJaw.value = 0.1 + 0.05 * Math.sin(time * 0.8);
       // a wake off the fin now and then
       if (Math.random() < dt * 3) this.fx()?.ripple(_v.copy(m.position).addScaledVector(this.heading, L * 0.05), 0.9, 0, 1.2);
     } else if (this.mode === 'breach') {
@@ -191,6 +193,8 @@ export class SharkShow {
       m.rotation.set(pitch, Math.atan2(this.heading.x, this.heading.z), this.rollSide * Math.max(0, k - 0.35) * 2.2);
       this.u.uSwim.value = 0.1;
       this.u.uFreq.value = 2.2;
+      // jaws wide as it comes out of the water, snapping shut at the top
+      this.u.uJaw.value = k < 0.45 ? 0.2 + 0.6 * Math.min(1, k / 0.3) : Math.max(0.12, 0.8 - (k - 0.45) * 3);
       airborne = rise > 0.2;
       // the line follows its jaw
       _o.position.copy(m.position);
@@ -217,6 +221,8 @@ export class SharkShow {
       m.rotation.set(0.02, Math.atan2(this.heading.x, this.heading.z), this.rollSide * (0.55 + Math.sin(time * 0.7) * 0.08));
       this.u.uSwim.value = 0.03;
       this.u.uFreq.value = 0.5;
+      // spent, but it still works its jaws at you
+      this.u.uJaw.value = 0.2 + 0.28 * Math.max(0, Math.sin(time * 1.3)) ** 3;
       if (Math.random() < dt * 1.5) this.fx()?.ripple(_v.copy(m.position).addScaledVector(this.heading, -L * 0.45), 0.8, 0, 1.4);
     } else if (this.mode === 'release') {
       // down and away
@@ -226,6 +232,7 @@ export class SharkShow {
       m.rotation.set(0.25 * k, Math.atan2(this.heading.x, this.heading.z), 0.25 * (1 - k));
       this.u.uSwim.value = 0.09;
       this.u.uFreq.value = 1.6;
+      this.u.uJaw.value = 0.12;
       if (k >= 1) this.stop();
     }
     return airborne;
