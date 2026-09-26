@@ -180,33 +180,52 @@ export function pearlBust(k: Kit): Object3D {
   const chest: [number, number][] = [[0.02, 0], [0.2, 0.0], [0.225, 0.05], [0.21, 0.11], [0.16, 0.17], [0.09, 0.21], [0.05, 0.225], [0, 0.23]];
   b.at(velvet, turned(chest, 32).scale(1, 1, 0.5), 0, Y, 0);
   b.at(velvet, turned([[0.052, 0.18], [0.05, 0.36], [0.056, 0.4], [0.04, 0.43], [0, 0.435]], 24), 0, Y, 0);
-  /** how far forward the chest's surface is at height y (above the bust's base) */
-  const chestZ = (y: number): number => {
+  // The bust's own surface, so the pearls lie on it: at height y (above its base), how far out
+  // it is along a direction θ round the vertical (θ = π/2 straight out of the front). The chest
+  // is the lathe flattened to half depth (an ellipse, R(y) across, R(y)/2 front to back); the
+  // neck a round column over it.
+  const Rchest = (y: number): number => {
     for (let i = 0; i < chest.length - 1; i++) {
       const [r0, y0] = chest[i];
       const [r1, y1] = chest[i + 1];
-      if (y >= y0 && y <= y1) return 0.5 * (r0 + ((r1 - r0) * (y - y0)) / (y1 - y0));
+      if (y >= y0 && y <= y1) return r0 + ((r1 - r0) * (y - y0)) / (y1 - y0);
     }
     return 0;
   };
-  // three strands of pearls, graded: round the neck at the back, lying on the chest in front
+  const NECK = 0.052;
+  const surface = (y: number, th: number): number => {
+    const R = Rchest(y);
+    const onChest = R / Math.sqrt(Math.cos(th) ** 2 + (Math.sin(th) / 0.5) ** 2);
+    return Math.max(onChest, y >= 0.18 ? NECK : 0);
+  };
+  /** a pearl of radius pr resting on the surface at height y, direction θ */
+  const onBust = (y: number, th: number, pr: number): Vector3 => {
+    const r = surface(y, th) + pr + 0.002;
+    return new Vector3(Math.cos(th) * r, Y + y, Math.sin(th) * r);
+  };
+  // three strands of pearls, graded: each round the neck at the back, a little lower than the
+  // last, and drooping down onto the chest in front, lying on it all the way round
   const pearl = M.gloss(k.renderer, '#fbf4ee');
-  for (const [drop, rx, pr] of [[0.035, 0.062, 0.0085], [0.07, 0.078, 0.0095], [0.105, 0.094, 0.011]] as const) {
+  const strands = [
+    [0.26, 0.05, 0.0085],
+    [0.24, 0.085, 0.0095],
+    [0.22, 0.12, 0.011],
+  ] as const;
+  for (const [top, drop, pr] of strands) {
     const pts: Vector3[] = [];
-    for (let i = 0; i <= 64; i++) {
-      const a = (i / 64) * Math.PI * 2;
-      const front = Math.max(0, Math.sin(a));
-      const y = 0.215 - drop * Math.pow(front, 2);
-      const x = Math.cos(a) * rx * (1 - 0.25 * front);
-      const zf = Math.max(Math.sqrt(Math.max(0, 0.052 * 0.052 - x * x)), chestZ(y) * Math.sqrt(Math.max(0, 1 - Math.pow(x / 0.22, 2)))) + pr;
-      const z = Math.sin(a) >= 0 ? zf * front + (1 - front) * 0 + Math.sin(a) * 0.001 : Math.sin(a) * (0.052 + pr);
-      pts.push(new Vector3(x, Y + y, z));
+    for (let i = 0; i <= 96; i++) {
+      const th = (i / 96) * Math.PI * 2;
+      const front = Math.max(0, Math.sin(th));
+      pts.push(onBust(top - drop * front * front, th, pr));
     }
     beads(b, pearl, pts, pr, 1.04);
   }
-  // a teardrop pendant on the shortest
-  b.at(M.gloss(k.renderer, '#fff6f0'), turned([[0, -0.022], [0.012, -0.008], [0.009, 0.006], [0, 0.012]], 12), 0, Y + 0.155, 0.078);
-  b.at(gold, turned([[0, 0], [0.006, 0.002], [0, 0.008]], 8), 0, Y + 0.168, 0.078);
+  // a teardrop pendant hanging from the front of the shortest, lying on the chest under it
+  const [top0, drop0, pr0] = strands[0];
+  const clasp = onBust(top0 - drop0 - pr0 * 1.6, Math.PI / 2, 0.006);
+  b.at(gold, turned([[0, 0], [0.004, 0.003], [0, 0.007]], 8), clasp.x, clasp.y, clasp.z);
+  const drop = onBust(top0 - drop0 - 0.022, Math.PI / 2, 0.011);
+  b.at(M.gloss(k.renderer, '#fff6f0'), turned([[0, -0.022], [0.011, -0.008], [0.008, 0.006], [0, 0.012]], 12), drop.x, drop.y, drop.z);
   return b.group();
 }
 
