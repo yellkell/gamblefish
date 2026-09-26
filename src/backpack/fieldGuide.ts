@@ -465,34 +465,33 @@ export class FieldGuide {
     label('DROP-OFF · 6 m', 128, 100, 20);
     label('DEEP WATER', 20, 140, 24);
     label('THE PIER', L.pier.x + 26, (L.pier.zStart + L.pier.zEnd) / 2 + 12, 20);
-    // the walks off the pier head, as far as they're built (dotted where they're still to come)
+    // the walks off the pier head, once they're built: nothing on the chart until then
     const built = this.walks?.() ?? {};
     for (const w of WALKS) {
+      if ((built[w.id] ?? 0) < 1) continue;
       const len = w.bays * w.bay + w.head[1];
-      const k = built[w.id] ?? 0;
       const [x0, y0] = px(w.gate.x, w.gate.z);
       const [x1, y1] = px(w.gate.x + w.dir[0] * len, w.gate.z + w.dir[1] * len);
       c.lineCap = 'round';
-      c.setLineDash([4, 7]);
-      c.lineWidth = 3;
-      c.strokeStyle = 'rgba(107, 74, 42, 0.55)';
+      c.lineWidth = 6;
+      c.strokeStyle = '#6b4a2a';
       c.beginPath();
       c.moveTo(x0, y0);
       c.lineTo(x1, y1);
       c.stroke();
-      c.setLineDash([]);
-      if (k > 0) {
-        c.lineWidth = 6;
-        c.strokeStyle = '#6b4a2a';
-        c.beginPath();
-        c.moveTo(x0, y0);
-        c.lineTo(x0 + (x1 - x0) * k, y0 + (y1 - y0) * k);
-        c.stroke();
-      }
-      if (k >= 1) {
-        c.fillStyle = '#6b4a2a';
-        c.fillRect(x1 - 6, y1 - 6, 12, 12);
-      }
+      // the platform at its end
+      c.fillStyle = '#6b4a2a';
+      c.fillRect(x1 - 7, y1 - 7, 14, 14);
+      // named: the reef walk above its middle (its end is in the reef's own label), the deep walk
+      // under its platform
+      c.font = font(700, 18);
+      c.textAlign = 'center';
+      c.textBaseline = 'middle';
+      const [lx, ly] = w.id === 'reef' ? [(x0 + x1) / 2, (y0 + y1) / 2 - 20] : [x1, y1 + 22];
+      c.lineWidth = 4;
+      c.strokeStyle = 'rgba(246, 236, 212, 0.9)';
+      c.strokeText(w.id === 'reef' ? 'REEF WALK' : 'DEEP WALK', lx, ly);
+      c.fillText(w.id === 'reef' ? 'REEF WALK' : 'DEEP WALK', lx, ly);
     }
     c.lineCap = 'butt';
     // you are here

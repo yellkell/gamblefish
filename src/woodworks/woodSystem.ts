@@ -57,6 +57,8 @@ export const PRICES = { axe: 120, bundle: 40, cart: 180 };
 const LOGS_PER_TREE = 4;
 const BLOWS = 4;
 const REGROW_S = 60;
+/** the timber yard's roof: its tilt up toward the counter (radians) */
+const ROOF_TILT = 0.12;
 
 /** the timber yard (its counter's front faces +x) and the woodlot's trees (x, z) */
 export const YARD: [number, number] = [26, -61];
@@ -350,9 +352,12 @@ export class WoodSystem extends createSystem({}) {
       [1.5, 0.9],
       [-1.5, -1.1],
       [1.5, -1.1],
-    ])
-      box(darkWood, 0.14, pz > 0 ? 2.6 : 2.9, 0.14, px, pz > 0 ? 1.3 : 1.45, pz);
-    for (let i = 0; i < 9; i++) box(roofMat, 0.4, 0.05, 2.6, -1.6 + i * 0.4, 2.78, -0.1, -0.12);
+    ]) {
+      // up to the roof's underside, which rises toward the front (over the sign)
+      const top = 2.78 - 0.025 / Math.cos(ROOF_TILT) + (pz + 0.1) * Math.tan(ROOF_TILT) + 0.03;
+      box(darkWood, 0.14, top, 0.14, px, top / 2, pz);
+    }
+    for (let i = 0; i < 9; i++) box(roofMat, 0.4, 0.05, 2.6, -1.6 + i * 0.4, 2.78, -0.1, -ROOF_TILT);
     box(plank, 3.0, 0.95, 0.6, 0, 0.475, 0.6);
     box(darkWood, 3.1, 0.06, 0.7, 0, 0.98, 0.6);
     // the sign over the front

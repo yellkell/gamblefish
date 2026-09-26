@@ -405,6 +405,8 @@ export class Walks {
     if (w.shown === stepsOf(w.def)) {
       const [ax, az] = w.def.dir;
       const L = w.def.bays * w.def.bay + w.def.head[1] / 2;
+      // the chart in the field guide draws the walk now it's finished
+      this.deps.state.emit();
       this.deps.onFinished?.(w.def, new Vector3(w.def.gate.x + ax * L, DECK + 1.2, w.def.gate.z + az * L));
       for (const o of this.walks) this.paintBoard(o);
     }

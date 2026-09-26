@@ -207,8 +207,8 @@ and the vendors.
   - **The walks:** two build crates stand on the pier head. Put wood in and a walk lays itself
     out plank by plank through a gateway in the rail. The **reef walk** (48 logs) runs 60 m out
     to a platform over the reef's edge. Finishing it unlocks the **deep walk** (44 logs), which
-    runs past the drop-off to a platform over 14 m of water. The chart in the field guide shows
-    both walks, planned or built. Wood, the axe and the walks are saved.
+    runs past the drop-off to a platform over 14 m of water. Each walk appears on the field guide's
+    chart, named, once it's finished. Wood, the axe and the walks are saved.
 - **ALWAYS DAY:** a switch under MUSIC in the backpack holds the island in the early
   afternoon. The fish that only bite at night won't bite while it's on.
 - **Wallet:** `src/ui/wallet.ts` puts an odometer-style money counter on both
