@@ -13,6 +13,7 @@ import * as GearJs from '../../vendor/tidewater/src/game/Gear.js';
 import { registerGear } from './gear.ts';
 import { biting, registerTimedFish } from './timedFish.ts';
 import { registerTrophyFish, trophyOdds, type Rig } from './trophyFish.ts';
+import { registerSharkFish, sharkOdds, sharkUnlocked } from './shark.ts';
 
 export interface FishInfo {
   name: string;
@@ -34,6 +35,8 @@ export type Habitat = Record<HabitatKey, number>;
 // reads it; the village's gear joins its upgrade tracks before any save is made or loaded
 registerTimedFish(Table.FISH as Record<string, unknown>, Table.FISH_IDS as string[]);
 registerTrophyFish(Table.FISH as Record<string, unknown>, Table.FISH_IDS as string[]);
+// the great white, last in the table (fishing/shark.ts)
+registerSharkFish(Table.FISH as Record<string, unknown>, Table.FISH_IDS as string[]);
 registerGear(GearJs.UPGRADES as unknown as Parameters<typeof registerGear>[0]);
 
 export const FISH = Table.FISH as unknown as Record<string, FishInfo>;
@@ -45,18 +48,20 @@ export const habitatAt = BitesJs.habitatAt as (w: { depth: number; reefDist: num
 const activity = BitesJs.activity as (pref: string, hour: number) => number;
 /**
  * Tidewater's weighted pick of what bites here (Bites.js pickSpecies), with the timed fish kept
- * to their hours (fishing/timedFish.ts) and the trophy fish to the rigs that can take them
- * (fishing/trophyFish.ts: no rig, no trophies).
+ * to their hours (fishing/timedFish.ts), the trophy fish to the rigs that can take them
+ * (fishing/trophyFish.ts: no rig, no trophies) and the shark to a full field guide and deep
+ * water (fishing/shark.ts).
  */
 export function pickSpecies(h: Habitat, hour: number, rng: () => number = Math.random, rig?: Rig): string | null {
   let total = 0;
   const w: number[] = [];
   const luck = rig ? (gearStats(rig.gear).luck ?? 1) : 1;
+  const shark = sharkUnlocked(rig?.log, FISH_IDS);
   for (const id of FISH_IDS) {
     const f = FISH[id];
     let hw = 0;
     for (const k in f.habitat) hw += (f.habitat[k as HabitatKey] ?? 0) * h[k as HabitatKey];
-    const x = hw * f.rarity * activity(f.time, hour) * biting(id, hour) * trophyOdds(id, hour, rig, luck);
+    const x = hw * f.rarity * activity(f.time, hour) * biting(id, hour) * trophyOdds(id, hour, rig, luck) * sharkOdds(id, rig?.depth ?? 0, shark, (rig?.log?.[id]?.count ?? 0) > 0);
     w.push(x);
     total += x;
   }

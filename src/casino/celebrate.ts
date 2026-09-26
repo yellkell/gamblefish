@@ -57,6 +57,7 @@ interface Flake {
   resting: boolean;
   flutter: number;
   colour: number;
+  size: number;
 }
 
 interface Glint {
@@ -72,6 +73,8 @@ interface Riser {
   from: Vector3;
   t: number;
   size: number;
+  /** how far it floats up (m) */
+  lift: number;
 }
 
 type SessionFn = () => XRSession | null | undefined;
@@ -136,13 +139,14 @@ export class Celebration {
   /**
    * A win at `at` (where the eye should go: the winning hand, the reels, the number).
    * `amount` rises from there in gold if given; `banner` is shown over it for tier 3 (or any
-   * tier, if given).
+   * tier, if given). `scale` grows all of it for a win seen from further off (a shark alongside).
    */
-  win(opts: { at: Vector3; tier: Tier; amount?: number; banner?: string; bannerAt?: Vector3; quiet?: boolean }): void {
+  win(opts: { at: Vector3; tier: Tier; amount?: number; banner?: string; bannerAt?: Vector3; quiet?: boolean; scale?: number }): void {
     const { at, tier } = opts;
-    this.burst(at, tier);
-    if (opts.amount) this.rise(at, opts.amount, tier);
-    if (opts.banner) this.showBanner(opts.banner, opts.bannerAt ?? at.clone().add(new Vector3(0, 0.34, 0)));
+    const k = opts.scale ?? 1;
+    this.burst(at, tier, k);
+    if (opts.amount) this.rise(at, opts.amount, tier, k);
+    if (opts.banner) this.showBanner(opts.banner, opts.bannerAt ?? at.clone().add(new Vector3(0, 0.34 * k, 0)), k);
     if (!opts.quiet) {
       winShimmer(tier);
       if (tier === 3) bigWinHit();
@@ -151,18 +155,18 @@ export class Celebration {
   }
 
   /** The light and the confetti on their own (no amount, no sound). */
-  burst(at: Vector3, tier: Tier): void {
+  burst(at: Vector3, tier: Tier, k = 1): void {
     // a flash of light where it happened
     this.flashT = 0;
-    this.flashSize = [0, 0.5, 0.8, 1.2][tier];
+    this.flashSize = [0, 0.5, 0.8, 1.2][tier] * k;
     this.flash.position.copy(at);
     // a ring racing out across the surface below it
     this.ringT = 0;
-    this.ringSize = [0, 0.45, 0.8, 1.3][tier];
+    this.ringSize = [0, 0.45, 0.8, 1.3][tier] * k;
     this.ring.position.set(at.x, this.restAt(at.x, at.z) + 0.004, at.z);
     // confetti thrown up and out, glints with it
     const n = [0, 26, 70, 150][tier];
-    const power = [0, 1.3, 1.8, 2.5][tier];
+    const power = [0, 1.3, 1.8, 2.5][tier] * Math.sqrt(k);
     for (let i = 0; i < n; i++) {
       const a = Math.random() * TAU;
       const out = (0.25 + Math.random() * 0.75) * power * 0.55;
@@ -176,6 +180,7 @@ export class Celebration {
         resting: false,
         flutter: Math.random() * TAU,
         colour: CONFETTI_COLOURS[i % CONFETTI_COLOURS.length],
+        size: Math.sqrt(k),
       });
     }
     if (this.flakes.length > MAX_CONFETTI) this.flakes.splice(0, this.flakes.length - MAX_CONFETTI);
@@ -189,28 +194,28 @@ export class Celebration {
         v: new Vector3(Math.cos(a) * Math.cos(e) * s, Math.sin(e) * s + 0.3, Math.sin(a) * Math.cos(e) * s),
         age: 0,
         life: 0.6 + Math.random() * 0.7,
-        size: 0.025 + Math.random() * 0.03,
+        size: (0.025 + Math.random() * 0.03) * k,
       });
     }
     if (this.sparks.length > MAX_GLINTS) this.sparks.splice(0, this.sparks.length - MAX_GLINTS);
   }
 
   /** "+$120" in gold, popping in at `at` and floating up. */
-  rise(at: Vector3, amount: number, tier: Tier): void {
+  rise(at: Vector3, amount: number, tier: Tier, k = 1): void {
     const sprite = new Sprite(new SpriteMaterial({ map: amountTexture(amount), transparent: true, depthWrite: false, depthTest: false, toneMapped: false }));
     sprite.renderOrder = 25;
     this.group.add(sprite);
-    this.risers.push({ sprite, from: at.clone(), t: 0, size: [0, 0.075, 0.095, 0.12][tier] });
+    this.risers.push({ sprite, from: at.clone(), t: 0, size: [0, 0.075, 0.095, 0.12][tier] * k, lift: 0.2 * k });
   }
 
-  showBanner(text: string, at: Vector3): void {
+  showBanner(text: string, at: Vector3, k = 1): void {
     const mat = this.banner.material;
     if (mat.map?.name !== text) {
       mat.map?.dispose();
       mat.map = bannerTexture(text);
       mat.map.name = text;
     }
-    this.bannerW = 0.72;
+    this.bannerW = 0.72 * k;
     this.banner.position.copy(at);
     this.bannerT = 0;
   }
@@ -302,7 +307,7 @@ export class Celebration {
       }
       o.position.copy(f.p);
       o.rotation.set(f.rot.x, f.rot.y, f.rot.z);
-      o.scale.setScalar(Math.max(0.001, Math.min(1, (f.life - f.age) / 0.45)));
+      o.scale.setScalar(Math.max(0.001, Math.min(1, (f.life - f.age) / 0.45)) * f.size);
       o.updateMatrix();
       this.confetti.setMatrixAt(n, m.copy(o.matrix));
       this.confetti.setColorAt(n++, _c.setHex(f.colour));
@@ -353,7 +358,7 @@ export class Celebration {
         return false;
       }
       const pop = t < 0.3 ? easeOutBack(t / 0.3) : 1;
-      const rise = 0.06 + 0.2 * (1 - Math.pow(1 - Math.min(1, t / LIFE), 2));
+      const rise = 0.3 * r.lift + r.lift * (1 - Math.pow(1 - Math.min(1, t / LIFE), 2));
       r.sprite.position.set(r.from.x, r.from.y + rise, r.from.z);
       r.sprite.scale.set(r.size * 3.2 * pop, r.size * pop, 1);
       r.sprite.material.opacity = t > LIFE - 0.6 ? (LIFE - t) / 0.6 : 1;

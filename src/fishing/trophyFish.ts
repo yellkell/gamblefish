@@ -187,6 +187,8 @@ export interface Rig {
   depth: number;
   /** the gear levels (GameState.upgrades) */
   gear: Record<string, number>;
+  /** what's been caught so far (GameState.log): the shark waits for a full book */
+  log?: Record<string, { count: number }>;
 }
 
 /** Does the rig have everything this trophy needs? The first thing missing, or null. */

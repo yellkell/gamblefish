@@ -94,7 +94,7 @@ export function fishSkinSurface(P: Record<string, number>): string {
   float grain = (fishVnoise(vec2(Lp.z, D.z) * 420.0) - 0.5) * 0.00022 * grainFade;
   float rd0 = abs(fract(D.w + 0.5) - 0.5);
   float rayH = (1.0 - smoothstep(0.0, 0.25, rd0)) * 0.0004;
-  float bumpH = (isBody ? sc * 0.0016 + op * 0.0025 + grain : isFin ? rayH : 0.0) * L;
+  float bumpH = (isBody ? sc * 0.0016 + op * 0.0025 + grain : isFin && !shark ? rayH : 0.0) * L;
 
   float rough = 0.4; float metal = 0.0; float transl = 0.0;
   vec3 back = r0.xyz; vec3 flank = r1.xyz; vec3 belly = r2.xyz;

@@ -40,6 +40,10 @@ registerTimedModels(SPECIES, SKIN);
 const { registerTrophyFish, registerTrophyModels } = await import('../src/fishing/trophyFish.ts');
 registerTrophyFish(FISH, FISH_IDS);
 registerTrophyModels(SPECIES, SKIN);
+// and the great white (src/fishing/shark.ts)
+const { registerSharkFish, registerSharkModel } = await import('../src/fishing/shark.ts');
+registerSharkFish(FISH, FISH_IDS);
+registerSharkModel(SPECIES, SKIN);
 
 // the rod module, with its builders exported
 const rodSrc = readFileSync(resolve(TW, 'game/FishingRod.js'), 'utf8');

@@ -14,6 +14,7 @@ import type { LastCatch } from './tidewater.ts';
 import { FISH } from './tidewater.ts';
 import { TIMED } from './timedFish.ts';
 import { TROPHY } from './trophyFish.ts';
+import { SHARK_ID } from './shark.ts';
 
 export interface GaugeState {
   label: string;
@@ -145,16 +146,17 @@ export class CatchCard {
     c.fill();
     c.lineWidth = 4;
     const trophy = TROPHY[info.species];
-    c.strokeStyle = trophy ? '#ffd45a' : info.record || info.newSpecies ? INK.amber : INK.rim;
-    c.lineWidth = trophy ? 7 : 4;
+    const shark = info.species === SHARK_ID;
+    c.strokeStyle = trophy || shark ? '#ffd45a' : info.record || info.newSpecies ? INK.amber : INK.rim;
+    c.lineWidth = trophy || shark ? 7 : 4;
     c.stroke();
     c.textBaseline = 'alphabetic';
     c.textAlign = 'left';
     let y = 62;
-    if (info.newSpecies || info.record || trophy) {
+    if (info.newSpecies || info.record || trophy || shark) {
       c.font = font(700, 28);
       c.fillStyle = INK.amber;
-      c.fillText([trophy ? '★ TROPHY FISH' : '', info.newSpecies ? 'NEW SPECIES' : info.record ? 'NEW RECORD' : ''].filter(Boolean).join('  ·  '), 28, 46);
+      c.fillText([trophy ? '★ TROPHY FISH' : shark ? '★ THE LAST CATCH' : '', info.newSpecies ? 'NEW SPECIES' : info.record ? 'NEW RECORD' : ''].filter(Boolean).join('  ·  '), 28, 46);
       y = 92;
     }
     c.font = font(700, 50);
@@ -163,7 +165,7 @@ export class CatchCard {
     c.font = font(500, 24);
     c.fillStyle = INK.dim;
     // a fish that keeps its own hours says which, a trophy what it took
-    const when = TIMED[info.species]?.when ?? trophy?.when;
+    const when = TIMED[info.species]?.when ?? trophy?.when ?? (shark ? 'held through every run' : undefined);
     c.fillText(when ? `${f.sci}  ·  ${when}` : f.sci, 28, y + 32, 456);
     c.font = font(700, 44);
     c.fillStyle = INK.hot;
@@ -174,9 +176,13 @@ export class CatchCard {
     c.fillText(`$${info.value}`, 484, y + 100);
     c.textAlign = 'left';
     c.font = font(600, 24);
-    c.fillStyle = info.kept ? INK.dim : INK.danger;
-    c.fillText('into your backpack…', 28, y + 146);
-    if (info.newSpecies) {
+    c.fillStyle = shark ? INK.amber : info.kept ? INK.dim : INK.danger;
+    c.fillText(shark ? 'released: the bounty is yours' : 'into your backpack…', 28, y + 146);
+    if (shark) {
+      c.textAlign = 'right';
+      c.fillStyle = INK.amber;
+      c.fillText(info.newSpecies ? 'field guide complete' : '', 484, y + 146);
+    } else if (info.newSpecies) {
       // its page in the backpack's field guide has just filled in
       c.textAlign = 'right';
       c.fillStyle = INK.amber;
