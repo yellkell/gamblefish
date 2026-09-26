@@ -12,8 +12,9 @@ import { launchXR, SessionMode, World } from '@iwsdk/core';
 import { Vector3, type Camera, type PerspectiveCamera } from 'three';
 import { Music } from './audio/music.ts';
 import { ShoreSound } from './audio/shore.ts';
-import { ensureAudio } from './audio/sfx.ts';
+import { ensureAudio, uiDeny } from './audio/sfx.ts';
 import { BackpackSystem, backpackDeps, backpackView } from './backpack/BackpackSystem.ts';
+import type { Place } from './backpack/chart.ts';
 import { FishingSystem, fishingDeps, fishingView } from './fishing/FishingSystem.ts';
 import { loadProps } from './fishing/props.ts';
 import { createGameState } from './fishing/tidewater.ts';
@@ -211,6 +212,54 @@ World.create(container, {
   backpackDeps.chart = { heightAt: (x, z) => heightfield.heightAt(x, z), layout: json.layout, buildings: frames };
   backpackDeps.where = () => world.camera.getWorldPosition(new Vector3());
   backpackDeps.walks = () => woodView.walks?.() ?? {};
+  // the chart's places: point at one in the field guide and you're there
+  backpackDeps.travel = (p) => {
+    const st = fishingView.state?.();
+    const spot = st === 'fighting' || st === 'landing' ? null : spotFor(p);
+    if (!spot || !teleportView.travel) {
+      uiDeny();
+      return false;
+    }
+    blink.fire();
+    teleportView.travel(spot.x, spot.z, Math.atan2(-(spot.face[0] - spot.x), -(spot.face[1] - spot.z)), spot.y);
+    return true;
+  };
+  /**
+   * Where you land for a place on the chart, and what you're looking at: inside a room a step in
+   * from its door, looking in; at a building without one, in front of it (or beside it, wherever
+   * there's dry ground first), looking at it; at a spot, where it says to stand.
+   */
+  const spotFor = (p: Place): { x: number; z: number; y: number; face: [number, number] } | null => {
+    if (!p.building) {
+      const [x, z] = p.stand ?? p.at!;
+      const area = surfaces.areaNear(x, z, 2.3);
+      return surfaces.standable(area, x, z) ? { x, z, y: area.y, face: p.face ?? p.at! } : null;
+    }
+    const b = frames.find((f) => f.name === p.building);
+    if (!b) return null;
+    const room = interiors.find((i) => i.name === b.name);
+    if (room) {
+      const at = room.toWorld(0, 0, room.d / 2 - 1.0);
+      const back = room.toWorld(0, 0, -room.d / 2);
+      return { x: at.x, z: at.z, y: at.y, face: [back.x, back.z] };
+    }
+    const c = Math.cos(b.yaw);
+    const sn = Math.sin(b.yaw);
+    // front, then either side, then the back: [across, out] for each metre further out
+    for (let out = 1.8; out < 7; out += 0.6)
+      for (const [lx, lz] of [
+        [b.doorX ?? 0, b.d / 2 + b.porch + out],
+        [b.w / 2 + out, 0],
+        [-b.w / 2 - out, 0],
+        [0, -b.d / 2 - out],
+      ]) {
+        const x = b.x + lx * c + lz * sn;
+        const z = b.z - lx * sn + lz * c;
+        const area = surfaces.areaNear(x, z, b.floorY);
+        if (surfaces.standable(area, x, z)) return { x, z, y: area.y, face: [b.x, b.z] };
+      }
+    return null;
+  };
   world.registerSystem(BackpackSystem);
 
   // stepping through a doorway: a blink hides the door you can't see open
@@ -229,6 +278,7 @@ World.create(container, {
     state: game,
     ground: (x: number, z: number) => heightfield.heightAt(x, z),
     addBox: (b: BoxCollider) => surfaces.addBox(b),
+    removeBox: (b: BoxCollider) => surfaces.removeBox(b),
     env: casinoEnv(world.renderer),
     busy: () => backpackView.open || interiorAt(interiors, world.player.position.x, world.player.position.z) !== null,
   });
@@ -289,7 +339,7 @@ World.create(container, {
   world.player.rotation.set(0, s.yaw, 0);
 
   // Dev hook: drive the rig without a headset (`__fish.move.to(x, z, yaw)`).
-  (window as unknown as { __fish: unknown }).__fish = { world, surfaces, move: teleportView, json, game, fishing: fishingView, vegetation, backpack: backpackView, interiors, tables, music, shore, sky, homeShops, gearShops, villa, fx, props: fishingDeps.props, wood: woodView };
+  (window as unknown as { __fish: unknown }).__fish = { world, surfaces, move: teleportView, json, game, fishing: fishingView, vegetation, backpack: backpackView, interiors, tables, music, shore, sky, homeShops, gearShops, villa, fx, props: fishingDeps.props, wood: woodView, spotFor };
 
   if (import.meta.env.DEV) void import('./dev/harness.ts').then((m) => m.installHarness(world));
 

@@ -21,10 +21,11 @@ import { FISH, FISH_IDS, fishLengthCm, type GameState, type HabitatKey } from '.
 import { TIMED } from '../fishing/timedFish.ts';
 import { TROPHY } from '../fishing/trophyFish.ts';
 import { font } from '../ui/fonts.ts';
+import { roundRect } from '../ui/panel.ts';
 import { InteractivePanel, register } from '../ui/pointer.ts';
 import { silhouette, thumbnail } from '../ui/thumbnail.ts';
 import { SHARK_ID } from '../fishing/shark.ts';
-import { drawChart, KEY, CHART, type ChartSource } from './chart.ts';
+import { drawChart, KEY, CHART, type ChartSource, type Place } from './chart.ts';
 import { WALKS } from '../woodworks/gates.ts';
 
 /** a line or two about each one, in the book's voice */
@@ -126,6 +127,8 @@ export class FieldGuide {
     private readonly where: (() => { x: number; z: number }) | null = null,
     /** how far each walk off the pier head is built (0..1) */
     private readonly walks: (() => Record<string, number>) | null = null,
+    /** go to a place on the chart */
+    private readonly travel: ((p: Place) => void) | null = null,
   ) {
     const regular = FISH_IDS.filter((id) => !BIG.includes(id) && id !== SHARK_ID);
     this.pages = [{ kind: 'title' }, { kind: 'chart' }];
@@ -154,8 +157,8 @@ export class FieldGuide {
     this.group.add(board);
     this.left = this.page(-SIZE[0] / 2 - 0.002);
     this.right = this.page(SIZE[0] / 2 + 0.002);
-    this.left.onClick = () => this.turn(-1);
-    this.right.onClick = () => this.turn(1);
+    this.left.onClick = (id) => this.click(id);
+    this.right.onClick = (id) => this.click(id);
     // (once both pages exist: this can run straight away)
     this.right.repaintOnFonts(() => (this.dirty = true));
     this.group.visible = false;
@@ -184,6 +187,15 @@ export class FieldGuide {
   /** per frame while open: repaint when a catch has filled something in */
   update(): void {
     if (this.open && this.dirty) this.paint();
+  }
+
+  /** the places on the chart page you can point at to go to, by button id */
+  private readonly places = new Map<string, Place>();
+
+  private click(id: string): void {
+    if (id === 'left' || id === 'right') return this.turn(id === 'left' ? -1 : 1);
+    const place = this.places.get(id);
+    if (place) this.travel?.(place);
   }
 
   private turn(d: number): void {
@@ -215,8 +227,9 @@ export class FieldGuide {
     c.fillRect(0, 0, W, H);
     c.textBaseline = 'alphabetic';
     const page = this.pages[n];
+    const buttons: { id: string; x: number; y: number; w: number; h: number }[] = [];
     if (page?.kind === 'title') this.title(c);
-    else if (page?.kind === 'chart') this.chartPage(c);
+    else if (page?.kind === 'chart') buttons.push(...this.chartPage(c, p.hover));
     else if (page?.kind === 'last') this.lastPage(c);
     else if (page?.kind === 'pair') page.ids.forEach((id, i) => this.entry(c, id, 36 + i * 520, i === 0 && page.ids.length > 1));
     else if (page?.kind === 'big') this.bigEntry(c, page.id);
@@ -229,7 +242,8 @@ export class FieldGuide {
     const first = this.spread === 0;
     const can = side === 'left' ? !first : !last;
     const bx = side === 'left' ? 30 : W - 190;
-    p.buttons = can ? [{ id: side, x: bx, y: H - 110, w: 160, h: 90 }] : [];
+    // the corner arrow first: it wins where a line of the key comes close to it
+    p.buttons = [...(can ? [{ id: side, x: bx, y: H - 110, w: 160, h: 90 }] : []), ...buttons];
     if (can) {
       c.fillStyle = p.hover === side ? '#8a5a2a' : 'rgba(90, 60, 30, 0.75)';
       c.font = font(700, 64);
@@ -428,14 +442,24 @@ export class FieldGuide {
     }
   }
 
-  /** The chart of the bay: the picture, a few water names, where you are, and the key. */
-  private chartPage(c: CanvasRenderingContext2D): void {
+  /**
+   * The chart of the bay: the picture, a few water names, where you are, and the key. Its
+   * markers, the lines of the key and a finished walk's platform are buttons: point and go.
+   */
+  private chartPage(c: CanvasRenderingContext2D, hover: string | null): { id: string; x: number; y: number; w: number; h: number }[] {
     const W = PX[0];
+    const buttons: { id: string; x: number; y: number; w: number; h: number }[] = [];
+    this.places.clear();
     c.textAlign = 'center';
     c.fillStyle = INK_BROWN;
-    c.font = font(700, 50);
-    c.fillText('CHART OF THE BAY', W / 2, 76);
-    if (!this.chartSource) return;
+    c.font = font(700, 46);
+    c.fillText('CHART OF THE BAY', W / 2, 58);
+    if (this.travel) {
+      c.font = `italic ${font(600, 22)}`;
+      c.fillStyle = INK_FADED;
+      c.fillText('point at a place on the chart, or in the key, to go there', W / 2, 88);
+    }
+    if (!this.chartSource) return buttons;
     const X = 40;
     const Y = 100;
     const w = W - 80;
@@ -479,9 +503,22 @@ export class FieldGuide {
       c.moveTo(x0, y0);
       c.lineTo(x1, y1);
       c.stroke();
-      // the platform at its end
-      c.fillStyle = '#6b4a2a';
+      // the platform at its end (point at it to go out there)
+      const id = `walk:${w.id}`;
+      c.fillStyle = hover === id ? '#c0301c' : '#6b4a2a';
       c.fillRect(x1 - 7, y1 - 7, 14, 14);
+      if (hover === id) {
+        c.strokeStyle = '#ffd24a';
+        c.lineWidth = 3;
+        c.strokeRect(x1 - 11, y1 - 11, 22, 22);
+      }
+      const plat = w.bays * w.bay + w.head[1] / 2;
+      this.places.set(id, {
+        text: w.id === 'reef' ? 'Reef walk' : 'Deep walk',
+        at: [w.gate.x + w.dir[0] * plat, w.gate.z + w.dir[1] * plat],
+        face: [w.gate.x + w.dir[0] * (len + 10), w.gate.z + w.dir[1] * (len + 10)],
+      });
+      buttons.push({ id, x: x1 - 20, y: y1 - 20, w: 40, h: 40 });
       // named: the reef walk above its middle (its end is in the reef's own label), the deep walk
       // under its platform
       c.font = font(700, 18);
@@ -513,15 +550,37 @@ export class FieldGuide {
       c.fillStyle = '#d0201a';
       c.fillText('YOU', a + 14, b + 7);
     }
+    // the markers are buttons too (and light up with their line of the key)
+    for (const m of ch.markers) {
+      const id = `go:${m.n - 1}`;
+      this.places.set(id, KEY[m.n - 1]);
+      buttons.push({ id, x: X + m.x - 18, y: Y + m.y - 18, w: 36, h: 36 });
+      if (hover === id || hover === `key:${m.n - 1}`) {
+        c.strokeStyle = '#ffd24a';
+        c.lineWidth = 5;
+        c.beginPath();
+        c.arc(X + m.x, Y + m.y, 18, 0, Math.PI * 2);
+        c.stroke();
+      }
+    }
     // the key, in three columns under the chart
-    const top = Y + h + 44;
+    const top = Y + h + 40;
+    const rows = Math.ceil(KEY.length / 3);
     const colW = (W - 80) / 3;
     c.textAlign = 'left';
-    KEY.forEach(([, text], i) => {
-      const col = Math.floor(i / 4);
-      const row = i % 4;
+    KEY.forEach((place, i) => {
+      const col = Math.floor(i / rows);
+      const row = i % rows;
       const x = 40 + col * colW;
-      const y = top + row * 42;
+      const y = top + row * 40;
+      const id = `key:${i}`;
+      this.places.set(id, place);
+      buttons.push({ id, x, y: y - 28, w: colW - 6, h: 38 });
+      if (hover === id || hover === `go:${i}`) {
+        c.fillStyle = 'rgba(154, 42, 26, 0.14)';
+        roundRect(c, x - 4, y - 28, colW - 6, 38, 10);
+        c.fill();
+      }
       c.fillStyle = '#9a2a1a';
       c.beginPath();
       c.arc(x + 14, y - 8, 13, 0, Math.PI * 2);
@@ -533,8 +592,9 @@ export class FieldGuide {
       c.textAlign = 'left';
       c.fillStyle = INK_BROWN;
       c.font = font(600, 21);
-      c.fillText(text, x + 34, y, colW - 40);
+      c.fillText(place.text, x + 34, y, colW - 40);
     });
+    return buttons;
   }
 }
 

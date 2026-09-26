@@ -162,7 +162,12 @@ and the vendors.
   charm. Each has its own body, built from a Tidewater anatomy with a bill, a sail or a
   comb added. `npm run check:fish` checks that none bites without its gear.
 - **The village:** the Rum Shack (I) and the empty Captain's Table (M) are gone, and
-  each spot is now a small garden. Rooms are only drawn when you could see into them
+  each spot is now a small garden. The beds' heliconias and birds of paradise are made the way the
+  Florist's plants are (`src/world/beds.ts`): leaves on their own stalks, and flower spikes of red
+  and yellow bracts, or the bird's green beak with its orange crest and blue tongue. They're in
+  full within 16 m of you, coarser beyond.
+- **The Tackle Shop's porch:** its roof hung from under the thatch eave, at eye height. The bake
+  raises any porch like that (taller walls, a shallower pitch) until it clears 2 m. Rooms are only drawn when you could see into them
   (from inside, or from in front of the doorway), so looking back at town from the
   pier costs about 100 draw calls instead of about 800.
 - **Field guide:** the backpack has a second tab (the BACKPACK and FIELD GUIDE
@@ -172,8 +177,11 @@ and the vendors.
   haven't caught shows as a shadow with where and when to look. The first one you land
   fills its entry in: its picture, names, habitat, how many you've caught and your best, and a
   true DID YOU KNOW? fact. Opposite the title page is a chart of the bay drawn from the terrain
-  (`src/backpack/chart.ts`), showing depths, the drop-off, the reef, the pier, and numbered shops
-  with a key, plus a dot for where you're standing. The great white has the last page.
+  (`src/backpack/chart.ts`), showing depths, the drop-off, the reef, the pier, and numbered places
+  (the shops, the casinos, home, the timber yard and the east woodlot) with a key, plus a dot for
+  where you're standing. Point at a marker, a line of the key or a finished walk's platform and
+  you're there: inside a room a step in from its door, or in front of the place, looking at it. The
+  backpack shuts behind you. (Not with a fish on the line.) The great white has the last page.
   Point at the corner arrows to turn the pages.
 - **Winning at the casinos** (`src/casino/celebrate.ts`): every win flashes light, sends
   a ring across the table and throws confetti and glints, which settle on the felt. The
@@ -200,15 +208,19 @@ and the vendors.
 - **The woodworks** (`src/woodworks/`): build your own way out to the reef and deep water.
   - **Timber yard:** an open stall on the beach west of the pier foot. It sells the AXE
     ($120), a bundle of 10 logs ($40) and a cart of 50 ($180) for when you'd rather not chop.
-  - **Woodlot:** six almond trees behind the yard. Once you own the axe, walk up to them and
-    it's in your hand. Swing it into a trunk: four good blows and the tree creaks, falls away
+  - **Woodlots:** six almond trees behind the yard, and six more on the far side of the village
+    past the boatyard, with a log pile and a chopping block but no stall (`src/woodworks/lots.ts`).
+    Once you own the axe, walk up to either and it's in your hand. Swing it into a trunk: four good blows and the tree creaks, falls away
     from you, and its 4 logs fly into your backpack. A sapling grows back from the stump
     about a minute later. The backpack tray shows your log count.
-  - **The walks:** two build crates stand on the pier head. Put wood in and a walk lays itself
-    out plank by plank through a gateway in the rail. The **reef walk** (48 logs) runs 60 m out
-    to a platform over the reef's edge. Finishing it unlocks the **deep walk** (44 logs), which
-    runs past the drop-off to a platform over 14 m of water. Each walk appears on the field guide's
-    chart, named, once it's finished. Wood, the axe and the walks are saved.
+  - **The walks:** put wood in a build crate on the pier head and a walk lays itself out plank by
+    plank through a gateway in the rail. At first only the **reef walk** (48 logs) is on offer: it
+    runs 60 m out to a platform over the reef's edge. Until it's finished the deep walk's gateway
+    keeps the pier's rail and has no crate. Then the **deep walk** (44 logs) opens, running past the
+    drop-off to a platform over 14 m of water. Each platform stands on a regular grid of piles, is
+    railed down its sides and open at the far edge to fish off, and has a lantern at each corner and
+    a bucket and a coil of rope made fast to a cleat (`src/woodworks/bucket.ts`). Each walk appears
+    on the field guide's chart, named, once it's finished. Wood, the axe and the walks are saved.
 - **ALWAYS DAY:** a switch under MUSIC in the backpack holds the island in the early
   afternoon. The fish that only bite at night won't bite while it's on.
 - **Wallet:** `src/ui/wallet.ts` puts an odometer-style money counter on both
@@ -273,7 +285,7 @@ same questions as ff2's `TELEPORT_AREAS`, `floorYAt` and `crossesWall`:
 | `src/world/` | baked data reader, heightfield, surfaces (pure), terrain, ocean, sky, village |
 | `src/audio/` | ff2's synth SFX bus and cash chime; Tidewater's sampled fishing and shore sounds; the music |
 | `src/fishing/` | the rod, cast, bites, fight, landing, catch card, tension gauge |
-| `src/woodworks/` | the axe, woodlot and timber yard; the reef and deep walks and their build crates |
+| `src/woodworks/` | the axe, the woodlots and the timber yard; the reef and deep walks, their build crates and the bucket at the end |
 | `src/ui/` | ff2's Rajdhani type kit and coin symbol, canvas panels, the wrist wallet |
 | `src/dev/harness.ts` | dev-only emulator driver |
 | `tools/bake-world.mjs` | Tidewater → `public/world/` |

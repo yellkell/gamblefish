@@ -6,10 +6,13 @@
  * the crate one after another (a thunk each), and the walk lays itself out, a bay at a time: its
  * piles, cap beam and stringers, then the planks dropping on, then the rails, a clap and two
  * hammer taps per step. Until its first bay is down a rope with a sign hangs across the gateway.
- * The deep walk's crate stays shut until the reef walk is finished.
+ * Only the reef walk is on offer at first: the deep walk's gateway is still closed by the pier's
+ * own rail, and its crate and rope aren't there, until the reef walk is finished.
  *
- * Built like Tidewater's pier: weathered boards in slightly different tones, round piles driven
- * into the sea floor, a top and mid rail on posts, a platform at the end with lanterns.
+ * Built like Tidewater's pier: weathered boards in slightly different tones laid end to end the
+ * whole way out, round piles driven into the sea floor, a top and mid rail on posts. At the end,
+ * a platform on a regular grid of piles, railed down its sides and open at the far edge to fish
+ * off, with a lantern at each corner, and a bucket and a coil of rope made fast to a cleat.
  *
  * All of a walk is one draw: every piece carries the step it belongs to, and the vertex stage
  * hides the steps not built yet and drops the newest one into place. Each step's deck and rails
@@ -35,6 +38,7 @@ import {
   Vector3,
   type Camera,
   type Object3D,
+  type WebGLRenderer,
 } from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { logThunk, plankLay, uiDeny } from '../audio/sfx.ts';
@@ -43,11 +47,14 @@ import { font, onFontsReady } from '../ui/fonts.ts';
 import { INK, roundRect } from '../ui/panel.ts';
 import { InteractivePanel, register } from '../ui/pointer.ts';
 import type { BoxCollider } from '../world/data.ts';
+import { bucketAndRope } from './bucket.ts';
 import { CRATES, DECK, HEAD_STEPS, logsFor, stepsOf, WALK_W, WALKS, type WalkDef, type WalkId } from './gates.ts';
 
 /** seconds a step takes to lay, and between logs flying into the crate */
 const STEP_S = 0.42;
 const LOG_S = 0.1;
+/** deck boards: one every PLANK m, the whole way out */
+const PLANK = 0.23;
 
 const _m = new Matrix4();
 const _q = new Quaternion();
@@ -116,15 +123,31 @@ interface Built {
   board: InteractivePanel;
   rope: Group;
   crate: Group;
+  /** the crate's collider, once it's there */
+  crateBox: BoxCollider;
+  crateIn: boolean;
   lanterns: Mesh[];
+  /** the bucket and the rope at the end, and whether they're in the way yet */
+  corner: Group | null;
+  cornerBox: BoxCollider;
+  cornerIn: boolean;
+  /** the pier's rail across a gateway not open yet, and its collider */
+  gateRail: Mesh | null;
+  gateBox: BoxCollider | null;
+  gateIn: boolean;
 }
 
 export interface WalkDeps {
   state: GameState;
   /** the sea floor under (x, z) */
   ground: (x: number, z: number) => number;
-  /** a floor or a wall for the teleport (world/surfaces.ts addBox) */
+  /** a floor or a wall for the teleport (world/surfaces.ts addBox), and taking one out again */
   addBox: (b: BoxCollider) => void;
+  removeBox: (b: BoxCollider) => void;
+  /** for the bucket and rope (village/craft.ts materials) */
+  renderer: WebGLRenderer | null;
+  /** Tidewater's baked timber (world/village.ts `village_wood`): the pier's rails, to match */
+  pierWood: Mesh | null;
   /** a walk has just been finished */
   onFinished?: (w: WalkDef, at: Vector3) => void;
 }
@@ -146,6 +169,7 @@ export class Walks {
       for (let i = 0; i < steps; i++) for (const b of w.colliders[i]) deps.addBox(b);
       this.paintBoard(w);
     }
+    this.sync();
     deps.state.onChange(() => this.walks.forEach((w) => this.paintBoard(w)));
   }
 
@@ -198,14 +222,25 @@ export class Walks {
       const [wx, wz] = toWorld(x, z);
       return Math.min(-0.5, this.deps.ground(wx, wz)) - 0.6;
     };
-    // the piles, cap beam, stringers and planks of a stretch [z0, z1] of deck `w` wide
-    const deck = (step: number, z0: number, z1: number, w: number, piles: number[]): void => {
-      for (const pz of piles) {
-        for (const px of [-w / 2 + 0.12, w / 2 - 0.12]) P.cyl(step, px, seabed(px, pz), DECK - 0.36, pz, 0.14, pile);
-        P.box(step, 0, DECK - 0.44, pz, w + 0.2, 0.18, 0.2, beam);
-      }
-      for (const sx of [-w / 2 + 0.3, 0, w / 2 - 0.3]) P.box(step, sx, DECK - 0.16, (z0 + z1) / 2, 0.1, 0.18, z1 - z0, beam);
-      for (let pz = z0 + 0.11; pz < z1; pz += 0.23) P.box(step, (r() - 0.5) * 0.02, DECK - 0.025, Math.min(pz, z1 - 0.1), w + (r() - 0.5) * 0.04, 0.05, 0.2, timber(r), (r() - 0.5) * 0.012);
+    const L0 = def.bays * def.bay;
+    const [hw, hd] = def.head;
+    const q = hd / HEAD_STEPS;
+    /** the step a point `z` along the walk is laid in: a bay, or a quarter of the platform */
+    const stepAt = (z: number): number => (z < L0 ? Math.min(def.bays - 1, Math.floor(z / def.bay)) : def.bays + Math.min(HEAD_STEPS - 1, Math.floor((z - L0) / q)));
+    // the deck boards, end to end all the way out: across the walk, then across the platform
+    for (let pz = PLANK / 2; pz + 0.1 <= L0 + hd + 1e-6; pz += PLANK) {
+      const w = pz < L0 ? WALK_W : hw;
+      // (a wide board wanders as far at its ends as a narrow one)
+      P.box(stepAt(pz), (r() - 0.5) * 0.02, DECK - 0.025, pz, w + (r() - 0.5) * 0.03, 0.05, 0.2, timber(r), ((r() - 0.5) * 0.03) / w);
+    }
+    // a row of piles across the deck at `pz`, and the cap beam they carry
+    const bent = (step: number, pz: number, w: number, xs: number[]): void => {
+      for (const px of xs) P.cyl(step, px, seabed(px, pz), DECK - 0.36, pz, 0.14, pile);
+      P.box(step, 0, DECK - 0.44, pz, w + 0.2, 0.18, 0.2, beam);
+    };
+    // the stringers under a stretch [z0, z1], on the cap beams, under the boards
+    const stringers = (step: number, z0: number, z1: number, xs: number[]): void => {
+      for (const sx of xs) P.box(step, sx, DECK - 0.16, (z0 + z1) / 2, 0.1, 0.18, z1 - z0, beam);
     };
     // a rail along one side of a stretch: posts at its ends, a top and a mid rail
     const railRun = (step: number, x: number, z0: number, z1: number, posts: number[]): void => {
@@ -215,27 +250,32 @@ export class Walks {
       wall(step, x, (z0 + z1) / 2, 0.08, (z1 - z0) / 2);
     };
 
-    // the bays
+    // the bays (the last one rests on the platform's first row of piles)
+    const walkPiles = [-half + 0.12, half - 0.12];
     for (let i = 0; i < def.bays; i++) {
       colliders.push([]);
       const z0 = i * def.bay;
       const z1 = z0 + def.bay;
-      deck(i, z0, z1, WALK_W, i === 0 ? [0.2, z1] : [z1]);
+      if (i === 0) bent(i, 0.2, WALK_W, walkPiles);
+      if (i < def.bays - 1) bent(i, z1, WALK_W, walkPiles);
+      stringers(i, z0, z1, [-half + 0.3, 0, half - 0.3]);
       for (const x of [-half + 0.05, half - 0.05]) railRun(i, x, z0, z1, i === 0 ? [z0, z1] : [z1]);
       floor(i, 0, (z0 + z1) / 2, half, def.bay / 2 + 0.05);
     }
-    // the platform at the end, in four
-    const [hw, hd] = def.head;
-    const L0 = def.bays * def.bay;
-    const q = hd / HEAD_STEPS;
+    // the platform at the end, laid in four: three rows of three piles, evenly across and along
+    const rows = [L0 + 0.1, L0 + hd / 2, L0 + hd - 0.2];
+    const platPiles = [-hw / 2 + 0.12, 0, hw / 2 - 0.12];
     const lanterns: Mesh[] = [];
+    const last = def.bays + HEAD_STEPS - 1;
     for (let k = 0; k < HEAD_STEPS; k++) {
       const s = def.bays + k;
       colliders.push([]);
       const z0 = L0 + k * q;
       const z1 = z0 + q;
-      deck(s, z0, z1, hw, k === HEAD_STEPS - 1 ? [z0, z1 - 0.2] : [z0 + q / 2]);
-      for (const x of [-hw / 2 + 0.05, hw / 2 - 0.05]) railRun(s, x, z0, z1, [z1]);
+      for (const pz of rows) if (stepAt(pz) === s) bent(s, pz, hw, platPiles);
+      stringers(s, z0, z1, [-hw / 2 + 0.3, -hw / 4, 0, hw / 4, hw / 2 - 0.3]);
+      // railed down both sides (the lantern posts stand at the far corners)
+      for (const x of [-hw / 2 + 0.05, hw / 2 - 0.05]) railRun(s, x, z0, z1, s === last ? [] : [z1]);
       floor(s, 0, (z0 + z1) / 2, hw / 2, q / 2 + 0.05);
       if (k === 0) {
         // the platform's shoulders, back to the walk's rails
@@ -248,17 +288,15 @@ export class Walks {
           wall(s, side * ((a + b) / 2), z0, (b - a) / 2, 0.08);
         }
       }
-      if (k === HEAD_STEPS - 1) {
-        // the far rail, and a lantern on a post at each corner
-        P.box(s, 0, DECK + 0.99, z1, hw, 0.05, 0.16, rail);
-        P.box(s, 0, DECK + 0.5, z1, hw, 0.12, 0.05, rail);
-        for (const x of [-hw / 4, 0, hw / 4]) P.box(s, x, DECK + 0.5, z1, 0.11, 1.0, 0.11, post);
-        wall(s, 0, z1, hw / 2, 0.08);
+      if (s === last) {
+        // the far edge is open to fish off: an edge board under the boards' ends, and a lantern
+        // on a tall post at each corner
+        P.box(s, 0, DECK - 0.13, z1 - 0.04, hw + 0.02, 0.2, 0.07, beam);
         for (const side of [-1, 1]) {
-          P.box(s, side * (hw / 2 - 0.05), DECK + 1.3, z1, 0.13, 2.6, 0.13, post);
-          P.box(s, side * (hw / 2 - 0.05), DECK + 2.62, z1, 0.3, 0.05, 0.3, post);
+          P.box(s, side * (hw / 2 - 0.05), DECK + 1.3, z1 - 0.06, 0.13, 2.6, 0.13, post);
+          P.box(s, side * (hw / 2 - 0.05), DECK + 2.62, z1 - 0.06, 0.3, 0.05, 0.3, post);
           const lamp = new Mesh(new BoxGeometry(0.2, 0.28, 0.2), new MeshBasicMaterial({ color: 0xffd28a, toneMapped: false }));
-          const [wx, wz] = toWorld(side * (hw / 2 - 0.05), z1);
+          const [wx, wz] = toWorld(side * (hw / 2 - 0.05), z1 - 0.06);
           lamp.position.set(wx, DECK + 2.45, wz);
           lamp.visible = false;
           this.group.add(lamp);
@@ -323,9 +361,47 @@ export class Walks {
     crate.add(board.mesh);
     register(board);
     this.group.add(crate);
-    this.deps.addBox({ tag: 'buildCrate', walkable: false, solid: true, cx, cz, hx: 0.4, hz: 0.4, rotY: 0, top: DECK + 0.62, bottom: DECK });
+    const crateBox: BoxCollider = { tag: 'buildCrate', walkable: false, solid: true, cx, cz, hx: 0.4, hz: 0.4, rotY: 0, top: DECK + 0.62, bottom: DECK };
 
-    const built: Built = { def, mesh, uniforms, shown: 0, dropT: 1, colliders, flying: [], queued: 0, queueT: 0, board, rope, crate, lanterns };
+    // the bucket and the rope, on the platform by the open edge (once it's finished)
+    let corner: Group | null = null;
+    const cornerAt = toWorld(hw / 2 - 0.95, L0 + hd - 0.85);
+    if (this.deps.renderer) {
+      corner = bucketAndRope(this.deps.renderer, 0.85);
+      corner.position.set(cornerAt[0], DECK, cornerAt[1]);
+      corner.rotation.y = yaw;
+      corner.visible = false;
+      this.group.add(corner);
+    }
+    const cornerBox: BoxCollider = { tag: 'bucket', walkable: false, solid: true, cx: cornerAt[0], cz: cornerAt[1], hx: 0.2, hz: 0.2, rotY: yaw, top: DECK + 0.32, bottom: DECK };
+
+    // a walk that waits on another: the pier's own rail across its gateway until it opens
+    const gate = def.after ? gateRail(def, this.deps.pierWood) : null;
+    if (gate) this.group.add(gate.mesh);
+
+    const built: Built = {
+      def,
+      mesh,
+      uniforms,
+      shown: 0,
+      dropT: 1,
+      colliders,
+      flying: [],
+      queued: 0,
+      queueT: 0,
+      board,
+      rope,
+      crate,
+      crateBox,
+      crateIn: false,
+      lanterns,
+      corner,
+      cornerBox,
+      cornerIn: false,
+      gateRail: gate?.mesh ?? null,
+      gateBox: gate?.box ?? null,
+      gateIn: false,
+    };
     board.paint = () => this.paintBoard(built);
     board.onClick = (id) => id === 'deposit' && this.deposit(built);
     board.repaintOnFonts(() => this.paintBoard(built));
@@ -387,12 +463,40 @@ export class Walks {
         w.dropT = 0;
         w.uniforms.uDrop.value = 0;
       }
-      w.rope.visible = w.shown === 0;
+      w.rope.visible = w.shown === 0 && this.open(w.def);
       const fill = w.crate.getObjectByName('fill')!;
       const left = this.logsIn(w.def) - w.shown * w.def.cost;
       fill.position.y = 0.06 + Math.min(0.5, left * 0.05);
       fill.visible = left > 0;
       for (const l of w.lanterns) l.visible = w.shown >= stepsOf(w.def);
+    }
+    this.sync();
+  }
+
+  /**
+   * What's there depends on how far along you are: a walk's crate and rope only once it's open
+   * to build (until then its gateway keeps the pier's rail), its bucket and rope once it's done.
+   */
+  private sync(): void {
+    const d = this.deps;
+    for (const w of this.walks) {
+      const open = this.open(w.def);
+      w.crate.visible = open;
+      if (open !== w.crateIn) {
+        (open ? d.addBox : d.removeBox)(w.crateBox);
+        w.crateIn = open;
+      }
+      if (w.gateRail) w.gateRail.visible = !open;
+      if (w.gateBox && !open !== w.gateIn) {
+        (!open ? d.addBox : d.removeBox)(w.gateBox);
+        w.gateIn = !open;
+      }
+      const done = w.shown >= stepsOf(w.def);
+      if (w.corner) w.corner.visible = done;
+      if (done !== w.cornerIn) {
+        (done ? d.addBox : d.removeBox)(w.cornerBox);
+        w.cornerIn = done;
+      }
     }
   }
 
@@ -511,4 +615,62 @@ function paintSign(g: CanvasRenderingContext2D, text: string): void {
   g.fillText(text, 128, 44, 230);
   g.font = font(600, 22);
   g.fillText('bring wood to build', 128, 86, 230);
+}
+
+/**
+ * The pier head's rail across a gateway that isn't open yet: a top and a mid rail the size of the
+ * pier's own (tools/bake-world.mjs RAIL), in its own colours, read off the baked rail either side
+ * of the gap (a face looking up and a face looking out are shaded apart, as Tidewater bakes them).
+ */
+function gateRail(def: WalkDef, wood: Mesh | null): { mesh: Mesh; box: BoxCollider } {
+  const g = def.gate;
+  const L = g.to - g.from;
+  const mid = (g.from + g.to) / 2;
+  // [bottom, top, half-thickness across the line] of each rail over the deck, as the bake lays them
+  const rails: [number, number, number][] = [
+    [0.95, 0.995, 0.1],
+    [0.41, 0.55, 0.025],
+  ];
+  const parts: BufferGeometry[] = [];
+  for (const [y0, y1, t] of rails) {
+    const up = new Color();
+    const side = new Color();
+    let nu = 0;
+    let ns = 0;
+    if (wood) {
+      const P = wood.geometry.getAttribute('position');
+      const N = wood.geometry.getAttribute('normal');
+      const C = wood.geometry.getAttribute('color');
+      for (let i = 0; i < P.count; i++) {
+        const y = P.getY(i) - DECK;
+        if (y < y0 - 0.006 || y > y1 + 0.006) continue;
+        const [a, c] = g.alongX ? [P.getX(i), P.getZ(i)] : [P.getZ(i), P.getX(i)];
+        if (Math.abs(c - g.line) > t + 0.006) continue;
+        if (!((a > g.from - 0.6 && a < g.from + 0.01) || (a > g.to - 0.01 && a < g.to + 0.6))) continue;
+        const k = Math.abs(N.getY(i)) > 0.7;
+        (k ? up : side).r += C.getX(i);
+        (k ? up : side).g += C.getY(i);
+        (k ? up : side).b += C.getZ(i);
+        if (k) nu++;
+        else ns++;
+      }
+    }
+    const fallback = new Color(0x3a3128);
+    const cu = nu ? up.multiplyScalar(1 / nu) : fallback;
+    const cs = ns ? side.multiplyScalar(1 / ns) : fallback;
+    const box = new BoxGeometry(g.alongX ? L : t * 2, y1 - y0, g.alongX ? t * 2 : L).toNonIndexed();
+    box.translate(g.alongX ? mid : g.line, DECK + (y0 + y1) / 2, g.alongX ? g.line : mid);
+    const n = box.getAttribute('normal');
+    const col = new Float32Array(n.count * 3);
+    for (let i = 0; i < n.count; i++) {
+      const c = Math.abs(n.getY(i)) > 0.7 ? cu : cs;
+      col.set([c.r, c.g, c.b], i * 3);
+    }
+    box.setAttribute('color', new Float32BufferAttribute(col, 3));
+    box.deleteAttribute('uv');
+    parts.push(box);
+  }
+  const mesh = new Mesh(mergeGeometries(parts, false)!, new MeshLambertMaterial({ vertexColors: true }));
+  const box: BoxCollider = { tag: 'pierRail', walkable: false, solid: true, cx: g.alongX ? mid : g.line, cz: g.alongX ? g.line : mid, hx: g.alongX ? L / 2 : 0.08, hz: g.alongX ? 0.08 : L / 2, rotY: 0, top: DECK + 1.0, bottom: DECK };
+  return { mesh, box };
 }

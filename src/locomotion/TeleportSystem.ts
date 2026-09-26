@@ -117,6 +117,8 @@ export const teleportView: {
   stepBack?: () => void;
   snapTurn?: (dir: -1 | 1) => void;
   to?: (x: number, z: number, yaw: number) => void;
+  /** go straight to (x, z) facing `yaw`, onto the floor there nearest `nearY` (the chart) */
+  travel?: (x: number, z: number, yaw: number, nearY: number) => void;
 } = {};
 
 export class TeleportSystem extends createSystem({}) {
@@ -160,6 +162,13 @@ export class TeleportSystem extends createSystem({}) {
     teleportView.to = (x, z, yaw) => {
       const s = locomotion.surfaces;
       teleportPlayer(this.player, x, z, yaw, s ? s.floorYAt(x, z, this.player.position.y) : 0);
+    };
+    teleportView.travel = (x, z, yaw, nearY) => {
+      const s = locomotion.surfaces;
+      const from = this.player.head.getWorldPosition(new Vector3());
+      teleportPlayer(this.player, x, z, yaw, s ? s.floorYAt(x, z, nearY) : 0);
+      sfx.uiClick();
+      moved(this.player, from);
     };
     // Arc line — a fat world-unit ribbon in galvanised steel (hazard-red
     // when the landing is refused), LineBasicMaterial ignores width so Line2

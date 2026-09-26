@@ -4,7 +4,9 @@
  *  TIMBER YARD   an open stall on the beach west of the pier foot: logs stacked either side, a
  *                chopping block with an axe standing in it, a board on the counter. It sells the
  *                AXE, and wood by the bundle (10) or the cart (50) for when you'd rather not chop.
- *  WOODLOT       six tropical almond trees on the sand behind it. Own the axe and walk up to them:
+ *  WOODLOTS      six tropical almond trees on the sand behind it, and six more on the far side of
+ *                the village past the boatyard, with a log pile and a chopping block but no stall
+ *                (woodworks/lots.ts). Own the axe and walk up to either:
  *                the rod goes over your shoulder and the axe is in your hand. Swing it into a
  *                trunk: a deep knock, a spray of chips, a jolt in your hand, the crown shivering.
  *                Four good blows and it creaks, leans and crashes down away from you; its logs fly
@@ -49,6 +51,7 @@ import { font, onFontsReady } from '../ui/fonts.ts';
 import { INK, roundRect } from '../ui/panel.ts';
 import { InteractivePanel, register } from '../ui/pointer.ts';
 import type { BoxCollider } from '../world/data.ts';
+import { EAST_PILE, EAST_TREES, WEST_TREES, YARD } from './lots.ts';
 import { Walks } from './walks.ts';
 
 /** what the timber yard charges */
@@ -60,16 +63,8 @@ const REGROW_S = 60;
 /** the timber yard's roof: its tilt up toward the counter (radians) */
 const ROOF_TILT = 0.12;
 
-/** the timber yard (its counter's front faces +x) and the woodlot's trees (x, z) */
-export const YARD: [number, number] = [26, -61];
-const TREES: [number, number][] = [
-  [4, -61],
-  [9.5, -57],
-  [14, -63],
-  [6, -67],
-  [12, -69],
-  [18, -56.5],
-];
+/** the woodlots' trees, west and east (x, z) */
+const TREES: [number, number][] = [...WEST_TREES, ...EAST_TREES];
 
 export const woodView: {
   /** the axe is in your hand (the rod goes away while it is) */
@@ -86,10 +81,11 @@ export const woodDeps: {
   state: GameState | null;
   ground: ((x: number, z: number) => number) | null;
   addBox: ((b: BoxCollider) => void) | null;
+  removeBox: ((b: BoxCollider) => void) | null;
   env: Texture | null;
   /** are you indoors, or is the backpack open (the axe stays away) */
   busy: (() => boolean) | null;
-} = { state: null, ground: null, addBox: null, env: null, busy: null };
+} = { state: null, ground: null, addBox: null, removeBox: null, env: null, busy: null };
 
 const _v = new Vector3();
 const _w = new Vector3();
@@ -226,6 +222,7 @@ export class WoodSystem extends createSystem({}) {
       d.addBox!({ tag: 'tree', walkable: false, solid: true, cx: x, cz: z, hx: 0.2, hz: 0.2, rotY: 0, top: base.y + 0.4, bottom: base.y - 1 });
     });
     this.buildYard(ground, d.addBox);
+    this.buildPile(ground, d.addBox);
     this.axe = this.buildAxe(d.env);
     this.axe.visible = false;
     this.scene.add(this.axe);
@@ -241,6 +238,9 @@ export class WoodSystem extends createSystem({}) {
       state: d.state,
       ground,
       addBox: d.addBox,
+      removeBox: d.removeBox ?? (() => {}),
+      renderer: this.renderer,
+      pierWood: (this.scene.getObjectByName('village_wood') as Mesh | undefined) ?? null,
       onFinished: (w, at) => {
         winFanfare(30);
         this.party.win({ at, tier: 3, banner: w.id === 'reef' ? 'REEF WALK OPEN!' : 'DEEP WALK OPEN!', bannerAt: at.clone().add(new Vector3(0, 1.6, 0)), scale: 2.5 });
@@ -367,24 +367,7 @@ export class WoodSystem extends createSystem({}) {
     sign.rotation.x = -0.1;
     g.add(sign);
     // log stacks either side, and a chopping block with the axe standing in it
-    const log = new MeshLambertMaterial({ color: 0x8a6440 });
-    const cut = new MeshLambertMaterial({ color: 0xd8b88a });
-    const stack = (sx: number, sz: number): void => {
-      let row = 0;
-      for (const n of [4, 3, 2]) {
-        for (let k = 0; k < n; k++) {
-          const l = new Mesh(new CylinderGeometry(0.14, 0.14, 1.4, 9).rotateX(Math.PI / 2), [log, cut, cut]);
-          l.position.set(sx + (k - (n - 1) / 2) * 0.29, 0.14 + row * 0.25, sz);
-          g.add(l);
-        }
-        row++;
-      }
-    };
-    stack(-2.4, -0.2);
-    stack(2.4, -0.2);
-    const block = new Mesh(new CylinderGeometry(0.3, 0.34, 0.55, 10), [log, cut, cut]);
-    block.position.set(2.2, 0.275, 1.3);
-    g.add(block);
+    g.add(logStack(-2.4, -0.2), logStack(2.4, -0.2), choppingBlock(2.2, 1.3));
     this.yardAxe = this.buildAxe(woodDeps.env);
     this.yardAxe.position.set(2.2, 0.62, 1.3);
     this.yardAxe.rotation.set(-Math.PI / 2 + 0.3, 0.4, 0);
@@ -402,6 +385,29 @@ export class WoodSystem extends createSystem({}) {
     // the counter and the stacks stop an arc
     addBox({ tag: 'yard', walkable: false, solid: true, cx: x + 0.6, cz: z, hx: 0.35, hz: 1.55, rotY: 0, top: g.position.y + 1.0, bottom: g.position.y - 1 });
     this.paintBoard();
+  }
+
+  /** The east woodlot's log pile and chopping block: no stall, nobody selling. */
+  private buildPile(ground: (x: number, z: number) => number, addBox: (b: BoxCollider) => void): void {
+    const [x, z] = EAST_PILE;
+    const g = new Group();
+    g.position.set(x, ground(x, z), z);
+    // the pile runs along the path's edge, the block in front of it toward the trees
+    g.rotation.y = -0.5;
+    g.add(logStack(0, 0), logStack(0, -0.32, 5), choppingBlock(1.4, 1.1));
+    // a few short logs lying by the block, waiting to be split
+    for (const [lx, lz, ry] of [
+      [1.9, 1.5, 0.4],
+      [1.1, 1.75, 1.9],
+      [2.05, 0.8, 2.6],
+    ]) {
+      const l = new Mesh(new CylinderGeometry(0.09, 0.09, 0.45, 8).rotateX(Math.PI / 2), [LOG_MAT(), CUT_MAT(), CUT_MAT()]);
+      l.position.set(lx, 0.09, lz);
+      l.rotation.y = ry;
+      g.add(l);
+    }
+    this.scene.add(g);
+    addBox({ tag: 'logPile', walkable: false, solid: true, cx: x, cz: z, hx: 0.75, hz: 0.75, rotY: -0.5, top: g.position.y + 0.8, bottom: g.position.y - 1 });
   }
 
   private buy(id: string): void {
@@ -628,6 +634,33 @@ export class WoodSystem extends createSystem({}) {
   walkProgress(): Record<string, number> {
     return this.walks?.progress() ?? {};
   }
+}
+
+let logMat: MeshLambertMaterial | null = null;
+let cutMat: MeshLambertMaterial | null = null;
+const LOG_MAT = (): MeshLambertMaterial => (logMat ??= new MeshLambertMaterial({ color: 0x8a6440 }));
+const CUT_MAT = (): MeshLambertMaterial => (cutMat ??= new MeshLambertMaterial({ color: 0xd8b88a }));
+
+/** A stack of logs across z at (x, z) on the ground: rows of 4, 3, 2 (or from `bottom` up). */
+function logStack(x: number, z: number, bottom = 4): Group {
+  const g = new Group();
+  let row = 0;
+  for (let n = bottom; n >= 2; n--) {
+    for (let k = 0; k < n; k++) {
+      const l = new Mesh(new CylinderGeometry(0.14, 0.14, 1.4, 9).rotateX(Math.PI / 2), [LOG_MAT(), CUT_MAT(), CUT_MAT()]);
+      l.position.set(x + (k - (n - 1) / 2) * 0.29, 0.14 + row * 0.25, z);
+      g.add(l);
+    }
+    row++;
+  }
+  return g;
+}
+
+/** A round of trunk standing on end, to split logs on. */
+function choppingBlock(x: number, z: number): Mesh {
+  const block = new Mesh(new CylinderGeometry(0.3, 0.34, 0.55, 10), [LOG_MAT(), CUT_MAT(), CUT_MAT()]);
+  block.position.set(x, 0.275, z);
+  return block;
 }
 
 function yardSign(): CanvasTexture {
