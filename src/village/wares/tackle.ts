@@ -305,7 +305,9 @@ export function bait(k: Kit, level: number): Object3D {
 /* ── charms ─────────────────────────────────────────────────────────── */
 
 /** a gold doubloon's face: a crowned head in relief, lettering round the rim */
+let doubloon: MeshStandardMaterial | null = null;
 function doubloonMaterial(k: Kit): MeshStandardMaterial {
+  if (doubloon) return doubloon;
   const c = document.createElement('canvas');
   c.width = c.height = 256;
   const g = c.getContext('2d')!;
@@ -339,7 +341,7 @@ function doubloonMaterial(k: Kit): MeshStandardMaterial {
   const map = new CanvasTexture(c);
   map.colorSpace = SRGBColorSpace;
   // the relief is in the map's greys, over polished gold
-  return new MeshStandardMaterial({ map, color: '#ffc848', roughness: 0.25, metalness: 1, envMap: casinoEnv(k.renderer), envMapIntensity: 1.5 });
+  return (doubloon = new MeshStandardMaterial({ map, color: '#ffc848', roughness: 0.25, metalness: 1, envMap: casinoEnv(k.renderer), envMapIntensity: 1.5 }));
 }
 
 export function charm(k: Kit, level: number): Group {

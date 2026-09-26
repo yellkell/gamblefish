@@ -29,6 +29,8 @@ export function mergeStatic(root: Object3D): Group {
     const sig = Object.keys(g.attributes).sort().join();
     if (Array.isArray(m.material) || !g.index || !PLAIN.includes(sig)) {
       const keep = new Mesh(g, m.material);
+      // (its geometry is the original's, not a baked copy: whoever re-bakes mustn't dispose it)
+      keep.userData.kept = true;
       keep.matrixAutoUpdate = false;
       keep.matrix.copy(local);
       keep.renderOrder = m.renderOrder;

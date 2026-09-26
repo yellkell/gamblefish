@@ -91,7 +91,7 @@ export function kentia(k: Kit): Object3D {
       for (const side of [-1, 1]) {
         const len = 0.25 * Math.pow(Math.sin(Math.PI * (0.12 + 0.82 * u)), 0.7);
         const d = side0.clone().multiplyScalar(side).multiplyScalar(0.8).addScaledVector(_t, 0.55).addScaledVector(UP, -0.18 - u * 0.2).normalize();
-        const g = blade({ len, width: 0.024, outline: OUTLINE.strap, fold: 0.55, arch: 0.7, segs: 5, across: 1, base: '#1e4e1e', tip: '#3c7a2a', rib: '#6a9a4a' });
+        const g = blade({ len, width: 0.024, outline: OUTLINE.strap, fold: 0.55, arch: 0.7, segs: 4, across: 1, base: '#1e4e1e', tip: '#3c7a2a', rib: '#6a9a4a' });
         b.add(leaf, g, aim(_p, d, DOWN));
       }
     }
@@ -155,7 +155,7 @@ export function hibiscus(k: Kit): Object3D {
       const round = side.clone().applyAxisAngle(_t, a);
       const d = round.addScaledVector(_t, 0.7).addScaledVector(UP, 0.25).normalize();
       const L = 0.085 + r() * 0.04;
-      b.add(leaf, blade({ len: L, width: L * 0.72, outline: OUTLINE.ovate, fold: 0.28, arch: 0.8, ripple: 0.07, ripples: 4, segs: 6, across: 2, base: '#1e4a1a', tip: '#3c7a2c', rib: '#6a9a48' }), aim(_p, d, DOWN));
+      b.add(leaf, blade({ len: L, width: L * 0.72, outline: OUTLINE.ovate, fold: 0.28, arch: 0.8, ripple: 0.07, ripples: 4, segs: 5, across: 1, base: '#1e4a1a', tip: '#3c7a2c', rib: '#6a9a48' }), aim(_p, d, DOWN));
     }
     along(pts, 1, _p, _t);
     if (depth === 0) {
@@ -221,7 +221,7 @@ export function fern(k: Kit): Object3D {
     const L = inner ? 0.3 + r() * 0.12 : 0.45 + r() * 0.2;
     const rachis = arc(start, dir, L, DOWN, inner ? 1.4 : 2.4 + r() * 0.4, 9);
     b.add(stem, stalk(rachis, 0.0025, 0.001, 4, 12));
-    const m = inner ? 16 : 22;
+    const m = inner ? 14 : 18;
     for (let i = 0; i < m; i++) {
       const u = 0.06 + (0.92 * i) / (m - 1);
       along(rachis, u, _p, _t);
@@ -231,7 +231,7 @@ export function fern(k: Kit): Object3D {
       for (const side of [-1, 1]) {
         const len = 0.05 * Math.pow(Math.sin(Math.PI * (0.1 + 0.85 * u)), 0.6);
         const d = side0.clone().multiplyScalar(side * 0.85).addScaledVector(_t, 0.5).normalize();
-        b.add(leaf, blade({ len, width: 0.014, outline: OUTLINE.lance, fold: 0.35, arch: 0.4, ripple: 0.12, ripples: 3, segs: 3, across: 1, base: '#1e5018', tip: '#4a8a2a', rib: '#6aa048' }), aim(_p, d, DOWN));
+        b.add(leaf, blade({ len, width: 0.014, outline: OUTLINE.lance, fold: 0.35, arch: 0.4, ripple: 0.12, ripples: 3, segs: 2, across: 1, base: '#1e5018', tip: '#4a8a2a', rib: '#6aa048' }), aim(_p, d, DOWN));
       }
     }
   }

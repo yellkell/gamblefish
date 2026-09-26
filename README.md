@@ -114,8 +114,15 @@ and the vendors.
 - **How the goods are made:** each shop's things are modelled in `src/village/wares/`
   with a small kit (`src/village/craft.ts`): leaves, petals and leaflets as curved,
   folded blades grown from real stems; tapered tubes; turned and rounded pieces; wood
-  grain, linen, velvet and rattan painted once on a canvas. A thing's pieces are baked
-  to one draw per material.
+  grain, linen, velvet and rattan painted once on a canvas.
+  - **Draw calls:** plain colours and cloth share one material per finish, with the
+    colour baked into each piece. Everything delivered to the shack or the villa is
+    baked together, one draw per material for the whole room.
+  - **Load time:** each thing is built once at load; its board picture is taken from
+    a copy.
+  - **Cost:** the town from the pier costs the same as before (rooms are drawn only
+    when you can see into them). A fully furnished shack costs about as many draws as
+    it did before this polish.
 - **Coral's villa:** Villa Mar (L) is furnished the same way. The Jeweller sells a
   crystal chandelier, a vanity with a jewellery box, pearls on a velvet bust, a
   ring under a glass cloche and a mermaid's tiara. The Boutique sells a velvet chaise

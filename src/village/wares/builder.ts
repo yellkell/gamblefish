@@ -278,7 +278,7 @@ export function bookshelf(k: Kit): Object3D {
       b.at(cloth, tint(block(0.003, h, d), cover), p[0], p[1], z, 0, 0, rz);
     }
     p = at(0, h / 2);
-    b.at(cloth, tint(rounded(w, h, 0.006, 0.0025, 1), cover), p[0], p[1], z + d / 2 - 0.002, 0, 0, rz);
+    b.at(cloth, tint(block(w, h, 0.006), cover), p[0], p[1], z + d / 2 - 0.002, 0, 0, rz);
     if (r() < 0.45) {
       for (const f of [0.14, 0.82]) {
         p = at(0, h * f);

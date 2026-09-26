@@ -20,7 +20,7 @@
  * big pieces are furniture you can't teleport into.
  */
 
-import { CanvasTexture, Group, MeshBasicMaterial, SRGBColorSpace, Vector3, Box3, type Object3D } from 'three';
+import { Box3, CanvasTexture, Group, MeshBasicMaterial, SRGBColorSpace, Vector3, type Mesh, type Object3D } from 'three';
 import { uiDeny, winFanfare } from '../audio/sfx.ts';
 import type { GameState } from '../fishing/tidewater.ts';
 import { font } from '../ui/fonts.ts';
@@ -130,6 +130,10 @@ export const GOODS: HomeItem[] = [
 /** Your shack, or Coral's villa: everything bought for it is standing in its spot. */
 export class Shack {
   private readonly placed = new Set<string>();
+  /** everything delivered, each in its spot (not drawn: the baked copy below is) */
+  private readonly things = new Group();
+  /** all of it baked together, one draw per material across the whole room */
+  private baked: Group | null = null;
   /** told when something new arrives (Coral's villa: she notices) */
   onDelivered: ((item: HomeItem) => void) | null = null;
 
@@ -147,17 +151,19 @@ export class Shack {
 
   /** Everything you own is in its spot (and the big pieces can't be stood in). */
   sync(): void {
+    let added = false;
     for (const id of this.state.home) {
       if (this.placed.has(id)) continue;
       const item = GOODS.find((g) => g.id === id);
       if (!item || !this.shops.includes(item.shop)) continue;
       this.placed.add(id);
       this.onDelivered?.(item);
-      const o = mergeStatic(item.build(this.kit));
+      const o = item.build(this.kit);
       const [x, y, z, ry] = item.at;
       o.position.set(x, y, z);
       o.rotation.y = ry;
-      this.room.contents.add(o);
+      this.things.add(o);
+      added = true;
       if (item.solid) {
         const [hx, hz, top] = item.solid;
         const p = this.room.toWorld(x, 0, z);
@@ -165,6 +171,14 @@ export class Shack {
         this.addCollider({ tag: 'furniture', walkable: false, solid: true, cx: p.x, cz: p.z, hx, hz, rotY: f.yaw + ry, top: f.floorY + top, bottom: f.floorY - 0.2 });
       }
     }
+    if (!added) return;
+    // re-bake the room's things (a bed, a palm and a chest share their wood, leaves and brass)
+    if (this.baked) {
+      this.room.contents.remove(this.baked);
+      this.baked.traverse((m) => (m as Mesh).isMesh && !(m as Mesh).userData.kept && (m as Mesh).geometry.dispose());
+    }
+    this.baked = mergeStatic(this.things);
+    this.room.contents.add(this.baked);
   }
 }
 
@@ -193,9 +207,9 @@ function dropExtras(o: Object3D): Object3D {
  * How a thing is shown on the counter: shrunk to fit its place, standing on the counter top.
  * A wall piece leans back on a little easel; a hanging one hangs from a gallows.
  */
-function onShow(k: Kit, item: HomeItem): Group {
+function onShow(k: Kit, item: HomeItem, built: Object3D): Group {
   const g = new Group();
-  const o = dropExtras(item.build(k));
+  const o = dropExtras(built);
   const wall = item.at[1] > 1 && !item.hangs;
   let bb = boundsOf(o);
   const size = bb.getSize(new Vector3());
@@ -258,15 +272,17 @@ export class HomeShopCounter {
     for (let i = 0; i < 4; i++) counter.at(M.wood(kit.renderer, 'mahogany', 0.4), rounded(hx * 0.42, top * 0.62, 0.02, 0.008), cx - hx + (hx * 2 * (i + 0.5)) / 4, top * 0.46, cz + hz + 0.005);
     counter.at(M.brass(kit.renderer), turned([[0.012, -hx], [0.012, hx]], 10), cx, 0.12, cz + hz + 0.05, 0, 0, Math.PI / 2);
     display.add(counter.group());
+    // each thing is built once: its picture is taken of a copy (sharing its geometry)
     const n = this.goods.length;
     this.goods.forEach((g, i) => {
-      const o = onShow(kit, g);
+      const built = g.build(kit);
+      this.pics.set(g.id, thumbnail(kit.renderer, built.clone(true)));
+      const o = onShow(kit, g, built);
       o.position.set(cx - hx + ((i + 0.5) * hx * 2) / n, top, cz - 0.02);
       display.add(o);
     });
     room.contents.add(mergeStatic(display));
     this.villa = forVilla(shop);
-    for (const g of this.goods) this.pics.set(g.id, thumbnail(kit.renderer, g.build(kit)));
 
     // the board behind: what they sell, what it costs, BUY
     this.board = new InteractivePanel([BW, BH], [1.6, (1.6 * BH) / BW]);

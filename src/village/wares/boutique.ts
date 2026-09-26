@@ -4,7 +4,7 @@
  * silk folding screen.
  */
 
-import { BufferGeometry, DoubleSide, ExtrudeGeometry, Group, Float32BufferAttribute, Shape, TorusGeometry, Vector3, type Object3D } from 'three';
+import { BoxGeometry, BufferGeometry, DoubleSide, ExtrudeGeometry, Group, Float32BufferAttribute, Shape, TorusGeometry, Vector3, type Object3D } from 'three';
 import { Batch, M, rng, rounded, stalk, turned, welded, type Kit } from '../craft.ts';
 import { turnedLeg } from './builder.ts';
 
@@ -90,8 +90,8 @@ export function chevalMirror(k: Kit): Object3D {
  * toward `tieX` at the tie-back height `tieY` (then falling out again to the floor).
  */
 export function curtain(w: number, h: number, folds: number, tieX: number, tieY: number, depth: number): BufferGeometry {
-  const nu = folds * 8;
-  const nv = 30;
+  const nu = folds * 6;
+  const nv = 18;
   const pos: number[] = [];
   const uv: number[] = [];
   const idx: number[] = [];
@@ -190,7 +190,7 @@ export function piano(k: Kit): Object3D {
   for (let i = 0; i < 30; i++) {
     const x = -W / 2 + 0.1 + i * 0.042;
     const len = x < 0 ? 1.25 - (x + W / 2) * 0.1 : 1.1 - (x - 0) * 1.3;
-    b.at(strings, rounded(0.003, 0.003, Math.max(0.2, len), 0.001, 1), x, 0.955, -0.14 - Math.max(0.2, len) / 2);
+    b.at(strings, new BoxGeometry(0.003, 0.003, Math.max(0.2, len)), x, 0.955, -0.14 - Math.max(0.2, len) / 2);
   }
   // the lid, propped open on its stick
   const lidG = welded(new ExtrudeGeometry(outline, { depth: 0.02, bevelEnabled: false, curveSegments: 24 }));
@@ -207,11 +207,12 @@ export function piano(k: Kit): Object3D {
   const ivory = M.gloss(k.renderer, '#f6f2e8');
   const n = 36;
   const kw = (W - 0.16) / n;
-  for (let i = 0; i < n; i++) b.at(ivory, rounded(kw - 0.002, 0.022, 0.15, 0.003, 1), -W / 2 + 0.08 + (i + 0.5) * kw, 0.776, 0.2);
+  // (keys and strings are plain blocks: sixty rounded boxes cost more than the rest of the piano)
+  for (let i = 0; i < n; i++) b.at(ivory, new BoxGeometry(kw - 0.002, 0.022, 0.15), -W / 2 + 0.08 + (i + 0.5) * kw, 0.776, 0.2);
   for (let i = 0; i < n - 1; i++) {
     const deg = i % 7;
     if (deg === 2 || deg === 6) continue;
-    b.at(black, rounded(kw * 0.55, 0.02, 0.09, 0.003, 1), -W / 2 + 0.08 + (i + 1) * kw, 0.795, 0.17);
+    b.at(black, new BoxGeometry(kw * 0.55, 0.02, 0.09), -W / 2 + 0.08 + (i + 1) * kw, 0.795, 0.17);
   }
   for (const sx of [-1, 1]) b.at(black, rounded(0.07, 0.12, 0.32, 0.02), sx * (W / 2 - 0.035), 0.79, 0.14);
   b.at(black, rounded(W - 0.14, 0.05, 0.03, 0.01), 0, 0.84, 0.05);

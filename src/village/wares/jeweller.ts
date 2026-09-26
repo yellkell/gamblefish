@@ -9,14 +9,17 @@ import { Batch, M, rounded, stalk, turned, type Kit } from '../craft.ts';
 
 /** a brilliant-cut stone, table up: crown and pavilion, faceted (flat shaded) */
 export function brilliant(r: number, facets = 8): BufferGeometry {
-  return turned([[0, -r * 1.05], [r, -r * 0.05], [r, 0.02 * r], [r * 0.6, r * 0.42], [0, r * 0.42]], facets);
+  // unwelded, so every facet keeps its own flat normal (no flat-shading shader variant needed)
+  const g = turned([[0, -r * 1.05], [r, -r * 0.05], [r, 0.02 * r], [r * 0.6, r * 0.42], [0, r * 0.42]], facets).toNonIndexed();
+  g.computeVertexNormals();
+  return g;
 }
 
 /** a string of beads along a curve */
 function beads(b: Batch, mat: import('three').Material, pts: Vector3[], r: number, gap = 1.02, cut = false): void {
   let carry = 0;
   // a cut crystal bead is an octahedron (eight facets); a pearl is round
-  const g = cut ? new OctahedronGeometry(r * 1.2) : new SphereGeometry(r, 8, 6);
+  const g = cut ? new OctahedronGeometry(r * 1.2) : new SphereGeometry(r, 7, 5);
   for (let i = 0; i < pts.length - 1; i++) {
     const seg = pts[i].distanceTo(pts[i + 1]);
     let d = carry;
@@ -48,7 +51,7 @@ export function chandelier(k: Kit): Object3D {
   // the chain up to the ceiling (left out of the board's picture)
   const chain = new Batch();
   // down from the villa's ceiling, 2 m over its top
-  for (let i = 0; i < 43; i++) chain.at(gold, new TorusGeometry(0.022, 0.006, 5, 10), 0, 0.42 + i * 0.038, 0, 0, i % 2 ? Math.PI / 2 : 0, 0);
+  for (let i = 0; i < 43; i++) chain.at(gold, new TorusGeometry(0.022, 0.006, 4, 8), 0, 0.42 + i * 0.038, 0, 0, i % 2 ? Math.PI / 2 : 0, 0);
   const cg = chain.group();
   cg.userData.noThumb = true;
   // the column: turned gold, a crystal ball in its waist

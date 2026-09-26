@@ -178,6 +178,7 @@ const WOODS: Record<Wood, [string, number]> = {
 };
 
 const cache = new Map<string, Material>();
+const woodMaps = new Map<Wood, CanvasTexture>();
 function once<T extends Material>(key: string, make: () => T): T {
   let m = cache.get(key);
   if (!m) cache.set(key, (m = make()));
@@ -185,35 +186,66 @@ function once<T extends Material>(key: string, make: () => T): T {
 }
 
 /** every material a thing can be made of */
+/**
+ * A plain colour in a finish. What's drawn is one shared vertex-coloured material per finish,
+ * the colour baked into each piece (Batch.add): a room full of things in forty colours is a
+ * handful of draws, not forty. (The per-colour material stands in for anything drawn outside a
+ * Batch, and looks the same.)
+ */
+function plain(r: WebGLRenderer, finish: string, c: string, p: { roughness: number; metalness: number; envMapIntensity: number; map?: CanvasTexture }, tile?: [number, number]): MeshStandardMaterial {
+  return once(`${finish}:${c}`, () => {
+    const m = new MeshStandardMaterial({ color: c, ...p, envMap: casinoEnv(r) });
+    m.userData.bakeAs = once(`shared:${finish}`, () => new MeshStandardMaterial({ ...p, vertexColors: true, envMap: casinoEnv(r) }));
+    m.userData.tint = c;
+    if (tile) m.userData.tile = tile;
+    return m;
+  });
+}
+
+/** cloth's weave, in grey on white (the colour is the piece's): one per kind of cloth */
+const weaves = new Map<string, CanvasTexture>();
+function weaveMap(kind: 'linen' | 'velvet' | 'canvas'): CanvasTexture {
+  let t = weaves.get(kind);
+  if (!t) weaves.set(kind, (t = canvas(128, 128, (g, w, h) => weave(g, w, h, '#ffffff', kind.length, kind === 'canvas' ? 3 : 4, kind === 'velvet' ? 0.05 : 0.12))));
+  return t;
+}
+
+/** metals come in four finishes (so they share their draws), from mirror to worn */
+const METAL_ROUGH = [0.15, 0.3, 0.45, 0.7];
+
+/** every material a thing can be made of */
 export const M = {
-  satin: (r: WebGLRenderer, c: string): MeshStandardMaterial => once(`satin:${c}`, () => new MeshStandardMaterial({ color: c, roughness: 0.55, metalness: 0.05, envMap: casinoEnv(r), envMapIntensity: 0.7 })),
-  gloss: (r: WebGLRenderer, c: string): MeshStandardMaterial => once(`gloss:${c}`, () => new MeshStandardMaterial({ color: c, roughness: 0.14, metalness: 0, envMap: casinoEnv(r), envMapIntensity: 1.2 })),
+  satin: (r: WebGLRenderer, c: string): MeshStandardMaterial => plain(r, 'satin', c, { roughness: 0.55, metalness: 0.05, envMapIntensity: 0.7 }),
+  gloss: (r: WebGLRenderer, c: string): MeshStandardMaterial => plain(r, 'gloss', c, { roughness: 0.14, metalness: 0, envMapIntensity: 1.2 }),
   /** glazed ceramic: glossy, a touch of depth */
-  glaze: (r: WebGLRenderer, c: string): MeshStandardMaterial => once(`glaze:${c}`, () => new MeshStandardMaterial({ color: c, roughness: 0.2, metalness: 0.02, envMap: casinoEnv(r), envMapIntensity: 1.3 })),
+  glaze: (r: WebGLRenderer, c: string): MeshStandardMaterial => plain(r, 'glaze', c, { roughness: 0.2, metalness: 0.02, envMapIntensity: 1.3 }),
   /** polished metal */
-  metal: (r: WebGLRenderer, c: string, rough = 0.25): MeshStandardMaterial => once(`metal:${c}:${rough}`, () => new MeshStandardMaterial({ color: c, roughness: rough, metalness: 1, envMap: casinoEnv(r), envMapIntensity: 1.5 })),
+  metal: (r: WebGLRenderer, c: string, rough = 0.25): MeshStandardMaterial => {
+    const k = METAL_ROUGH.reduce((a, b) => (Math.abs(b - rough) < Math.abs(a - rough) ? b : a));
+    return plain(r, `metal${k}`, c, { roughness: k, metalness: 1, envMapIntensity: 1.5 });
+  },
   gold: (r: WebGLRenderer): MeshStandardMaterial => M.metal(r, '#ffc848', 0.2),
   brass: (r: WebGLRenderer): MeshStandardMaterial => M.metal(r, '#c89a48', 0.36),
   copper: (r: WebGLRenderer): MeshStandardMaterial => M.metal(r, '#b0643a', 0.36),
   silver: (r: WebGLRenderer): MeshStandardMaterial => M.metal(r, '#e8ecf0', 0.12),
   iron: (r: WebGLRenderer): MeshStandardMaterial => M.metal(r, '#3a3a3e', 0.6),
-  wood: (r: WebGLRenderer, kind: Wood, polish = 0.45): MeshStandardMaterial =>
-    once(`wood:${kind}:${polish}`, () => {
+  wood: (r: WebGLRenderer, kind: Wood, finish = 0.45): MeshStandardMaterial => {
+    // three finishes (polished, satin, oiled), so pieces of a wood share their draws
+    const polish = [0.3, 0.45, 0.6].reduce((a, b) => (Math.abs(b - finish) < Math.abs(a - finish) ? b : a));
+    return once(`wood:${kind}:${polish}`, () => {
       const [base, contrast] = WOODS[kind];
-      const map = canvas(256, 512, (g, w, h) => grain(g, w, h, base, kind.length * 7.3, contrast));
+      // one grain texture per wood, whatever its finish
+      let map = woodMaps.get(kind);
+      if (!map) woodMaps.set(kind, (map = canvas(256, 512, (g, w, h) => grain(g, w, h, base, kind.length * 7.3, contrast))));
       const m = new MeshStandardMaterial({ map, roughness: polish, metalness: 0, envMap: casinoEnv(r), envMapIntensity: 0.8 });
       // box-projected: one tile is 0.35 m across the grain and 0.7 m along it
       m.userData.tile = [0.35, 0.7];
       return m;
-    }),
+    });
+  },
   /** cloth: linen's weave, or velvet's sheen */
   cloth: (r: WebGLRenderer, c: string, kind: 'linen' | 'velvet' | 'canvas' = 'linen'): MeshStandardMaterial =>
-    once(`cloth:${c}:${kind}`, () => {
-      const map = canvas(128, 128, (g, w, h) => weave(g, w, h, c, c.length, kind === 'canvas' ? 3 : 4, kind === 'velvet' ? 0.05 : 0.12));
-      const m = new MeshStandardMaterial({ map, roughness: kind === 'velvet' ? 0.75 : 0.9, metalness: 0, envMap: casinoEnv(r), envMapIntensity: kind === 'velvet' ? 0.9 : 0.5 });
-      m.userData.tile = [0.12, 0.12];
-      return m;
-    }),
+    plain(r, `cloth-${kind}`, c, { map: weaveMap(kind), roughness: kind === 'velvet' ? 0.75 : 0.9, metalness: 0, envMapIntensity: kind === 'velvet' ? 0.9 : 0.5 }, [0.12, 0.12]),
   rattan: (r: WebGLRenderer, c = '#c8a468'): MeshStandardMaterial =>
     once(`rattan:${c}`, () => {
       const map = canvas(128, 128, (g, w, h) => rattanPaint(g, w, h, c));
@@ -246,8 +278,8 @@ export const M = {
   /** clear glass: a bottle, a dome, a lamp's chimney */
   glass: (r: WebGLRenderer, tint = '#dff4ff', opacity = 0.2): MeshStandardMaterial =>
     once(`glass:${tint}:${opacity}`, () => new MeshStandardMaterial({ color: tint, transparent: true, opacity, roughness: 0.03, metalness: 0, envMap: casinoEnv(r), envMapIntensity: 2, depthWrite: false })),
-  /** cut crystal and gems: very bright highlights */
-  crystal: (r: WebGLRenderer, c = '#f4fbff'): MeshStandardMaterial => once(`crystal:${c}`, () => new MeshStandardMaterial({ color: c, roughness: 0.02, metalness: 0.35, envMap: casinoEnv(r), envMapIntensity: 3, flatShading: true })),
+  /** cut crystal and gems: very bright highlights (the facets are in the pieces' normals: brilliant()) */
+  crystal: (r: WebGLRenderer, c = '#f4fbff'): MeshStandardMaterial => plain(r, 'crystal', c, { roughness: 0.02, metalness: 0.35, envMapIntensity: 3 }),
   /** a picture or label painted on a canvas */
   painted: (r: WebGLRenderer, key: string, w: number, h: number, paint: (g: CanvasRenderingContext2D, w: number, h: number) => void, rough = 0.8): MeshStandardMaterial =>
     once(`painted:${key}`, () => {
@@ -479,7 +511,7 @@ export function turned(profile: [number, number][], segs = 24, phiStart = 0, phi
 }
 
 /** A box with rounded edges, centred on the origin. */
-export function rounded(w: number, h: number, d: number, r = Math.min(w, h, d) * 0.2, segs = 2): BufferGeometry {
+export function rounded(w: number, h: number, d: number, r = Math.min(w, h, d) * 0.2, segs = 1): BufferGeometry {
   return new RoundedBoxGeometry(w, h, d, segs, Math.min(r, Math.min(w, h, d) / 2 - 1e-4));
 }
 
@@ -543,10 +575,17 @@ export class Batch {
   private readonly parts = new Map<Material, BufferGeometry[]>();
 
   add(mat: Material, g: BufferGeometry, m?: Matrix4): this {
-    const tile = mat.userData.tile as [number, number] | undefined;
+    let geo = g.clone();
     // wood and cloth: their texture laid on in the piece's own shape, before it's placed
-    let geo = tile ? boxUV(g.clone(), tile) : g;
-    geo = m ? (geo === g ? geo.clone() : geo).applyMatrix4(m) : geo;
+    const tile = mat.userData.tile as [number, number] | undefined;
+    if (tile) boxUV(geo, tile);
+    if (m) geo.applyMatrix4(m);
+    // a plain colour: into its finish's shared material, the colour in the piece
+    const bake = mat.userData.bakeAs as Material | undefined;
+    if (bake) {
+      tint(geo, mat.userData.tint as string);
+      mat = bake;
+    }
     // everything bakes indexed (a rounded box, say, comes unindexed)
     if (!geo.index) geo = mergeVertices(geo);
     const coloured = (mat as MeshStandardMaterial).vertexColors === true;
