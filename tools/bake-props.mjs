@@ -30,7 +30,7 @@ const url = (p) => 'file:///' + resolve(TW, p).replace(/\\/g, '/');
 if (process.argv.includes('--if-missing') && existsSync(resolve(OUT, 'props.bin'))) process.exit(0);
 
 const { SPECIES, SKIN } = await import(url('world/fish/FishSpecies.js'));
-const { fishGeometry, PART } = await import(url('world/fish/FishGeometry.js'));
+const { fishGeometry, PART, section, surfaceX } = await import(url('world/fish/FishGeometry.js'));
 const { FISH, FISH_IDS } = await import(url('game/FishTable.js'));
 // the fish that keep their own hours (src/fishing/timedFish.ts): into the table, with bodies
 const { registerTimedFish, registerTimedModels } = await import('../src/fishing/timedFish.ts');
@@ -118,6 +118,22 @@ for (const id of FISH_IDS) {
   const fin = lin(K.fin);
   const edge = lin(K.edge);
   const iris = lin(S.iris);
+  // Seat the eye domes on the head. Tidewater lays each dome down as a flat disc at the eye's
+  // centre, so wherever the head narrows fast under it (the billfish, a snout that tapers, an
+  // enlarged eye) its rim stood off in the air and the eye looked like it was on a stalk. Each
+  // dome vertex is put back on the body surface under it, plus the dome's own bulge.
+  for (let i = 0; i < n; i++) {
+    if (Math.floor(D[i * 4 + 1] + 1e-4) !== PART.EYE) continue;
+    const x = P[i * 3];
+    const y = P[i * 3 + 1];
+    const z = P[i * 3 + 2];
+    const uu = Math.min(1, Math.max(0, (0.5 - z) / S.body));
+    const c = section(S, uu);
+    const rho = Math.min(1, Math.hypot(D[i * 4 + 2], D[i * 4 + 3]));
+    // a low cornea: proud enough to catch the light, never a bulb
+    const bulge = 0.16 * S.eye.r * (1 - rho * rho) + 0.03 * S.eye.r;
+    P[i * 3] = Math.sign(x) * (surfaceX(c, y) + bulge);
+  }
   const col = new Uint8Array(n * 4);
   const along = new Uint8Array(n);
   for (let i = 0; i < n; i++) {

@@ -311,6 +311,8 @@ export function fishSkinSurface(P: Record<string, number>): string {
   float gloss = 0.0;
   if (part == ${pa('EYE')}) {
     float r = length(vec2(t, w));
+    // the dome's rim gives way to the eye painted on the skin under it, so no hard ring shows
+    if (r > 0.9) discard;
     c = shark ? vec3(0.006, 0.006, 0.008) : fishEyeCol(r, atan(w, t), irisC);
     c = mix(c, flank * 0.6, smoothstep(0.93, 1.0, r));
     rough = 0.04;

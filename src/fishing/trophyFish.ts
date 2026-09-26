@@ -231,7 +231,8 @@ function withBill(S: Anatomy, b: number, w: number): void {
   S.bot = bill(S.bot, 0.8);
   S.wid = bill(S.wid, 1);
   S.mouth = { ...S.mouth, corner: m(S.mouth.corner) };
-  S.eye = { ...S.eye, u: m(S.eye.u) };
+  // the head is squeezed into the rest of the length behind the bill: the eye shrinks with it
+  S.eye = { ...S.eye, u: m(S.eye.u), r: S.eye.r * (1 - b) };
   S.opercle = m(S.opercle);
   S.dorsal = S.dorsal.map((f) => ({ ...f, from: m(f.from), to: m(f.to) }));
   S.anal = S.anal.map((f) => ({ ...f, from: m(f.from), to: m(f.to) }));
