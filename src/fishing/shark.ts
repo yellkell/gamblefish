@@ -81,7 +81,7 @@ export function registerSharkModel(species: Record<string, unknown>, skin: Recor
     bot: [[0, 0.004], [0.03, 0.015], [0.08, 0.038], [0.16, 0.072], [0.28, 0.104], [0.4, 0.114], [0.52, 0.104], [0.64, 0.08], [0.76, 0.052], [0.88, 0.027], [0.96, 0.016], [1, 0.015]],
     wid: [[0, 0.005], [0.04, 0.036], [0.12, 0.072], [0.25, 0.1], [0.4, 0.108], [0.55, 0.095], [0.7, 0.068], [0.85, 0.038], [0.95, 0.024], [1, 0.022]],
     // underslung: the snout overhangs a wide mouth set well back
-    mouth: { corner: 0.12, y: -0.03, tip: -0.014, protrude: 0 },
+    mouth: { corner: 0.17, y: -0.05, tip: -0.022, protrude: 0 },
     eye: { u: 0.085, y: 0.022, r: 0.011 },
     opercle: 0.2,
     scales: 0,

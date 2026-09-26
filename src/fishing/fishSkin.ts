@@ -255,25 +255,82 @@ export function fishSkinSurface(P: Record<string, number>): string {
     float rims = smoothstep(0.8, 0.97, sf) * sfade * bodyK;
     c *= 1.0 - rims * 0.35;
   } else if (shark) {
-    // great white: a ragged line between the slate back and the white belly, low on the flank
+    // ---- the great white
+    // a ragged line between the slate back and the white belly, low on the flank
     float edge = -0.12 + (fishVnoise(vec2(z * 26.0, seed)) - 0.5) * 0.16 + (fishVnoise(vec2(z * 70.0, 3.0 + seed)) - 0.5) * 0.05;
-    float top = smoothstep(edge - 0.035, edge + 0.035, h);
-    vec3 slate = mix(flank, back, smoothstep(0.1, 0.8, h)) * mix(0.9, 1.08, n1);
-    c = mix(belly, slate, top);
-    // five gill slits in front of the pectoral fin
+    float top = smoothstep(edge - 0.03, edge + 0.03, h);
+    // slate with a bronze cast along the back, mottled in big soft blotches and fine freckles
+    vec3 slate = mix(flank, back, smoothstep(0.1, 0.8, h));
+    slate = mix(slate, slate * vec3(1.08, 1.0, 0.9), smoothstep(0.3, 0.9, h) * 0.6);
+    float blot = fishVnoise(vec2(z, y) * 16.0 + seed * 11.0);
+    float fleck = fishVnoise(vec2(z, sd) * 150.0 + seed * 3.0);
+    slate *= mix(0.84, 1.1, blot) * mix(0.93, 1.04, fleck);
+    vec3 belly2 = belly * mix(0.94, 1.02, fishVnoise(vec2(z, sd) * 40.0));
+    c = mix(belly2, slate, top);
+    // a thin darker band where the two meet, as on a real one
+    c *= 1.0 - fishBand(h, edge + 0.04, 0.012, 0.03) * 0.12 * bodyK;
+    // old scars: pale scratches raked across the flank and back
+    vec2 sq = vec2(z * 9.0, h * 3.0) + seed * 5.0;
+    vec2 cell = floor(sq);
+    float scar = 0.0;
+    if (fishHash(cell + 0.7) > 0.72) {
+      float an = fishHash(cell + 2.1) * 3.14159;
+      vec2 dir = vec2(cos(an), sin(an));
+      vec2 q = fract(sq) - 0.5;
+      float along = dot(q, dir);
+      float off = abs(dot(q, vec2(-dir.y, dir.x)));
+      scar = (1.0 - smoothstep(0.012, 0.03, off)) * (1.0 - smoothstep(0.25, 0.38, abs(along)));
+    }
+    c = mix(c, mix(c, vec3(0.78, 0.76, 0.72), 0.55), scar * top * bodyK);
+    // five gill slits in front of the pectoral fin: dark, and cut into the relief
     float gz = eye.w - 0.012;
     float slits = 0.0;
     for (int k = 0; k < 5; k++) {
       float zk = gz - float(k) * 0.017 - (0.4 - h) * 0.006;
-      slits = max(slits, (1.0 - smoothstep(0.0012, 0.0028, abs(z - zk))) * smoothstep(-0.55, -0.35, h) * (1.0 - smoothstep(0.35, 0.55, h)));
+      // each slit a little longer than the one behind it, curving back at its lower end
+      float zc = zk - smoothstep(0.0, -0.4, h) * 0.004;
+      float len = 0.3 - float(k) * 0.03;
+      slits = max(slits, (1.0 - smoothstep(0.0008, 0.0022, abs(z - zc))) * smoothstep(-len - 0.12, -len, h) * (1.0 - smoothstep(len * 0.8, len * 0.8 + 0.1, h)));
     }
-    c = mix(c, vec3(0.05, 0.05, 0.06), slits * bodyK * 0.9);
-    // black tips under the pectorals, dark rims on the fins
+    c = mix(c, vec3(0.1, 0.09, 0.1), slits * bodyK * 0.8);
+    bumpH -= slits * bodyK * 0.0012 * L;
+    // the black spot in the pectoral's armpit
+    float axil = (1.0 - smoothstep(0.008, 0.016, length(vec2((z - (0.5 - 0.32 * 0.8 - 0.012)) * 0.8, y + 0.052)))) * bodyK;
+    c = mix(c, vec3(0.03, 0.03, 0.035), axil * 0.9);
+    // pores on the snout (the ampullae), freckling the underside and sides in front of the eye
+    vec2 pc = vec2(z, y) * 260.0;
+    vec2 pcell = floor(pc);
+    float pore = (1.0 - smoothstep(0.12, 0.22, length(fract(pc) - 0.5 - (vec2(fishHash(pcell), fishHash(pcell + 4.0)) - 0.5) * 0.5)))
+      * step(0.55, fishHash(pcell + 9.0)) * smoothstep(eye.x - 0.02, eye.x + 0.03, z) * bodyK;
+    c *= 1.0 - pore * 0.55;
+    // teeth: a row of white triangles just under the upper lip, from the corner of the mouth forward
+    float mz = clamp((z - lat.z) / (0.5 - lat.z), 0.0, 1.0);
+    float lipY = mix(lat.w, r3.w, mz);
+    // serrated triangles hanging from the upper jaw, the lower row's tips showing between them
+    float inMouth = step(lat.z + 0.006, z) * (1.0 - smoothstep(0.47, 0.485, z)) * bodyK;
+    float tri = 1.0 - abs(fract(z * 105.0) * 2.0 - 1.0);
+    float tri2 = 1.0 - abs(fract(z * 105.0 + 0.5) * 2.0 - 1.0);
+    float below = lipY - y;
+    float tooth = step(0.0012, below) * step(below, 0.0012 + 0.0095 * tri);
+    float lower = step(0.0012 + 0.0105, below) * step(below, 0.0012 + 0.0125) * step(0.4, tri2);
+    float gum = 1.0 - smoothstep(0.0, 0.0014, abs(below - 0.0006));
+    c = mix(c, vec3(0.35, 0.12, 0.14), gum * inMouth * 0.9);
+    c = mix(c, vec3(0.93, 0.91, 0.84) * mix(0.85, 1.0, tri), max(tooth, lower) * inMouth);
+    // a shadow in the gape between the rows
+    c *= 1.0 - step(0.0012, below) * step(below, 0.0012 + 0.0115) * (1.0 - max(tooth, lower)) * inMouth * 0.75;
+    // black tips under the pectorals, dark trailing edges on the rest of the fins
     float tip = part == ${pa('PECTORAL')} ? smoothstep(0.7, 0.95, t) : 0.0;
     c = mix(c, vec3(0.02, 0.02, 0.025), tip);
-    if (isFin && part != ${pa('PECTORAL')}) c = mix(slate, slate * 0.55, smoothstep(0.6, 1.0, t));
-    // dermal denticles: a fine, sandpapery sheen rather than scales
-    rough = mix(0.5, 0.62, n2);
+    if (isFin && part != ${pa('PECTORAL')}) c = mix(slate, slate * 0.5, smoothstep(0.6, 1.0, t));
+    if (part == ${pa('PECTORAL')}) c = mix(mix(belly2, slate, 0.8), vec3(0.02, 0.02, 0.025), tip);
+    // dermal denticles: a fine sandpaper grain in the relief, and a satin rather than wet sheen
+    float dFade = 1.0 - smoothstep(0.3, 0.8, px / (0.0025 * L));
+    float den = fishVnoise(vec2(z, sd) * 900.0 + seed) - 0.5;
+    float ridge = sin(z * 700.0 + fishVnoise(vec2(z, sd) * 80.0) * 6.0) * 0.5;
+    bumpH += (den * 0.00006 + ridge * 0.000025) * dFade * L * (isBody || isFin ? 1.0 : 0.0);
+    // the flank's long muscle ripples, very faint
+    bumpH += sin(z * 60.0 + h * 2.0) * 0.00025 * bodyK * L;
+    rough = mix(0.42, 0.6, fleck);
     metal = 0.0;
   }
 
