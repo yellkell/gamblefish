@@ -46,6 +46,8 @@ JavaScript, though, and that does carry over:
   builders headlessly in Node (about 2 s). It writes `public/world/`:
   - `terrain.bin` — the heightfield on a 2 m grid, a ground-colour map and water depth.
   - `village.bin` — the village, pier and boardwalks as merged, vertex-coloured meshes.
+    The pier's handrails are laid end to end. Tidewater overlaps each bay's rails
+    over the posts, and the overlapping faces flickered.
   - `world.json` — the layout and Tidewater's collision world.
 - The runtime (`src/world/`) rebuilds all of this in three.js for Quest:
   - LOD terrain chunks.
@@ -101,18 +103,40 @@ and the vendors.
   Taxidermist and Pawn Shop each sell things for it from a counter and a price
   board (`src/village/homeGoods.ts`). What you buy is delivered to its spot in the
   shack and kept in your save.
+  - The Builder: a driftwood bed with a patchwork quilt, a table and two ladder-back
+    chairs, a kilim rug, a bookshelf, and a sea chest for the foot of the bed.
+  - The Florist: a kentia palm, a hibiscus in bloom, a Boston fern in a macramé
+    hanger, a moth orchid on a bamboo stand, and a monstera in a woven basket.
+  - The Taxidermist: tarpon, mahi-mahi, red snapper and a leaping sailfish, each on a
+    carved plaque with an engraved brass plate.
+  - The Pawn Shop: a ship in a bottle on a rum barrel, a mariner's globe, a painting of
+    the bay, and a brass diving helmet on its salvage crate.
+- **How the goods are made:** each shop's things are modelled in `src/village/wares/`
+  with a small kit (`src/village/craft.ts`): leaves, petals and leaflets as curved,
+  folded blades grown from real stems; tapered tubes; turned and rounded pieces; wood
+  grain, linen, velvet and rattan painted once on a canvas.
+  - **Draw calls:** plain colours and cloth share one material per finish, with the
+    colour baked into each piece. Everything delivered to the shack or the villa is
+    baked together, one draw per material for the whole room.
+  - **Load time:** each thing is built once at load; its board picture is taken from
+    a copy.
+  - **Cost:** the town from the pier costs the same as before (rooms are drawn only
+    when you can see into them). A fully furnished shack costs about as many draws as
+    it did before this polish.
 - **Coral's villa:** Villa Mar (L) is furnished the same way. The Jeweller sells a
-  crystal chandelier, a vanity with a jewellery box, pearls on a velvet bust and a
-  ring under a glass dome. The Boutique sells a velvet chaise longue, a gilded mirror,
-  silk drapes and a baby grand. Coral is at home (`src/village/villa.ts`), lit like the
+  crystal chandelier, a vanity with a jewellery box, pearls on a velvet bust, a
+  ring under a glass cloche and a mermaid's tiara. The Boutique sells a velvet chaise
+  longue, a gilded cheval mirror, silk drapes, a baby grand and a painted silk screen. Coral is at home (`src/village/villa.ts`), lit like the
   room around her rather than by the sky outside, and a board
   over her sofa counts your gifts in hearts, with a new line from her for each one.
 - **Fishing upgrades** (`src/fishing/gear.ts`, `src/village/gearShop.ts`), on
   Tidewater's own upgrade tracks:
   - The **Tackle Shop** sells rods (cast distance), reels (reel speed) and line
-    (breaking strain), each now with a big-game top level.
-  - The **Bait Shop** sells bait. Better bait brings bites sooner.
-  - The **Fortune Teller** sells luck charms, which make trophy fish bite more often.
+    (breaking strain), each now with a big-game top level, and hooks: sharper hooks
+    hold the window to strike open longer.
+  - The **Bait Shop** sells bait, up to live bonito. Better bait brings bites sooner.
+  - The **Fortune Teller** sells luck charms, up to the sea king's doubloon. They
+    make trophy fish bite more often.
   - Each board says which trophy fish a level opens up.
   - Every shop board shows a picture of each thing it sells: the item's own 3D model,
     photographed once at load (`src/ui/thumbnail.ts`).
@@ -126,7 +150,8 @@ and the vendors.
   each spot is now a small garden. Rooms are only drawn when you could see into them
   (from inside, or from in front of the doorway), so looking back at town from the
   pier costs about 100 draw calls instead of about 800.
-- **Field guide:** the backpack has a second tab, a book of the island's marine fauna
+- **Field guide:** the backpack has a second tab (the BACKPACK and FIELD GUIDE
+  buttons stand off the tray's left edge, above MUSIC), a book of the island's marine fauna
   (`src/backpack/fieldGuide.ts`). It has a title page with your progress, two species to
   a page, and the tarpon and the trophy fish on a page each at the back. A species you
   haven't caught shows as a shadow with where and when to look. The first one you land

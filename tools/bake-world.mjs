@@ -81,6 +81,35 @@ let boathouse = null;
 let boathouseDepth = -1;
 const SLIP = { rails: [-0.55, 1.25], tie: 0.6, wet: 2.5, step: 0.5 };
 const walkIn = () => house && hasInterior(house.name);
+
+// The pier's handrails. Tidewater lays each bay's top rail 16 cm longer than the bay and each mid
+// rail 10 cm longer, so neighbouring pieces overlap over every post, on the same faces (the head's
+// runs don't even jitter apart): they z-fight, a flickering patchwork at the joints. The bake lays
+// them end to end instead: each piece is clipped where one already laid stops (a rail still
+// caps the post at the end of a run), and the top rails sit level, without the per-bay wobble.
+const { PIER } = await import(url('world/Pier.js'));
+const RAIL = { top: PIER.deck + 0.95 + 0.022, mid: PIER.deck + 0.48 };
+const railsLaid = { top: [], mid: [] };
+/** a harbour-frame piece inside the pier's footprint */
+const onPier = (B, x, z) => B.stack.length === 0 && x > PIER.headX0 - 0.5 && x < PIER.headX1 + 0.5 && z > PIER.zStart - 0.5 && z < PIER.zEnd + 0.5;
+/**
+ * Clip a rail running along x (alongX) or z over [a0, a1], `half` thick either side of `c`,
+ * against the rails of its kind already laid; returns the free stretch, or null.
+ */
+const clipRail = (kind, alongX, a0, a1, c, half) => {
+  for (const r of railsLaid[kind]) {
+    // the laid piece's extent along this one's axis, and across it
+    const [e0, e1] = alongX ? r.x : r.z;
+    const [f0, f1] = alongX ? r.z : r.x;
+    if (f1 <= c - half + 1e-4 || f0 >= c + half - 1e-4 || e1 <= a0 + 1e-4 || e0 >= a1 - 1e-4) continue;
+    if (e0 <= a0 + 1e-4) a0 = e1;
+    else if (e1 >= a1 - 1e-4) a1 = e0;
+  }
+  if (a1 - a0 < 0.02) return null;
+  const cross = [c - half, c + half];
+  railsLaid[kind].push(alongX ? { x: [a0, a1], z: cross } : { x: cross, z: [a0, a1] });
+  return [a0, a1];
+};
 {
   const { Village: V } = await import(url('world/Village.js'));
   const layout = V.prototype._layout;
@@ -153,6 +182,22 @@ const walkIn = () => house && hasInterior(house.name);
     }
   };
   Builder.prototype.box = function (key, x, y, z, sx, sy, sz, o) {
+    // the pier's top rails (0.2 wide, 0.045 deep) and the head's mid rails (0.05 thick, 0.14 deep)
+    const top = sy === 0.045 && Math.min(sx, sz) === 0.2 && Math.abs(y - RAIL.top) < 0.02;
+    const mid = sy === 0.14 && Math.min(sx, sz) === 0.05 && Math.abs(y - RAIL.mid) < 0.01;
+    if (key === 'wood' && (top || mid) && Math.max(sx, sz) > 0.5 && onPier(this, x, z)) {
+      const alongX = sx > sz;
+      const len = alongX ? sx : sz;
+      // the walkway's top rails wander a centimetre off their posts, bay by bay: back on the line
+      if (top && !alongX) for (const px of [PIER.x - PIER.pileOff, PIER.x + PIER.pileOff]) if (Math.abs(x - px) < 0.02) x = px;
+      const c = alongX ? z : x;
+      const ab = clipRail(top ? 'top' : 'mid', alongX, (alongX ? x : z) - len / 2, (alongX ? x : z) + len / 2, c, Math.min(sx, sz) / 2);
+      if (!ab) return;
+      const m = (ab[0] + ab[1]) / 2;
+      const L = ab[1] - ab[0];
+      const o2 = top ? { ...o, rx: 0, rz: 0 } : o;
+      return box.call(this, key, alongX ? m : x, top ? RAIL.top : y, alongX ? z : m, alongX ? L : sx, sy, alongX ? sz : L, o2);
+    }
     // Tidewater's slipway ties (1.1 m, one set per rail)
     if (inBoathouse(this) && sx === 1.1 && sy === 0.09 && sz === 0.16) return;
     const p = blockingPost(this);
@@ -188,6 +233,16 @@ const walkIn = () => house && hasInterior(house.name);
     return lathe.call(this, key, x, y, z, profile, o);
   };
   Builder.prototype.beam = function (key, p0, p1, w, h, o) {
+    // the walkway's mid rails, one per bay along z: laid end to end (a sagging one keeps its sag)
+    if (key === 'wood' && w === 0.05 && h === 0.14 && p0[0] === p1[0] && Math.abs(p0[1] - RAIL.mid) < 0.4 && onPier(this, p0[0], p0[2])) {
+      const ab = clipRail('mid', false, Math.min(p0[2], p1[2]), Math.max(p0[2], p1[2]), p0[0], w / 2);
+      if (!ab) return;
+      const level = Math.abs(p0[1] - p1[1]) < 0.03;
+      const lerpY = (zz) => p0[1] + ((p1[1] - p0[1]) * (zz - p0[2])) / (p1[2] - p0[2]);
+      const y0 = level ? RAIL.mid : lerpY(ab[0]);
+      const y1 = level ? RAIL.mid : lerpY(ab[1]);
+      return beam.call(this, key, [p0[0], y0, ab[0]], [p1[0], y1, ab[1]], w, h, o);
+    }
     // Tidewater's slipway rails (one straight beam each)
     if (inBoathouse(this) && w === 0.14 && h === 0.12 && SLIP.rails.includes(p0[0]) && p0[0] === p1[0]) return;
     const p = blockingPost(this);
@@ -752,3 +807,4 @@ console.log(`terrain.bin ${mb(terrainBin)}  village.bin ${mb(villageBin)}  veg.b
 console.log('vegetation', vegCounts, 'rocks', rocks.length);
 console.log('village', villageMeta);
 console.log(`colliders: ${boxes.length} boxes (${boxes.filter((b) => b.walkable).length} walkable), ${cylinders.length} cylinders`);
+console.log(`pier rails laid end to end: ${railsLaid.top.length} top, ${railsLaid.mid.length} mid`);

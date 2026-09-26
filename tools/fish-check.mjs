@@ -78,7 +78,7 @@ console.log('\nthe trophy fish (2,000 bites at each spot)');
     check(`${FISH[id].name}: never without its gear or its depth`, noRig + bare + short.reduce((a, b) => a + b, 0) + shallow === 0, `no rig ${noRig}, starter gear ${bare}, one level short ${short.join('/')}, too shallow ${shallow}`);
     check(`${FISH[id].name}: bites for the rig that can take it`, rigged > 0, `${rigged} of 2,000`);
     const lucky = count(id, where, hour, { depth: deep, gear: top });
-    check(`${FISH[id].name}: bites more with the mermaid's comb`, lucky > rigged, `${rigged} → ${lucky}`);
+    check(`${FISH[id].name}: bites more with the best charm`, lucky > rigged, `${rigged} → ${lucky}`);
     if (t.hours) {
       const off = count(id, where, 12, { depth: deep, gear: top });
       check(`${FISH[id].name}: only at night`, off === 0, `${off} at noon`);

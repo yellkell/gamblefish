@@ -503,8 +503,8 @@ export class FishingSystem extends createSystem({}) {
         fishingDeps.fx?.ripple(this.bob, 0.55, 0, 1.0);
       } else {
         b.phase = 'take';
-        // big, strong fish give a (slightly) shorter window
-        b.t = 2.4 - FISH[b.species!].fight * 0.5;
+        // big, strong fish give a (slightly) shorter window; sharper hooks a longer one
+        b.t = (2.4 - FISH[b.species!].fight * 0.5) * (fishingDeps.state!.stats.strikeMul ?? 1);
         this.hapticT = 0;
         surfaceThrash(this.bob, 0.35);
         fishingDeps.fx?.splash(this.bob, 0.35);

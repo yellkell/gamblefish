@@ -342,8 +342,21 @@ export function buildInteriors(frames: BuildingFrame[]): Interior[] {
     );
     ceil.position.y = h;
     group.add(floor, ceil);
-    const panel = (pw: number, ph: number, x: number, y: number, z: number, ry: number): void => {
-      const m = new Mesh(new PlaneGeometry(pw, ph), wallMat);
+    /**
+     * A wall, or (`cut`) a piece of the front wall: its texture is then cut from the whole wall's,
+     * so the planks and the baked light run on through the pieces round the doorway, rather than
+     * the whole wall's worth squeezed into the strip over the door.
+     */
+    const panel = (pw: number, ph: number, x: number, y: number, z: number, ry: number, cut = false): void => {
+      const g = new PlaneGeometry(pw, ph);
+      if (cut) {
+        // turned to face in (ry = π): local +x runs along world −x; the whole wall's u = ½ − x / w
+        const pos = g.getAttribute('position');
+        const uv = g.getAttribute('uv');
+        for (let i = 0; i < pos.count; i++) uv.setXY(i, 0.5 - (x - pos.getX(i)) / w, (y + pos.getY(i)) / h);
+        uv.needsUpdate = true;
+      }
+      const m = new Mesh(g, wallMat);
       m.position.set(x, y, z);
       m.rotation.y = ry;
       group.add(m);
@@ -360,9 +373,9 @@ export function buildInteriors(frames: BuildingFrame[]): Interior[] {
     const l1 = dx - OW / 2;
     const r0 = dx + OW / 2;
     const r1 = w / 2;
-    if (l1 > l0) panel(l1 - l0, h, (l0 + l1) / 2, h / 2, d / 2, Math.PI);
-    if (r1 > r0) panel(r1 - r0, h, (r0 + r1) / 2, h / 2, d / 2, Math.PI);
-    panel(OW, h - OH, dx, OH + (h - OH) / 2, d / 2, Math.PI);
+    if (l1 > l0) panel(l1 - l0, h, (l0 + l1) / 2, h / 2, d / 2, Math.PI, true);
+    if (r1 > r0) panel(r1 - r0, h, (r0 + r1) / 2, h / 2, d / 2, Math.PI, true);
+    panel(OW, h - OH, dx, OH + (h - OH) / 2, d / 2, Math.PI, true);
     // the doorway lined from the room's shell out to the house's wall: jambs and head in the
     // trim's wood over the gap between them, the threshold in the floor's planks. Through the
     // wall itself the bake's cut wall faces are the lining — a plane over them fought them in

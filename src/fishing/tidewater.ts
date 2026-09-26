@@ -112,6 +112,8 @@ export interface GearStats {
   biteMul: number;
   /** the fortune teller's charm: how much more often a trophy fish bites */
   luck: number;
+  /** the tackle shop's hooks: how much longer the window to strike stays open */
+  strikeMul: number;
 }
 
 export interface CaughtFish {

@@ -14,7 +14,7 @@
  * much more you need. The board says what each level opens up among the trophy fish.
  */
 
-import { BoxGeometry, ConeGeometry, Group, Mesh, MeshBasicMaterial, SphereGeometry, TorusGeometry } from 'three';
+import { Group, MeshBasicMaterial, SphereGeometry, TorusGeometry, Vector3, type Object3D } from 'three';
 import { uiDeny, winFanfare } from '../audio/sfx.ts';
 import { GEAR_BLURB, GEAR_SHOPS } from '../fishing/gear.ts';
 import { FISH, UPGRADES, type GameState } from '../fishing/tidewater.ts';
@@ -23,10 +23,12 @@ import { font } from '../ui/fonts.ts';
 import { INK, roundRect } from '../ui/panel.ts';
 import { InteractivePanel, register } from '../ui/pointer.ts';
 import { drawThumb, thumbnail } from '../ui/thumbnail.ts';
-import { ball, box, cyl, glass, mat, type Kit } from './homeGoods.ts';
+import { Batch, M, rng, rounded, stalk, turned, type Kit } from './craft.ts';
 import { shopCounter, type Interior } from './interiors.ts';
 import { mergeStatic } from './merge.ts';
 import { ROLES } from './roles.ts';
+import { curtain } from './wares/boutique.ts';
+import { bait, charm, hook, hookCard, reel, rod, spool } from './wares/tackle.ts';
 
 const BW = 1200;
 const BH = 700;
@@ -40,219 +42,166 @@ function opens(track: string, level: number): string[] {
 
 /* ── what's on show ─────────────────────────────────────────────────────── */
 
-/** a spinning reel: spool, body, handle */
-function reel(k: Kit, colour: string): Group {
-  const g = new Group();
-  g.add(cyl(k, colour, 0.035, 0.035, 0.05, 0, 0.1, 0, 16, 'gloss').rotateX(Math.PI / 2));
-  g.add(cyl(k, '#c8ccd0', 0.03, 0.03, 0.03, 0, 0.1, 0.04, 12, 'gloss').rotateX(Math.PI / 2));
-  g.add(box(k, '#2a2a2e', 0.02, 0.08, 0.03, 0, 0.05, 0));
-  g.add(box(k, '#2a2a2e', 0.1, 0.012, 0.02, 0, 0.01, 0));
-  g.add(box(k, '#c8ccd0', 0.012, 0.06, 0.012, 0.045, 0.12, -0.03));
-  return g;
-}
-
-/** a rod standing in the rack: butt, cork grip, blank, a few guides */
-function rod(k: Kit, blank: string, len: number): Group {
-  const g = new Group();
-  g.add(cyl(k, '#2a2a2e', 0.016, 0.018, 0.12, 0, 0.06, 0, 8));
-  g.add(cyl(k, '#c8a070', 0.015, 0.015, 0.32, 0, 0.28, 0, 8));
-  g.add(cyl(k, blank, 0.004, 0.011, len - 0.44, 0, 0.44 + (len - 0.44) / 2, 0, 6, 'gloss'));
-  for (let i = 1; i <= 4; i++) g.add(new Mesh(new TorusGeometry(0.012 - i * 0.0015, 0.002, 4, 10), mat(k, 'gloss', '#c8ccd0')).translateY(0.44 + ((len - 0.44) * i) / 5).translateZ(0.014));
-  return g;
+/** a thing placed at x, y, z, turned by ry (and tipped by rx, rz) */
+function put(g: Group, o: Object3D, x: number, y: number, z: number, ry = 0, rx = 0, rz = 0, s = 1): void {
+  o.position.set(x, y, z);
+  o.rotation.set(rx, ry, rz);
+  o.scale.setScalar(s);
+  g.add(o);
 }
 
 function tackleDecor(k: Kit, room: Interior, top: number, cz: number): Group {
   const g = new Group();
-  // the rack by the left wall: a rail and four rods, the big-game one last
+  // the rack by the left wall: a rail top and bottom, a rod of every grade standing in it
   const rack = new Group();
-  rack.add(box(k, '#6a4428', 0.08, 0.06, 1.3, 0, 0.9, 0));
-  rack.add(box(k, '#6a4428', 0.08, 0.04, 1.3, 0, 0.08, 0));
-  const rods: [string, number][] = [['#8a6a48', 1.9], ['#2a3a2a', 2.1], ['#c23b2e', 2.4], ['#101a3a', 2.3]];
-  rods.forEach(([c, L], i) => {
-    const r = rod(k, c, L);
-    r.position.set(0.02, 0.02, -0.5 + i * 0.33);
-    r.rotation.z = -0.06;
-    rack.add(r);
-  });
-  rack.position.set(-room.w / 2 + 0.2, 0, -0.1);
+  const b = new Batch();
+  const wood = M.wood(k.renderer, 'teak', 0.4);
+  b.at(wood, rounded(0.1, 0.05, 1.5, 0.012), 0, 0.95, 0);
+  b.at(wood, rounded(0.14, 0.06, 1.5, 0.012), 0, 0.05, 0);
+  for (const z of [-0.72, 0.72]) b.at(wood, rounded(0.05, 1.0, 0.05, 0.01), -0.03, 0.5, z);
+  for (let i = 0; i < 4; i++) b.at(M.satin(k.renderer, '#2a2a2e'), new TorusGeometry(0.022, 0.006, 5, 12).rotateX(Math.PI / 2), 0.04, 0.95, -0.54 + i * 0.36);
+  rack.add(b.group());
+  for (let i = 0; i < 4; i++) put(rack, rod(k, i), 0.04, 0.08, -0.54 + i * 0.36, Math.PI / 2, 0, -0.05);
+  rack.position.set(-room.w / 2 + 0.16, 0, -0.1);
   g.add(rack);
-  // on the counter: three reels and spools of line
-  ['#4a4e56', '#c8a040', '#101a3a'].forEach((c, i) => {
-    const r = reel(k, c);
-    r.position.set(-0.8 + i * 0.35, top, cz);
-    r.rotation.y = 0.5;
-    g.add(r);
-  });
-  ['#e8e0c0', '#3fd66a', '#ff8a3a', '#3fa0ff'].forEach((c, i) => g.add(cyl(k, c, 0.045, 0.045, 0.06, 0.35 + i * 0.16, top + 0.03, cz + 0.05, 14, 'gloss')));
-  // a trophy sailfish's bill over the door, the way tackle shops have them
-  g.add(cyl(k, '#1a2a5a', 0.004, 0.03, 0.9, 0, room.h - 0.5, room.d / 2 - 0.05, 8, 'gloss').rotateZ(Math.PI / 2));
+  // on the counter: the three reels on little stands, spools of line, cards of hooks
+  const c = new Batch();
+  for (let i = 1; i <= 3; i++) {
+    const x = -0.95 + (i - 1) * 0.3;
+    c.at(M.wood(k.renderer, 'walnut', 0.3), rounded(0.12, 0.02, 0.1, 0.006), x, top + 0.01, cz);
+    c.at(M.metal(k.renderer, '#b8bcc4', 0.25), turned([[0.006, 0], [0.006, 0.12]], 8), x, top + 0.02, cz - 0.03);
+    put(g, reel(k, i), x, top + 0.13, cz - 0.03, 0.4, Math.PI, 0);
+  }
+  for (let i = 1; i <= 4; i++) put(g, spool(k, i), 0.1 + (i - 1) * 0.15, top, cz + 0.05, 0.3);
+  for (let i = 0; i < 4; i++) put(g, hookCard(k, i), 0.72 + i * 0.12, top, cz - 0.12, -0.1, -0.15);
+  g.add(c.group());
+  // a sailfish's bill over the door, the way tackle shops have them
+  const bill = new Batch();
+  bill.add(M.gloss(k.renderer, '#1a2a5a'), stalk([new Vector3(-0.45, room.h - 0.45, room.d / 2 - 0.05), new Vector3(0.4, room.h - 0.42, room.d / 2 - 0.05), new Vector3(0.45, room.h - 0.43, room.d / 2 - 0.05)], 0.03, 0.003, 8, 8));
+  bill.at(M.wood(k.renderer, 'walnut', 0.3), rounded(0.2, 0.14, 0.02, 0.01), -0.45, room.h - 0.45, room.d / 2 - 0.03);
+  g.add(bill.group());
   return g;
 }
 
 function baitDecor(k: Kit, room: Interior, top: number, cz: number): Group {
   const g = new Group();
-  // the live-bait tank by the right wall: blue water in glass, a school of silver baitfish
+  // the live-bait tank by the right wall: blue water in glass, a school of baitfish, a bubbler
   const tank = new Group();
-  tank.add(box(k, '#4a4e56', 0.7, 0.7, 0.5, 0, 0.35, 0));
-  const water = new Mesh(new BoxGeometry(0.66, 0.36, 0.46), mat(k, 'gloss', '#1e6a8a'));
-  water.position.y = 0.88;
-  tank.add(water);
-  const pane = new Mesh(new BoxGeometry(0.7, 0.42, 0.5), glass());
-  pane.position.y = 0.91;
-  tank.add(pane);
-  for (let i = 0; i < 9; i++) {
-    const f = new Mesh(new ConeGeometry(0.018, 0.09, 5).rotateZ(Math.PI / 2), mat(k, 'gloss', '#d8e0e4'));
-    f.position.set(-0.24 + (i % 3) * 0.22 + (i % 2) * 0.04, 0.8 + Math.floor(i / 3) * 0.08, -0.12 + ((i * 7) % 5) * 0.06);
-    tank.add(f);
+  const b = new Batch();
+  b.at(M.metal(k.renderer, '#5a5e66', 0.5), rounded(0.74, 0.62, 0.5, 0.02), 0, 0.31, 0);
+  b.at(M.gloss(k.renderer, '#1e6a8a'), rounded(0.68, 0.34, 0.44, 0.01), 0, 0.8, 0);
+  b.at(M.glass(k.renderer, '#cfefff', 0.18), rounded(0.72, 0.42, 0.48, 0.008), 0, 0.84, 0);
+  b.at(M.metal(k.renderer, '#5a5e66', 0.5), rounded(0.74, 0.03, 0.5, 0.008), 0, 1.06, 0);
+  for (let i = 0; i < 10; i++) b.at(M.glass(k.renderer, '#ffffff', 0.5), new SphereGeometry(0.006 + (i % 3) * 0.003, 8, 6), 0.28, 0.66 + i * 0.03, 0.15 + Math.sin(i) * 0.01);
+  tank.add(b.group());
+  const r = rng(12);
+  for (let i = 0; i < 7; i++) {
+    const { mesh, uniforms } = k.props.makeFish('silverside');
+    uniforms.uSwim.value = 0.05;
+    uniforms.uTime.value = r() * 5;
+    put(tank, mesh, -0.22 + r() * 0.44, 0.72 + r() * 0.16, -0.14 + r() * 0.28, (r() - 0.5) * 0.8 + Math.PI / 2, 0, 0, 0.1 + r() * 0.03);
   }
   tank.position.set(room.w / 2 - 0.45, 0, 0.35);
   tank.rotation.y = -Math.PI / 2;
   g.add(tank);
   // buckets and a cooler by the counter
-  for (const [x, c] of [[-1.25, '#3f7f55'], [-0.95, '#c23b2e']] as const) {
-    g.add(cyl(k, c, 0.14, 0.12, 0.3, x, 0.15, cz + 0.55, 14));
-    g.add(new Mesh(new TorusGeometry(0.13, 0.006, 4, 16, Math.PI), mat(k, 'gloss', '#c8ccd0')).translateX(x).translateY(0.3).translateZ(cz + 0.55));
+  const c = new Batch();
+  for (const [x, col] of [[-1.25, '#3f7f55'], [-0.95, '#c23b2e']] as const) {
+    c.at(M.gloss(k.renderer, col), turned([[0, 0], [0.12, 0], [0.14, 0.3], [0.145, 0.305], [0.135, 0.3]], 20), x, 0, cz + 0.55);
+    c.at(M.metal(k.renderer, '#c8ccd0', 0.3), new TorusGeometry(0.14, 0.004, 4, 16, Math.PI), x, 0.3, cz + 0.55, 0, 0.4, 0);
   }
-  g.add(box(k, '#f4f4f0', 0.5, 0.34, 0.34, 1.0, 0.17, cz + 0.6));
-  // on the counter: tubs of pilchards and squid, and the glow rig
-  ['#b8c4c8', '#e8c8c8', '#3fd6c6'].forEach((c, i) => {
-    g.add(cyl(k, '#f4f4f0', 0.09, 0.08, 0.1, -0.6 + i * 0.6, top + 0.05, cz, 14));
-    g.add(cyl(k, c, 0.08, 0.08, 0.02, -0.6 + i * 0.6, top + 0.1, cz, 14, 'gloss'));
-  });
+  c.at(M.gloss(k.renderer, '#f4f4f0'), rounded(0.52, 0.3, 0.34, 0.03), 1.0, 0.15, cz + 0.6);
+  c.at(M.gloss(k.renderer, '#2f6fa8'), rounded(0.54, 0.05, 0.36, 0.02), 1.0, 0.32, cz + 0.6);
+  // a tray of ice along the counter for the bait on show
+  c.at(M.metal(k.renderer, '#c8ccd0', 0.25), rounded(1.9, 0.03, 0.3, 0.01), 0, top + 0.015, cz);
+  c.at(M.glaze(k.renderer, '#a8c4d0'), rounded(1.84, 0.012, 0.26, 0.006), 0, top + 0.03, cz);
+  g.add(c.group());
+  for (let lv = 0; lv < 5; lv++) put(g, bait(k, lv), -0.76 + lv * 0.38, top + 0.036, cz, -0.3, 0, 0, lv === 4 ? 0.8 : 1);
   return g;
 }
 
 function fortuneDecor(k: Kit, room: Interior, top: number, cz: number): Group {
   const g = new Group();
-  // velvet on the side walls, a little table with the crystal ball, candles on the counter
-  for (const sx of [-1, 1]) {
-    for (let i = 0; i < 6; i++) g.add(cyl(k, i % 2 ? '#3a1a5a' : '#4a2a6a', 0.08, 0.11, room.h - 0.2, sx * (room.w / 2 - 0.08), (room.h - 0.2) / 2, -1.2 + i * 0.2, 10));
-  }
-  const t = new Group();
-  t.add(cyl(k, '#2a1a3a', 0.45, 0.45, 0.04, 0, 0.72, 0, 24, 'gloss'));
-  t.add(cyl(k, '#2a1a3a', 0.05, 0.08, 0.7, 0, 0.35, 0, 10));
-  t.add(cyl(k, '#5a3a8a', 0.47, 0.5, 0.3, 0, 0.6, 0, 24)); // the cloth
-  t.add(cyl(k, '', 0.08, 0.1, 0.06, 0, 0.77, 0, 16, 'gold'));
-  const orb = new Mesh(new SphereGeometry(0.13, 24, 16), new MeshBasicMaterial({ color: 0xb89aff, transparent: true, opacity: 0.8, toneMapped: false }));
-  orb.position.y = 0.92;
-  t.add(orb);
-  t.add(new Mesh(new SphereGeometry(0.05, 12, 8), new MeshBasicMaterial({ color: 0xffffff, toneMapped: false })).translateY(0.92));
-  t.position.set(1.4, 0, 0.6);
-  g.add(t);
-  // on the counter: the charms themselves — a shark's tooth, a black pearl, a golden comb
-  const tooth = new Mesh(new ConeGeometry(0.03, 0.1, 3), mat(k, 'gloss', '#f4f0e0'));
-  tooth.position.set(-0.6, top + 0.05, cz);
-  g.add(tooth);
-  g.add(ball(k, '#14141c', 0.04, 0, top + 0.04, cz, 'gloss'));
-  const comb = new Group();
-  comb.add(box(k, '', 0.16, 0.03, 0.01, 0, 0.06, 0, 'gold'));
-  for (let i = 0; i < 9; i++) comb.add(box(k, '', 0.006, 0.05, 0.006, -0.07 + i * 0.0175, 0.025, 0, 'gold'));
-  comb.position.set(0.6, top, cz);
-  g.add(comb);
+  const b = new Batch();
+  // velvet on the side walls, falling in folds
+  const velvet = M.cloth(k.renderer, '#3a1a5a', 'velvet');
+  for (const sx of [-1, 1]) b.at(velvet, curtain(room.d - 0.4, room.h - 0.1, 6, 0, -9, 0.06), sx * (room.w / 2 - 0.1), room.h - 0.05, 0, 0, (sx * Math.PI) / 2, 0);
+  // her little round table: a floor-length cloth, the crystal ball on a gold stand
+  b.at(M.cloth(k.renderer, '#5a3a8a', 'velvet'), turned([[0, 0.76], [0.46, 0.76], [0.5, 0.72], [0.52, 0.4], [0.55, 0.02], [0.54, 0], [0.4, 0]], 32), 1.4, 0, 0.6);
+  b.at(M.gold(k.renderer), turned([[0, 0], [0.09, 0], [0.1, 0.02], [0.06, 0.04], [0.07, 0.08], [0.05, 0.09]], 20), 1.4, 0.76, 0.6);
+  b.at(M.glass(k.renderer, '#d8c8ff', 0.35), new SphereGeometry(0.13, 28, 20), 1.4, 0.97, 0.6);
+  // tarot cards fanned on the cloth
+  const r = rng(4);
+  for (let i = 0; i < 5; i++) b.at(M.painted(k.renderer, `tarot${i % 3}`, 64, 112, (c, w, h) => {
+    c.fillStyle = '#f4ead6';
+    c.fillRect(0, 0, w, h);
+    c.strokeStyle = '#8a6a2a';
+    c.lineWidth = 4;
+    c.strokeRect(4, 4, w - 8, h - 8);
+    c.fillStyle = ['#2a3a8a', '#8a1a2a', '#1a6a4a'][i % 3];
+    c.beginPath();
+    c.arc(w / 2, h / 2, 18, 0, Math.PI * 2);
+    c.fill();
+    c.fillStyle = '#e8c060';
+    c.beginPath();
+    for (let p = 0; p < 10; p++) {
+      const a = (p / 10) * Math.PI * 2 - Math.PI / 2;
+      const rr = p % 2 ? 6 : 14;
+      c.lineTo(w / 2 + Math.cos(a) * rr, h / 2 + Math.sin(a) * rr);
+    }
+    c.fill();
+  }), rounded(0.06, 0.002, 0.1, 0.001, 1), 1.2 + i * 0.05, 0.765 + i * 0.001, 0.85 + (r() - 0.5) * 0.04, 0, -0.5 + i * 0.25, 0);
+  // candles on the counter's ends, dripping
+  const wax = M.glaze(k.renderer, '#f4ead6');
   for (const x of [-1.05, 1.05]) {
-    g.add(cyl(k, '#f4ead6', 0.02, 0.02, 0.18, x, top + 0.09, cz, 8));
-    g.add(new Mesh(new SphereGeometry(0.02, 8, 6), new MeshBasicMaterial({ color: 0xffc860, toneMapped: false })).translateX(x).translateY(top + 0.2).translateZ(cz));
+    for (const [dx, h] of [[0, 0.2], [0.06, 0.13], [-0.05, 0.1]] as const) {
+      b.at(wax, turned([[0.02, 0], [0.02, h], [0.014, h + 0.005], [0, h + 0.006]], 12), x + dx, top, cz + (dx ? 0.04 : 0));
+      b.at(M.satin(k.renderer, '#2a2a2a'), turned([[0.001, 0], [0.001, 0.01]], 4), x + dx, top + h, cz + (dx ? 0.04 : 0));
+    }
   }
+  // little velvet stands for the charms
+  for (let lv = 1; lv <= 4; lv++) {
+    const x = -0.6 + (lv - 1) * 0.4;
+    b.at(M.cloth(k.renderer, '#2a1040', 'velvet'), rounded(0.2, 0.05, 0.14, 0.02, 2), x, top + 0.025, cz);
+    b.at(M.gold(k.renderer), turned([[0.004, 0], [0.004, 0.2], [0, 0.205]], 8), x, top + 0.05, cz - 0.03);
+    b.at(M.gold(k.renderer), turned([[0.003, -0.03], [0.003, 0.03]], 6), x, top + 0.24, cz - 0.03, 0, 0, Math.PI / 2);
+  }
+  g.add(b.group());
+  for (let lv = 1; lv <= 4; lv++) put(g, charm(k, lv), -0.6 + (lv - 1) * 0.4, top + 0.17, cz - 0.02, 0, 0, 0, 1.1);
+  // the flames and the ball's glow: lit from within
+  const flame = new MeshBasicMaterial({ color: 0xffc860, toneMapped: false });
+  const glow = new MeshBasicMaterial({ color: 0xb89aff, transparent: true, opacity: 0.55, toneMapped: false, depthWrite: false });
+  const lights = new Batch();
+  for (const x of [-1.05, 1.05]) for (const [dx, h] of [[0, 0.2], [0.06, 0.13], [-0.05, 0.1]] as const) lights.at(flame, turned([[0, 0], [0.008, 0.01], [0.006, 0.02], [0, 0.034]], 8), x + dx, top + h + 0.008, cz + (dx ? 0.04 : 0));
+  lights.at(glow, new SphereGeometry(0.07, 20, 14), 1.4, 0.97, 0.6);
+  g.add(lights.group());
   return g;
 }
 
 /* ── pictures for the board: each level of each track ────────────────── */
 
-/** a little fish: a silver body with a dark back, and a tail fin */
-function baitfish(k: Kit, colour: string, len: number): Group {
-  const g = new Group();
-  g.add(new Mesh(new SphereGeometry(len * 0.5, 12, 8).scale(1, 0.32, 0.18), mat(k, 'satin', colour)));
-  const back = new Mesh(new SphereGeometry(len * 0.47, 12, 8).scale(1, 0.18, 0.19), mat(k, 'satin', '#1e3a5a'));
-  back.position.y = len * 0.07;
-  g.add(back);
-  const tail = new Mesh(new ConeGeometry(len * 0.16, len * 0.28, 4).rotateZ(-Math.PI / 2).scale(1, 1, 0.2), mat(k, 'gloss', colour));
-  tail.position.x = -len * 0.58;
-  g.add(tail);
-  g.add(ball(k, '#101014', len * 0.04, len * 0.36, len * 0.04, len * 0.07, 'gloss'));
-  return g;
-}
-
-/** a squid: mantle, fins, tentacles */
-function squid(k: Kit, colour: string): Group {
-  const g = new Group();
-  g.add(new Mesh(new ConeGeometry(0.05, 0.22, 12).rotateZ(Math.PI / 2), mat(k, 'gloss', colour)).translateX(0.1));
-  g.add(new Mesh(new BoxGeometry(0.07, 0.004, 0.12), mat(k, 'gloss', colour)).translateX(0.19));
-  for (let i = 0; i < 8; i++) {
-    const a = (i / 8) * Math.PI * 2;
-    const t = cyl(k, colour, 0.006, 0.003, 0.16, -0.08, Math.cos(a) * 0.02, Math.sin(a) * 0.02, 5).rotateZ(Math.PI / 2 + Math.cos(a) * 0.15);
-    g.add(t);
-  }
-  return g;
-}
-
-const ROD_LOOK: [string, number][] = [['#8a6a48', 1.9], ['#2a3a2a', 2.1], ['#c23b2e', 2.4], ['#101a3a', 2.3]];
-const REEL_LOOK = ['#4a4e56', '#c8a040', '#101a3a', '#c23b2e'];
-const LINE_LOOK = ['#e8e0c0', '#f4f4f0', '#3fd66a', '#ff8a3a', '#3fa0ff'];
-
 /** the thing a level of a track is, for its picture on the board */
-function gearIcon(k: Kit, track: string, level: number): Group {
+function gearIcon(k: Kit, track: string, level: number): Object3D {
   const g = new Group();
   switch (track) {
-    case 'rod': {
-      const [c, L] = ROD_LOOK[Math.min(level, ROD_LOOK.length - 1)];
-      const r = rod(k, c, L);
-      const rl = reel(k, REEL_LOOK[Math.min(level, REEL_LOOK.length - 1)]);
-      rl.position.set(0, 0.34, 0.03);
-      rl.rotation.set(Math.PI, 0, 0);
-      r.add(rl);
-      r.rotation.z = -0.95;
-      g.add(r);
+    case 'rod':
+      put(g, rod(k, level), 0, 0, 0, 0.3, 0, -0.95);
       break;
-    }
-    case 'reel': {
-      const r = reel(k, REEL_LOOK[Math.min(level, REEL_LOOK.length - 1)]);
-      r.scale.setScalar(1 + level * 0.12);
-      r.rotation.y = 0.6;
-      g.add(r);
+    case 'reel':
+      put(g, reel(k, level), 0, 0, 0, 0.6 + (level >= 2 ? Math.PI / 2 : 0), Math.PI, 0);
       break;
-    }
-    case 'line': {
-      const c = LINE_LOOK[Math.min(level, LINE_LOOK.length - 1)];
-      const spool = new Group();
-      spool.add(cyl(k, '#2a2a2e', 0.075, 0.075, 0.012, 0, 0.044, 0, 20, 'gloss'));
-      spool.add(cyl(k, '#2a2a2e', 0.075, 0.075, 0.012, 0, -0.044, 0, 20, 'gloss'));
-      spool.add(cyl(k, c, 0.06 + level * 0.003, 0.06 + level * 0.003, 0.078, 0, 0, 0, 20, 'gloss'));
-      spool.rotation.x = 1.1;
-      g.add(spool);
+    case 'line':
+      put(g, spool(k, level), 0, 0, 0, 0, 1.1);
       break;
-    }
-    case 'bait': {
-      if (level === 0) {
-        // a frozen shrimp, curled
-        for (let i = 0; i < 6; i++) g.add(ball(k, '#f0a890', 0.035 - i * 0.004, Math.cos(i * 0.5) * 0.06, Math.sin(i * 0.5) * 0.06, 0, 'gloss'));
-      } else if (level === 1) {
-        for (let i = 0; i < 3; i++) g.add(baitfish(k, '#8a9cac', 0.2).translateY(i * 0.05).translateX(i * 0.03));
-      } else {
-        g.add(squid(k, level === 3 ? '#e8d0e8' : '#f0d8d0'));
-        if (level === 3) {
-          const glow = new Mesh(new BoxGeometry(0.012, 0.012, 0.1), new MeshBasicMaterial({ color: 0x5aff9a, toneMapped: false }));
-          glow.position.set(0.02, 0.06, 0);
-          glow.rotation.y = 1.2;
-          g.add(glow);
-        }
-      }
+    case 'hooks':
+      put(g, hook(k, level, 2.4), 0, 0, 0, 0.2);
       break;
-    }
-    case 'charm': {
-      if (level === 1) {
-        g.add(new Mesh(new TorusGeometry(0.08, 0.004, 4, 24), mat(k, 'satin', '#6a4a2a')));
-        g.add(new Mesh(new ConeGeometry(0.02, 0.07, 3).rotateX(Math.PI), mat(k, 'gloss', '#f4f0e0')).translateY(-0.1));
-      } else if (level === 2) {
-        g.add(ball(k, '#14141c', 0.05, 0, 0, 0, 'gloss'));
-        g.add(new Mesh(new TorusGeometry(0.052, 0.006, 6, 24).rotateX(Math.PI / 2), mat(k, 'gold', '')));
-        g.add(new Mesh(new TorusGeometry(0.012, 0.004, 6, 12), mat(k, 'gold', '')).translateY(0.062));
-      } else if (level === 3) {
-        g.add(box(k, '', 0.16, 0.03, 0.01, 0, 0.06, 0, 'gold'));
-        for (let i = 0; i < 9; i++) g.add(box(k, '', 0.006, 0.06, 0.006, -0.07 + i * 0.0175, 0.02, 0, 'gold'));
-        g.add(ball(k, '#e8f6ff', 0.01, 0, 0.078, 0.006, 'gloss'));
-      }
+    case 'bait':
+      put(g, bait(k, level), 0, 0, 0, 0.4);
       break;
-    }
+    case 'charm':
+      put(g, charm(k, level), 0, 0, 0, 0.3);
+      break;
   }
   return g;
 }
@@ -282,9 +231,12 @@ export class GearShopCounter {
     this.tracks = GEAR_SHOPS[room.name] ?? [];
     const [cx, cz, hx, hz, top] = shopCounter(room.d);
     const display = new Group();
-    display.add(box(kit, '#6a4428', hx * 2, top, hz * 2, cx, top / 2, cz));
-    display.add(box(kit, '#4a2e1a', hx * 2 + 0.08, 0.05, hz * 2 + 0.08, cx, top + 0.025, cz, 'gloss'));
-    display.add(DECOR[room.name]?.(kit, room, top + 0.05, cz) ?? new Group());
+    const counter = new Batch();
+    counter.at(M.wood(kit.renderer, 'walnut', 0.45), rounded(hx * 2, top - 0.05, hz * 2, 0.02), cx, (top - 0.05) / 2, cz);
+    counter.at(M.wood(kit.renderer, 'mahogany', 0.25), rounded(hx * 2 + 0.08, 0.05, hz * 2 + 0.08, 0.015), cx, top - 0.025, cz);
+    for (let i = 0; i < 4; i++) counter.at(M.wood(kit.renderer, 'mahogany', 0.4), rounded(hx * 0.42, top * 0.62, 0.02, 0.008), cx - hx + (hx * 2 * (i + 0.5)) / 4, top * 0.46, cz + hz + 0.005);
+    display.add(counter.group());
+    display.add(DECOR[room.name]?.(kit, room, top, cz) ?? new Group());
     room.contents.add(mergeStatic(display));
     for (const t of this.tracks) UPGRADES[t].levels.forEach((_, lv) => lv > 0 && this.pics.set(`${t}:${lv}`, thumbnail(kit.renderer, gearIcon(kit, t, lv))));
 

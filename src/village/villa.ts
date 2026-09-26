@@ -7,15 +7,18 @@
  * the board over the sofa keeps count in hearts, with a word from her for each new one.
  */
 
-import { Group, Mesh, PlaneGeometry, type Camera } from 'three';
+import { Group, Mesh, PlaneGeometry, TorusGeometry, type Camera } from 'three';
 import type { GameState } from '../fishing/tidewater.ts';
 import { font } from '../ui/fonts.ts';
 import { INK, Panel, roundRect } from '../ui/panel.ts';
 import type { BoxCollider } from '../world/data.ts';
 import { Character } from './characters.ts';
-import { box, cyl, GOODS, leaf, legs, rugPaint, Shack, VILLA_SHOPS, type Kit } from './homeGoods.ts';
+import { Batch, M, rounded, turned } from './craft.ts';
+import { GOODS, rugPaint, Shack, VILLA_SHOPS, type Kit } from './homeGoods.ts';
 import type { Interior } from './interiors.ts';
 import { mergeStatic } from './merge.ts';
+import { turnedLeg } from './wares/builder.ts';
+import { kentia } from './wares/florist.ts';
 import { LOVE_INTEREST } from './roles.ts';
 
 /** what she says as the gifts come in (by how many she has) */
@@ -25,7 +28,9 @@ const WORDS = [
   'People are starting to talk about us, you know.',
   'Stay for a drink? The sunset’s better from here.',
   'I told my mother about you.',
+  'You remembered what I said about the sea. Nobody remembers.',
   'You’ve made this place feel like a home.',
+  'Stay a little longer tonight?',
   'Nobody’s ever spoiled me like this.',
   'Every time the door opens, I hope it’s you.',
   'Ask me. You know what I’ll say.',
@@ -49,29 +54,42 @@ export class Villa {
     const d = room.d;
     // her own things: the sofa (a collider in interiors.ts FURNITURE), a rug, a sideboard, palms
     const own = new Group();
-    const sofa = new Group();
-    sofa.add(box(kit, '#f4ead6', 2.1, 0.42, 0.84, 0, 0.21, 0));
-    sofa.add(box(kit, '#f4ead6', 2.1, 0.5, 0.2, 0, 0.62, -0.32));
-    for (const sx of [-1, 1]) sofa.add(box(kit, '#f4ead6', 0.18, 0.3, 0.84, sx * 0.96, 0.57, 0));
-    for (const [x, c] of [[-0.55, '#e8506a'], [0.55, '#3fa8a0']] as const) sofa.add(box(kit, c, 0.42, 0.34, 0.12, x, 0.62, -0.18));
-    sofa.position.set(0, 0, -d / 2 + 0.5);
-    own.add(sofa);
+    const b = new Batch();
+    const r = kit.renderer;
+    // the sofa: linen over a deep seat, rolled arms, two cushions in her colours, on turned feet
+    const linen = M.cloth(r, '#f2eadb');
+    const sz = -d / 2 + 0.5;
+    b.at(linen, rounded(2.1, 0.3, 0.84, 0.06, 3), 0, 0.3, sz);
+    for (const sx of [-0.5, 0.5]) b.at(linen, rounded(0.98, 0.14, 0.68, 0.06, 3), sx, 0.5, sz + 0.06);
+    b.at(linen, rounded(2.1, 0.5, 0.22, 0.08, 3), 0, 0.65, sz - 0.32);
+    for (const sx of [-1, 1]) {
+      b.at(linen, rounded(0.2, 0.34, 0.84, 0.08, 3), sx * 0.97, 0.55, sz);
+      b.at(linen, turned([[0, -0.42], [0.1, -0.41], [0.11, -0.38], [0.11, 0.38], [0.1, 0.41], [0, 0.42]], 18), sx * 0.97, 0.72, sz, Math.PI / 2, 0, 0);
+    }
+    for (const [x, c] of [[-0.55, '#e8506a'], [0.55, '#3fa8a0']] as const) b.at(M.cloth(r, c, 'velvet'), rounded(0.42, 0.38, 0.13, 0.06, 3), x, 0.72, sz - 0.18, -0.2, 0, 0);
+    for (const sx of [-1, 1]) for (const dz of [-1, 1]) b.at(M.wood(r, 'walnut', 0.3), turned(turnedLeg(0.15, 0.03), 10), sx * 0.95, 0, sz + dz * 0.34);
+    // the sideboard against the right wall, a blue vase on it
     const side = new Group();
-    side.add(box(kit, '#8a5a34', 1.2, 0.8, 0.4, 0, 0.4, 0, 'gloss'));
-    legs(kit, side, '#4a2e1a', 1.2, 0.4, 0.1);
-    side.add(cyl(kit, '#2f6fa8', 0.08, 0.06, 0.3, -0.35, 0.95, 0, 14, 'gloss'));
+    const sb = new Batch();
+    const wood = M.wood(r, 'teak', 0.3);
+    sb.at(wood, rounded(1.2, 0.62, 0.4, 0.02), 0, 0.46, 0);
+    sb.at(wood, rounded(1.26, 0.04, 0.44, 0.012), 0, 0.79, 0);
+    for (const x of [-0.3, 0.3]) {
+      sb.at(M.wood(r, 'mahogany', 0.35), rounded(0.54, 0.52, 0.02, 0.01), x, 0.46, 0.2);
+      sb.at(M.brass(r), new TorusGeometry(0.018, 0.004, 5, 12), x + (x < 0 ? 0.22 : -0.22), 0.5, 0.22);
+    }
+    for (const sx of [-1, 1]) for (const dz of [-1, 1]) sb.at(wood, turned(turnedLeg(0.15, 0.025), 10), sx * 0.55, 0, dz * 0.15);
+    sb.at(M.glaze(r, '#2f6fa8'), turned([[0, 0], [0.06, 0], [0.09, 0.08], [0.08, 0.18], [0.04, 0.26], [0.045, 0.3], [0.04, 0.3]], 24), -0.35, 0.81, 0);
+    side.add(sb.group());
     side.position.set(room.w / 2 - 0.32, 0, 0.2);
     side.rotation.y = -Math.PI / 2;
-    own.add(side);
+    own.add(b.group(), side);
+    // a kentia palm in each back corner, a size up from the florist's
     for (const [x, z] of [[-room.w / 2 + 0.45, -d / 2 + 0.45], [room.w / 2 - 0.45, -d / 2 + 0.45]]) {
-      const palm = new Group();
-      palm.add(cyl(kit, '#e8d8b8', 0.24, 0.18, 0.44, 0, 0.22, 0, 16, 'gloss'));
-      palm.add(cyl(kit, '#6a4a2a', 0.04, 0.06, 1.6, 0, 1.1, 0, 7));
-      const crown = new Group();
-      crown.position.y = 1.85;
-      for (let i = 0; i < 10; i++) crown.add(leaf(kit, i % 2 ? '#3f8a3a' : '#2f7a30', 0.9, 0.1, (i / 10) * Math.PI * 2, 0.3));
-      palm.add(crown);
+      const palm = kentia(kit);
+      palm.scale.setScalar(1.45);
       palm.position.set(x, 0, z);
+      palm.rotation.y = x;
       own.add(palm);
     }
     room.contents.add(mergeStatic(own));
