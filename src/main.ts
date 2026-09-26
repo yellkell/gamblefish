@@ -48,7 +48,8 @@ import { buildVillage } from './world/village.ts';
 import { buildLamps } from './world/lamps.ts';
 import { runBootIntro } from './experience/bootIntro.ts';
 import { onFontsReady } from './ui/fonts.ts';
-import { drawLogo } from './ui/logo.ts';
+import { drawLogo, drawLogoFish, hasLogoFish, setLogoFish } from './ui/logo.ts';
+import { thumbnail } from './ui/thumbnail.ts';
 
 /** ff2's fixed-foveation level: sharp centre, cheap rim. */
 const FOVEATION = 0.33;
@@ -60,13 +61,22 @@ const status = document.getElementById('status') as HTMLElement;
 const enter = document.getElementById('enter-vr') as HTMLButtonElement;
 const bar = document.getElementById('bar-fill') as HTMLElement;
 
-// the splash's mark (index.html shows it after the publisher card), repainted once the type is in
+// the splash's mark (index.html shows it after the publisher card), repainted once the type is
+// in; its leaping fish is the real mahi-mahi, laid over it and faded in once the models load
 const logo = document.getElementById('logo') as HTMLCanvasElement | null;
+const logoFish = document.getElementById('logo-fish') as HTMLCanvasElement | null;
 const paintLogo = (): void => {
   const g = logo?.getContext('2d');
-  if (!g || !logo) return;
-  g.clearRect(0, 0, logo.width, logo.height);
-  drawLogo(g, logo.width, logo.height);
+  if (g && logo) {
+    g.clearRect(0, 0, logo.width, logo.height);
+    drawLogo(g, logo.width, logo.height, true, false);
+  }
+  const f = logoFish?.getContext('2d');
+  if (f && logoFish && hasLogoFish()) {
+    f.clearRect(0, 0, logoFish.width, logoFish.height);
+    drawLogoFish(f, logoFish.width, logoFish.height);
+    logoFish.classList.add('in');
+  }
 };
 paintLogo();
 onFontsReady(paintLogo);
@@ -178,6 +188,17 @@ World.create(container, {
   const props = loadProps(propsBuf);
   // the silvery fish reflect the casinos' studio light (a soft, neutral room)
   props.setEnv(casinoEnv(world.renderer));
+  // the mark's leaping fish: the mahi-mahi, mid-thrash, photographed side on
+  {
+    const { mesh, uniforms } = props.makeFish('mahi');
+    uniforms.uSwim.value = 0.1;
+    uniforms.uFreq.value = 1;
+    uniforms.uTime.value = 0.12;
+    mesh.rotation.y = Math.PI / 2;
+    setLogoFish(thumbnail(world.renderer, mesh, { w: 1024, h: 420, dir: new Vector3(0.06, 0.1, 1).normalize() }));
+    mesh.material.dispose();
+    paintLogo();
+  }
   Object.assign(fishingDeps, { props, state: game, ocean, terrain: heightfield, surfaces, layout: json.layout, wallet, fx });
   // point-and-click panels first: a hand on a button claims its trigger before fishing sees it
   world.registerSystem(PointerSystem);

@@ -4,6 +4,9 @@
  * the ampersand on it. A fish leaps over the chip, trailing a spray of drops, above a line of
  * surf. A small tagline runs beneath.
  *
+ * The leaping fish is the game's own mahi-mahi, skin and all, photographed once its model has
+ * loaded (setLogoFish); until then the mark is drawn without it, and the page fades it in.
+ *
  * Drawn to fit any w × h at a 2 : 1 aspect (the art is laid out on 1280 × 640 and scaled).
  * The glow is left to whoever shows it (a CSS pool behind the canvas, live planes in VR),
  * so the canvas carries only the lettering and art, on transparent.
@@ -16,27 +19,49 @@ export const SEA = '#3fd6c6';
 export const GOLD = '#ffc93a';
 const CHIP_RED = '#c8243a';
 
-export function drawLogo(g: CanvasRenderingContext2D, w: number, h: number, tagline = true): void {
-  g.save();
+let photo: CanvasImageSource | null = null;
+
+/** The photographed fish for the mark (a transparent picture of the model, snout to the right). */
+export function setLogoFish(img: CanvasImageSource): void {
+  photo = img;
+}
+
+export function hasLogoFish(): boolean {
+  return photo !== null;
+}
+
+/** Into the mark's own frame (1280 × 640, centred), and where the chip sits in it. */
+function frame(g: CanvasRenderingContext2D, w: number, h: number): number {
   const k = Math.min(w / 1280, h / 640);
   g.translate(w / 2, h / 2);
   g.scale(k, k);
   g.translate(0, -18);
   g.lineJoin = 'round';
-
-  // lay the row out from its measured widths so it's centred whatever the face
+  // the row laid out from its measured widths so it's centred whatever the face
   g.font = font(700, SIZE);
   const wf = g.measureText('FISH').width;
   const wc = g.measureText('CHIPS').width;
-  const R = 112;
-  const GAP = 30;
-  const x0 = -(wf + wc + 2 * R + 2 * GAP) / 2;
-  const cx = x0 + wf + GAP + R;
+  return -(wf + wc + 2 * R + 2 * GAP) / 2 + wf + GAP + R;
+}
+
+const R = 112;
+const GAP = 30;
+
+/**
+ * The mark. `fish`: draw the leaping fish too (the photograph, once there is one); leave it out
+ * to lay the fish over the mark separately (the page fades it in).
+ */
+export function drawLogo(g: CanvasRenderingContext2D, w: number, h: number, tagline = true, fish = true): void {
+  g.save();
+  const cx = frame(g, w, h);
+  g.font = font(700, SIZE);
+  const x0 = cx - R - GAP - g.measureText('FISH').width;
   surf(g);
   word(g, 'FISH', x0, ['#e9fffb', '#7ff0e2', '#1fa99c'], 'rgba(63, 214, 198, 0.8)');
   word(g, 'CHIPS', cx + R + GAP, ['#fff8c8', '#ffc93a', '#e0700f'], 'rgba(255, 176, 0, 0.8)');
   chip(g, cx, 18, R);
-  leaper(g, cx);
+  spray(g, cx);
+  if (fish && photo) leaper(g, cx);
 
   if (tagline) {
     g.font = font(600, 34);
@@ -125,11 +150,19 @@ function chip(g: CanvasRenderingContext2D, x: number, y: number, r: number): voi
   g.restore();
 }
 
-/** A fish leaping over the chip, arcing left to right, with a spray of drops behind it. */
-function leaper(g: CanvasRenderingContext2D, cx: number): void {
+/** Just the leaping fish, in the mark's frame, on its own canvas (the page fades it in). */
+export function drawLogoFish(g: CanvasRenderingContext2D, w: number, h: number): void {
+  if (!photo) return;
+  g.save();
+  const cx = frame(g, w, h);
+  leaper(g, cx);
+  g.restore();
+}
+
+/** The drops along the arc the fish came up on, left of the chip. */
+function spray(g: CanvasRenderingContext2D, cx: number): void {
   g.save();
   g.translate(cx, 0);
-  // the drops along the arc it came up on
   g.fillStyle = 'rgba(200, 250, 245, 0.85)';
   for (let i = 0; i < 9; i++) {
     const a = Math.PI * (0.98 - i * 0.045);
@@ -138,67 +171,22 @@ function leaper(g: CanvasRenderingContext2D, cx: number): void {
     g.arc(Math.cos(a) * rr - 20, -Math.sin(a) * rr * 0.72 - 40, 5 + (i % 3) * 2.5, 0, TAU);
     g.fill();
   }
-  g.save();
-  g.translate(58, -196);
-  g.rotate(0.3);
-  const L = 150; // nose to tail fork
-  const body = g.createLinearGradient(0, -34, 0, 34);
-  body.addColorStop(0, '#0f6d78');
-  body.addColorStop(0.45, '#3fd6c6');
-  body.addColorStop(0.62, '#d9fff9');
-  body.addColorStop(1, '#ffffff');
-  g.lineWidth = 9;
-  g.strokeStyle = '#061820';
-  const outline = (): void => {
-    g.beginPath();
-    g.moveTo(L * 0.55, 0); // nose
-    g.bezierCurveTo(L * 0.42, -38, L * 0.02, -40, -L * 0.3, -14);
-    g.lineTo(-L * 0.46, -4);
-    // the forked tail
-    g.lineTo(-L * 0.66, -40);
-    g.quadraticCurveTo(-L * 0.58, 0, -L * 0.66, 40);
-    g.lineTo(-L * 0.46, 4);
-    g.lineTo(-L * 0.3, 14);
-    g.bezierCurveTo(L * 0.02, 36, L * 0.42, 32, L * 0.55, 0);
-    g.closePath();
-  };
-  // dorsal fin
-  g.beginPath();
-  g.moveTo(L * 0.1, -34);
-  g.quadraticCurveTo(-L * 0.02, -74, -L * 0.2, -62);
-  g.lineTo(-L * 0.16, -24);
-  g.closePath();
-  g.fillStyle = '#1fa99c';
-  g.stroke();
-  g.fill();
-  outline();
-  g.stroke();
-  g.shadowColor = 'rgba(63, 214, 198, 0.7)';
-  g.shadowBlur = 24;
-  g.fillStyle = body;
-  g.fill();
-  g.shadowBlur = 0;
-  // gill line, pectoral fin, eye
-  g.strokeStyle = 'rgba(6, 24, 32, 0.55)';
-  g.lineWidth = 4;
-  g.beginPath();
-  g.arc(L * 0.3, 0, 26, -1.0, 1.0);
-  g.stroke();
-  g.fillStyle = '#1fa99c';
-  g.beginPath();
-  g.moveTo(L * 0.2, 12);
-  g.quadraticCurveTo(L * 0.05, 34, -L * 0.04, 30);
-  g.quadraticCurveTo(L * 0.06, 18, L * 0.2, 12);
-  g.fill();
-  g.fillStyle = '#061820';
-  g.beginPath();
-  g.arc(L * 0.42, -7, 7.5, 0, TAU);
-  g.fill();
-  g.fillStyle = '#ffffff';
-  g.beginPath();
-  g.arc(L * 0.435, -9, 2.6, 0, TAU);
-  g.fill();
   g.restore();
+}
+
+/** The photographed fish, leaping over the chip, arcing down to the right, in a sea-glass glow. */
+function leaper(g: CanvasRenderingContext2D, cx: number): void {
+  if (!photo) return;
+  const img = photo as HTMLCanvasElement;
+  const w = 440;
+  const h = (w * img.height) / img.width;
+  g.save();
+  g.translate(cx + 56, -200);
+  g.rotate(0.24);
+  g.shadowColor = 'rgba(63, 214, 198, 0.8)';
+  g.shadowBlur = 34;
+  g.drawImage(img, -w / 2, -h / 2, w, h);
+  g.shadowBlur = 0;
   g.restore();
 }
 

@@ -63,6 +63,16 @@ JavaScript, though, and that does carry over:
 Not carried over yet: vegetation (palms), the boat, the reef and the swimming fish,
 and the vendors.
 
+## Opening
+
+- **On the page:** ff2's publisher card (yellkell.com, PRESENTS) fades in and out, then the
+  splash: the FISH & CHIPS mark (`src/ui/logo.ts`: a chip for the ampersand) breathing in its
+  glow. The leaping fish over the chip is the game's own mahi-mahi, photographed once its
+  model loads and faded in. The loader, a neon ENTER VR, and a thumbstick icon sit under it.
+- **In the headset:** the first session of a page load opens on ff2's boot intro
+  (`src/experience/bootIntro.ts`): the publisher card, then the same mark, then the curtain
+  drops. While it's up the controls wait and the first song decodes, starting as it drops.
+
 ## Fishing (How to Fish's loop, Tidewater's rules)
 
 - **Game logic:** `src/fishing/tidewater.ts` imports Tidewater's fishing code
@@ -158,7 +168,10 @@ and the vendors.
   (`src/backpack/fieldGuide.ts`). It has a title page with your progress, two species to
   a page, and the tarpon and the trophy fish on a page each at the back. A species you
   haven't caught shows as a shadow with where and when to look. The first one you land
-  fills its entry in: its picture, names, habitat, how many you've caught and your best.
+  fills its entry in: its picture, names, habitat, how many you've caught and your best, and a
+  true DID YOU KNOW? fact. Opposite the title page is a chart of the bay drawn from the terrain
+  (`src/backpack/chart.ts`), showing depths, the drop-off, the reef, the pier, and numbered shops
+  with a key, plus a dot for where you're standing. The great white has the last page.
   Point at the corner arrows to turn the pages.
 - **Winning at the casinos** (`src/casino/celebrate.ts`): every win flashes light, sends
   a ring across the table and throws confetti and glints, which settle on the felt. The
@@ -169,6 +182,21 @@ and the vendors.
     throbs. A natural gets a BLACKJACK! banner and the biggest burst.
   - **Slots:** the winning symbols glow and the amount rises when the count lands.
     Three shells or hooks get a NICE WIN banner, on top of the BIG WIN and JACKPOT ones.
+- **The fish's skin** (`src/fishing/fishSkin.ts`): Tidewater's WGSL fish material, ported to
+  GLSL on three's standard material. It adds scales in colour and relief, each species'
+  markings, the lateral line and gill cover, see-through ray-striped fins, eyes with an iris
+  and cornea, and the silvery sheen. The bake keeps each vertex's anatomy data for it, and
+  seats the eye domes on the head so none stand off it.
+- **The great white** (`src/fishing/shark.ts`, `src/fishing/sharkShow.ts`): the last catch.
+  Once every other page of the field guide is filled, it takes baits in 6 m of water or more.
+  - Every few seconds it breaches and runs. A ring lights on the rod's foregrip: grab it with
+    your other hand and hold on until the run breaks. One-handed it strips line, and reeling
+    against a run snaps it.
+  - Three held runs beat it. It rolls up alongside you under a GREAT WHITE! banner, and you let
+    it go for a bounty.
+  - Its skin is its own pattern: denticles, scars, gill slits, snout pores and teeth.
+- **ALWAYS DAY:** a switch under MUSIC in the backpack holds the island in the early
+  afternoon. The fish that only bite at night won't bite while it's on.
 - **Wallet:** `src/ui/wallet.ts` puts an odometer-style money counter on both
   wrists. Any change in the balance rings ff2's cash chime, pitched up for
   money in and down for money out.

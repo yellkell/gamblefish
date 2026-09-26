@@ -187,9 +187,35 @@
         animation: none;
       }
       .controls {
-        margin: 16px 0 0;
-        font-size: 12px;
-        color: rgba(234, 244, 248, 0.55);
+        margin: 18px 0 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        font-size: 14px;
+        font-weight: 600;
+        letter-spacing: 0.06em;
+        color: rgba(201, 255, 248, 0.75);
+      }
+      .controls .stick {
+        width: 30px;
+        height: 30px;
+        color: #3fd6c6;
+      }
+      #logo-fish {
+        position: absolute;
+        inset: 0;
+        z-index: 2;
+        width: 100%;
+        height: auto;
+        aspect-ratio: 2 / 1;
+        opacity: 0;
+        transform: translateY(14px);
+        transition: opacity 0.7s ease, transform 0.7s cubic-bezier(0.2, 1.4, 0.4, 1);
+      }
+      #logo-fish.in {
+        opacity: 1;
+        transform: none;
       }
       @media (prefers-reduced-motion: reduce) {
         .logo-glow,
@@ -209,14 +235,20 @@
       <div class="logo-wrap">
         <div class="logo-glow" aria-hidden="true"></div>
         <canvas id="logo" width="1280" height="640" role="img" aria-label="FISH &amp; CHIPS: catch fish, cash in chips"></canvas>
+        <canvas id="logo-fish" width="1280" height="640" aria-hidden="true"></canvas>
       </div>
       <div class="dock">
         <div id="status">Starting…</div>
         <div id="bar"><div id="bar-fill"></div></div>
         <button id="enter-vr" disabled>ENTER VR</button>
         <p class="controls">
-          Thumbstick forward: aim a teleport, roll the stick to pick your facing, release to go.
-          Flick sideways: snap turn. Flick back: step back.
+          <svg class="stick" viewBox="0 0 48 48" aria-hidden="true">
+            <circle cx="24" cy="24" r="21" fill="none" stroke="currentColor" stroke-width="2" opacity="0.5" />
+            <circle cx="24" cy="24" r="11" fill="currentColor" opacity="0.9" />
+            <circle cx="24" cy="24" r="6" fill="none" stroke="#06141c" stroke-width="1.5" opacity="0.6" />
+            <path d="M24 2.5 l-3.5 4.5 h7 z M24 45.5 l-3.5 -4.5 h7 z M2.5 24 l4.5 -3.5 v7 z M45.5 24 l-4.5 -3.5 v7 z" fill="currentColor" />
+          </svg>
+          <span>Thumbstick movement</span>
         </p>
       </div>
     </section>
