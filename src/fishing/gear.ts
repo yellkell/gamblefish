@@ -1,8 +1,10 @@
 /**
  * The gear the village sells, on Tidewater's own upgrade tracks (game/Gear.js). Tidewater's rod,
  * reel and line each get one more level at the top — the big-game tackle the trophy fish need
- * (fishing/trophyFish.ts) — and two tracks join them:
+ * (fishing/trophyFish.ts) — and three tracks join them:
  *
+ *   hooks   the TACKLE SHOP: a sharper hook holds on longer when a fish takes it, so the
+ *           window to strike is longer.
  *   bait    the BAIT SHOP: what's on the hook. Better bait brings the bites quicker, and the
  *           trophy fish won't look at frozen shrimp.
  *   charm   the FORTUNE TELLER: luck. A charm makes the trophy fish bite more often.
@@ -24,6 +26,15 @@ const TOP: Record<string, Level> = {
 
 /** the new tracks */
 const NEW: Tracks = {
+  hooks: {
+    name: 'Hooks',
+    levels: [
+      { cost: 0, label: 'Rusty J-hooks', strikeMul: 1 },
+      { cost: 120, label: 'Sharpened hooks', strikeMul: 1.25 },
+      { cost: 380, label: 'Forged circle hooks', strikeMul: 1.5 },
+      { cost: 950, label: 'Big-game circle hooks', strikeMul: 1.8 },
+    ],
+  },
   bait: {
     name: 'Bait',
     levels: [
@@ -31,6 +42,7 @@ const NEW: Tracks = {
       { cost: 150, label: 'Live pilchards', baitTier: 1, biteMul: 0.85 },
       { cost: 450, label: 'Live squid', baitTier: 2, biteMul: 0.72 },
       { cost: 1100, label: 'Glow-lit squid rig', baitTier: 3, biteMul: 0.6 },
+      { cost: 2400, label: 'Live bonito', baitTier: 4, biteMul: 0.5 },
     ],
   },
   charm: {
@@ -40,6 +52,7 @@ const NEW: Tracks = {
       { cost: 300, label: 'Shark-tooth necklace', luck: 1.6 },
       { cost: 900, label: 'Lucky black pearl', luck: 2.4 },
       { cost: 2500, label: "Mermaid's comb", luck: 3.5 },
+      { cost: 6000, label: "Sea king's doubloon", luck: 5 },
     ],
   },
 };
@@ -49,13 +62,14 @@ export const GEAR_BLURB: Record<string, string[]> = {
   rod: ['bends like a willow', 'light and quick', 'reaches past the breakers', 'casts out past the drop-off'],
   reel: ['it squeaks', 'no more squeak', 'cranks like a winch', 'the one the marlin boats use'],
   line: ['snaps if you look at it', 'good for the pier', 'holds a jack', 'holds a tarpon', 'holds anything that swims'],
-  bait: ['the fish are used to it', 'a jack can’t leave it alone', 'the big pelagics come up for it', 'swordfish hunt by its light'],
-  charm: ['', 'the sea owes you one', 'the rare ones find you', 'the sea gives up its best'],
+  hooks: ['they bend', 'a longer window to strike', 'they set themselves in the corner of the jaw', 'nothing throws one'],
+  bait: ['the fish are used to it', 'a jack can’t leave it alone', 'the big pelagics come up for it', 'swordfish hunt by its light', 'no marlin can pass it by'],
+  charm: ['', 'the sea owes you one', 'the rare ones find you', 'the sea gives up its best', 'the sea itself is on your side'],
 };
 
 /** Which tracks each village shop sells (village/gearShop.ts). */
 export const GEAR_SHOPS: Record<string, string[]> = {
-  S3: ['rod', 'reel', 'line'],
+  S3: ['rod', 'reel', 'line', 'hooks'],
   S2: ['bait'],
   N: ['charm'],
 };

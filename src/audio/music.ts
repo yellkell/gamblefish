@@ -9,7 +9,10 @@
  *
  * Two players:
  *  - OUTSIDE, the rotation: the songs in ./songs, in filename order, one after another, round
- *    and round. Only the one playing is decoded; the next decodes when it ends.
+ *    and round. The next song decodes in the background while this one plays (a little after it
+ *    starts), and is scheduled to start on the sample this one ends: no gap, and no decode at
+ *    the change. (Decoding at the change, then folding and measuring ~6 M samples in one go,
+ *    stalled the frame on the headset every time the song changed.)
  *  - IN THE CASINOS, their own song (./casino), on a loop. Inside one you hear only that. Walking
  *    up to a casino, it spills out of the open door, muffled by the walls and placed at the door,
  *    and the rotation dips under it.
@@ -81,11 +84,22 @@ function dB(x: number): number {
   return Math.pow(10, x / 20);
 }
 
+/**
+ * The per-sample work (folding to mono, measuring loudness) is a few million samples a song:
+ * done in slices, handing the frame back between them, so it never holds up a frame.
+ */
+const SLICE = 200_000;
+const yieldFrame = (): Promise<void> => new Promise((r) => setTimeout(r, 0));
+
 /** RMS of the whole song (dBFS) → the gain to NORM (never more than +12 dB). */
-function levelOf(buffer: AudioBuffer): number {
+async function levelOf(buffer: AudioBuffer): Promise<number> {
   const d = buffer.getChannelData(0);
   let sum = 0;
-  for (let i = 0; i < d.length; i += 4) sum += d[i] * d[i];
+  for (let i0 = 0; i0 < d.length; i0 += SLICE) {
+    const end = Math.min(d.length, i0 + SLICE);
+    for (let i = i0; i < end; i += 4) sum += d[i] * d[i];
+    await yieldFrame();
+  }
   const rms = Math.sqrt(sum / Math.max(1, Math.ceil(d.length / 4)));
   return rms > 0 ? Math.min(dB(12), dB(NORM) / rms) : 1;
 }
@@ -99,12 +113,17 @@ async function decode(url: string): Promise<Loaded | null> {
     if (src.numberOfChannels > 1) {
       buffer = new AudioBuffer({ length: src.length, sampleRate: src.sampleRate, numberOfChannels: 1 });
       const sum = buffer.getChannelData(0);
-      for (let c = 0; c < src.numberOfChannels; c++) {
+      const n = src.numberOfChannels;
+      for (let c = 0; c < n; c++) {
         const d = src.getChannelData(c);
-        for (let i = 0; i < sum.length; i++) sum[i] += d[i] / src.numberOfChannels;
+        for (let i0 = 0; i0 < sum.length; i0 += SLICE) {
+          const end = Math.min(sum.length, i0 + SLICE);
+          for (let i = i0; i < end; i++) sum[i] += d[i] / n;
+          await yieldFrame();
+        }
       }
     }
-    return { buffer, head: audibleFrom(buffer), level: levelOf(buffer) };
+    return { buffer, head: audibleFrom(buffer), level: await levelOf(buffer) };
   } catch {
     return null; // a song that won't load is just silence
   }
@@ -209,15 +228,17 @@ export class Music {
     this.muffle.connect(this.panner).connect(this.outGain);
   }
 
-  /** The rotation: this song, then (when it ends) the next one's decode, round and round. */
-  private async playRotation(ctx: AudioContext, i: number): Promise<void> {
+  /**
+   * The rotation: this song, and while it plays the next one decoding, scheduled to follow it
+   * on the sample it ends; round and round.
+   */
+  private async playRotation(ctx: AudioContext, i: number, at = 0, ready: Loaded | null = null): Promise<void> {
     if (!ROTATION.length) return;
-    this.song = i;
-    const loaded = await decode(ROTATION[i]);
+    const loaded = ready ?? (await decode(ROTATION[i]));
     const next = (i + 1) % ROTATION.length;
     if (!loaded) {
       // skip a song that won't decode (don't spin if none will)
-      if (next !== 0) void this.playRotation(ctx, next);
+      if (next !== 0) void this.playRotation(ctx, next, at);
       return;
     }
     const src = ctx.createBufferSource();
@@ -225,15 +246,23 @@ export class Music {
     const lv = ctx.createGain();
     lv.gain.value = loaded.level;
     src.connect(lv).connect(this.rotation!);
+    const start = Math.max(at, ctx.currentTime);
+    src.start(start, loaded.head);
+    // (the dev hook reads which song is on)
+    window.setTimeout(() => (this.song = i), Math.max(0, (start - ctx.currentTime) * 1000));
     if (ROTATION.length === 1) {
       src.loop = true;
       src.loopStart = loaded.head;
       src.loopEnd = loaded.buffer.duration;
-    } else {
-      // the old buffer goes with its source
-      src.onended = () => void this.playRotation(ctx, next);
+      return;
     }
-    src.start(0, loaded.head);
+    // the old buffer goes with its source, once it's played
+    src.onended = () => src.disconnect();
+    const ends = start + loaded.buffer.duration - loaded.head;
+    // decode the next a little after this one's under way (not on top of whatever started it)
+    await new Promise((r) => setTimeout(r, Math.min(20, Math.max(0, (ends - ctx.currentTime) / 2)) * 1000));
+    const after = await decode(ROTATION[next]);
+    void this.playRotation(ctx, next, ends, after);
   }
 
   private async playCasino(ctx: AudioContext): Promise<void> {

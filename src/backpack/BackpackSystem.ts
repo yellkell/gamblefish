@@ -23,7 +23,8 @@
  *  market, a shop counter, Coral's hands. Hold the fish over one (tray open or not) and a ghost
  *  settles on it with what it's worth there; click to hand it over.
  *
- *  TABS: BACKPACK and FIELD GUIDE, on the tray's far edge (point and click). The field guide
+ *  TABS: BACKPACK and FIELD GUIDE, stacked off the tray's left rim, above the MUSIC switch
+ *  (point and click): out in the open, where no fish, wall or readout can cover them. The field guide
  *  (backpack/fieldGuide.ts) is a book of the island's fish that lies open in the tray in place
  *  of the slots, filling itself in as you catch each species.
  *
@@ -203,7 +204,7 @@ export class BackpackSystem extends createSystem({}) {
   private releaseNet!: Group;
   /** the MUSIC on / off switch, on the tray's left (the net is on its right) */
   private musicButton!: InteractivePanel;
-  /** the tabs on the far edge, and the book the second one opens */
+  /** the tabs off the left rim, and the book the second one opens */
   private tabs!: InteractivePanel;
   private guide!: FieldGuide;
   private tab: 'pack' | 'guide' = 'pack';
@@ -251,8 +252,9 @@ export class BackpackSystem extends createSystem({}) {
     this.paintMusicButton();
     this.tray.group.add(this.musicButton.mesh);
     register(this.musicButton);
-    // the tabs: BACKPACK | FIELD GUIDE, lying on the tray's far edge
-    this.tabs = new InteractivePanel([720, 120], [0.36, 0.06]);
+    // the tabs: BACKPACK over FIELD GUIDE, lying off the tray's left rim (on its far edge they
+    // were under the box's wall and behind the fish readout that stands there)
+    this.tabs = new InteractivePanel([320, 272], [0.17, 0.1445]);
     this.tabs.mesh.rotation.x = -Math.PI / 2;
     this.tabs.paint = () => this.paintTabs();
     this.tabs.onClick = (id) => this.setTab(id as 'pack' | 'guide');
@@ -441,10 +443,10 @@ export class BackpackSystem extends createSystem({}) {
       { id: 'pack', label: 'BACKPACK' },
       { id: 'guide', label: 'FIELD GUIDE' },
     ];
-    b.buttons = tabs.map((t, i) => ({ id: t.id, x: (i * W) / 2, y: 0, w: W / 2, h: H }));
+    b.buttons = tabs.map((t, i) => ({ id: t.id, x: 0, y: (i * H) / 2, w: W, h: H / 2 }));
     tabs.forEach((t, i) => {
       const on = this.tab === t.id;
-      roundRect(c, (i * W) / 2 + 6, 6, W / 2 - 12, H - 12, 22);
+      roundRect(c, 6, (i * H) / 2 + 6, W - 12, H / 2 - 12, 22);
       c.fillStyle = on ? INK.amber : b.hover === t.id ? 'rgba(40, 52, 60, 0.95)' : INK.glass;
       c.fill();
       c.lineWidth = 4;
@@ -454,7 +456,7 @@ export class BackpackSystem extends createSystem({}) {
       c.textBaseline = 'middle';
       c.font = font(700, 50);
       c.fillStyle = on ? '#1a1206' : INK.dim;
-      c.fillText(t.label, (i * W) / 2 + W / 4, H / 2 + 2, W / 2 - 40);
+      c.fillText(t.label, W / 2, (i * H) / 2 + H / 4 + 2, W - 30);
     });
     b.commit();
   }
@@ -488,7 +490,7 @@ export class BackpackSystem extends createSystem({}) {
     this.releaseNet.position.set(this.tray.width / 2 + 0.16, 0.01, this.tray.height / 2 - 0.08);
     this.info.mesh.position.set(0, 0.075, -this.tray.height / 2 - 0.1);
     this.musicButton.mesh.position.set(-this.tray.width / 2 - 0.13, 0.012, this.tray.height / 2 - 0.08);
-    this.tabs.mesh.position.set(0, 0.012, -this.tray.height / 2 - 0.05);
+    this.tabs.mesh.position.set(-this.tray.width / 2 - 0.13, 0.012, -this.tray.height / 2 + 0.078);
     // face your eyes, level (the tray itself is tipped 35° toward you: parented as-is, the text
     // leaned away and read skewed)
     this.info.mesh.lookAt(this.camera.getWorldPosition(_v));

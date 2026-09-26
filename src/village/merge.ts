@@ -9,12 +9,13 @@
 import { BufferGeometry, Group, Matrix4, Mesh, type Material, type Object3D } from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
-const PLAIN = ['normal', 'position', 'uv'].join();
+/** the attribute sets that bake together: plain, and vertex-coloured (village/craft.ts blades) */
+const PLAIN = [['normal', 'position', 'uv'].join(), ['color', 'normal', 'position', 'uv'].join()];
 
 export function mergeStatic(root: Object3D): Group {
   root.updateMatrixWorld(true);
   const inv = new Matrix4().copy(root.matrixWorld).invert();
-  const byMat = new Map<Material, BufferGeometry[]>();
+  const byMat = new Map<string, { mat: Material; list: BufferGeometry[] }>();
   const out = new Group();
   out.name = root.name;
   out.position.copy(root.position);
@@ -25,7 +26,8 @@ export function mergeStatic(root: Object3D): Group {
     if (!m.isMesh) return;
     const local = new Matrix4().multiplyMatrices(inv, m.matrixWorld);
     const g = m.geometry;
-    if (Array.isArray(m.material) || !g.index || Object.keys(g.attributes).sort().join() !== PLAIN) {
+    const sig = Object.keys(g.attributes).sort().join();
+    if (Array.isArray(m.material) || !g.index || !PLAIN.includes(sig)) {
       const keep = new Mesh(g, m.material);
       keep.matrixAutoUpdate = false;
       keep.matrix.copy(local);
@@ -35,11 +37,12 @@ export function mergeStatic(root: Object3D): Group {
     }
     const c = g.clone().applyMatrix4(local);
     c.clearGroups();
-    let list = byMat.get(m.material);
-    if (!list) byMat.set(m.material, (list = []));
-    list.push(c);
+    const key = `${m.material.uuid}:${sig}`;
+    let e = byMat.get(key);
+    if (!e) byMat.set(key, (e = { mat: m.material, list: [] }));
+    e.list.push(c);
   });
-  for (const [mat, list] of byMat) {
+  for (const { mat, list } of byMat.values()) {
     const merged = list.length === 1 ? list[0] : mergeGeometries(list, false);
     if (!merged) continue;
     const mesh = new Mesh(merged, mat);

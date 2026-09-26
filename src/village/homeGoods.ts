@@ -10,58 +10,40 @@
  *
  * Two more shops furnish Coral's house, Villa Mar (L), the same way: the JEWELLER sells the
  * sparkle (a crystal chandelier, a vanity with a jewellery box, pearls on a velvet bust, a ring
- * under a glass dome) and the BOUTIQUE the finer things (a chaise longue, a gilded mirror, silk
- * drapes, a baby grand). What you buy there is delivered to her villa (village/villa.ts), and
- * she notices.
+ * under a glass cloche, a mermaid's tiara) and the BOUTIQUE the finer things (a chaise longue,
+ * a gilded mirror, silk drapes, a baby grand, a painted silk screen). What you buy there is
+ * delivered to her villa (village/villa.ts), and she notices.
  *
- * Every thing is built here from a few primitives in the room's frame (x across the facade, +z
- * out of the front, y = 0 on the floor), in the casino's materials (casino/look.ts: lit by a
- * small studio environment, so they read under the room's lamp at any hour). Its spot in the
- * shack keeps the doorway and the middle of the floor clear; the big pieces are furniture you
- * can't teleport into.
+ * The things themselves are modelled in village/wares/, one file per shop, with the maker's kit
+ * (village/craft.ts), in the room's frame (x across the facade, +z out of the front, y = 0 on
+ * the floor). Each spot in the shack keeps the doorway and the middle of the floor clear; the
+ * big pieces are furniture you can't teleport into.
  */
 
-import {
-  BoxGeometry,
-  CanvasTexture,
-  ConeGeometry,
-  CylinderGeometry,
-  Group,
-  Matrix4,
-  Mesh,
-  MeshBasicMaterial,
-  MeshStandardMaterial,
-  PlaneGeometry,
-  SphereGeometry,
-  SRGBColorSpace,
-  TorusGeometry,
-  Vector3,
-  type Material,
-  type Object3D,
-  type WebGLRenderer,
-} from 'three';
+import { CanvasTexture, Group, MeshBasicMaterial, SRGBColorSpace, Vector3, Box3, type Object3D } from 'three';
 import { uiDeny, winFanfare } from '../audio/sfx.ts';
-import { casinoEnv, look } from '../casino/look.ts';
-import type { Props } from '../fishing/props.ts';
 import type { GameState } from '../fishing/tidewater.ts';
 import { font } from '../ui/fonts.ts';
 import { INK, roundRect } from '../ui/panel.ts';
 import { InteractivePanel, register } from '../ui/pointer.ts';
 import { drawThumb, thumbnail } from '../ui/thumbnail.ts';
 import type { BoxCollider } from '../world/data.ts';
-import { ROLES } from './roles.ts';
+import { Batch, M, rounded, stalk, turned, type Kit } from './craft.ts';
 import { HOME_SHOPS as HOME_SHOP_LIST, shopCounter, VILLA_SHOPS, type HomeShop, type Interior } from './interiors.ts';
 import { mergeStatic } from './merge.ts';
+import { ROLES } from './roles.ts';
+import { bed, bookshelf, rug, seaChest, tableChairs } from './wares/builder.ts';
+import { chaise, chevalMirror, drapes, piano, screen } from './wares/boutique.ts';
+import { fern, hibiscus, kentia, monstera, orchid } from './wares/florist.ts';
+import { chandelier, pearlBust, ringCloche, tiara, vanity } from './wares/jeweller.ts';
+import { divingHelmet, globe, painting, shipInBottle } from './wares/pawn.ts';
+import { mahiMount, sailfishMount, snapperMount, tarponMount } from './wares/taxidermist.ts';
 
 export { HOME, HOME_SHOPS, VILLA, VILLA_SHOPS } from './interiors.ts';
+export type { Kit } from './craft.ts';
 
 /** is this shop's stock for Coral's villa (not your shack)? */
 const forVilla = (shop: string): boolean => (VILLA_SHOPS as readonly string[]).includes(shop);
-
-export interface Kit {
-  renderer: WebGLRenderer;
-  props: Props;
-}
 
 interface HomeItem {
   id: string;
@@ -73,52 +55,9 @@ interface HomeItem {
   at: [number, number, number, number];
   /** a piece you can't stand in: its footprint (half-width, half-depth, before the turn) and height */
   solid?: [number, number, number];
-  /** it hangs from the ceiling (on the counter it stands like anything else) */
+  /** it hangs from the ceiling (on the counter it hangs from a little display gallows) */
   hangs?: boolean;
   build(k: Kit): Object3D;
-}
-
-/* ── making things ─────────────────────────────────────────────────────── */
-
-const mats = new Map<string, Material>();
-export function mat(k: Kit, kind: 'satin' | 'gloss' | 'gold', colour: string): Material {
-  const key = `${kind}:${colour}`;
-  let m = mats.get(key);
-  if (!m) mats.set(key, (m = kind === 'gold' ? look.gold(k.renderer) : look[kind](k.renderer, colour)));
-  return m;
-}
-
-export function box(k: Kit, colour: string, w: number, h: number, d: number, x = 0, y = 0, z = 0, kind: 'satin' | 'gloss' | 'gold' = 'satin'): Mesh {
-  const m = new Mesh(new BoxGeometry(w, h, d), mat(k, kind, colour));
-  m.position.set(x, y, z);
-  return m;
-}
-
-export function cyl(k: Kit, colour: string, r0: number, r1: number, h: number, x = 0, y = 0, z = 0, seg = 14, kind: 'satin' | 'gloss' | 'gold' = 'satin'): Mesh {
-  const m = new Mesh(new CylinderGeometry(r0, r1, h, seg), mat(k, kind, colour));
-  m.position.set(x, y, z);
-  return m;
-}
-
-export function ball(k: Kit, colour: string, r: number, x: number, y: number, z: number, kind: 'satin' | 'gloss' | 'gold' = 'satin'): Mesh {
-  const m = new Mesh(new SphereGeometry(r, 12, 8), mat(k, kind, colour));
-  m.position.set(x, y, z);
-  return m;
-}
-
-function canvasTexture(w: number, h: number, paint: (g: CanvasRenderingContext2D, w: number, h: number) => void): CanvasTexture {
-  const c = document.createElement('canvas');
-  c.width = w;
-  c.height = h;
-  paint(c.getContext('2d')!, w, h);
-  const t = new CanvasTexture(c);
-  t.colorSpace = SRGBColorSpace;
-  return t;
-}
-
-/** a painted surface, lit like the rest of the room's things (the studio environment) */
-function painted(k: Kit, w: number, h: number, paint: (g: CanvasRenderingContext2D, w: number, h: number) => void): MeshStandardMaterial {
-  return new MeshStandardMaterial({ map: canvasTexture(w, h, paint), roughness: 0.8, metalness: 0, envMap: casinoEnv(k.renderer), envMapIntensity: 0.8 });
 }
 
 /**
@@ -127,561 +66,63 @@ function painted(k: Kit, w: number, h: number, paint: (g: CanvasRenderingContext
  * in depth too, so it never fights the floor (or Tidewater's under it) at a glance.
  */
 export function rugPaint(w: number, h: number, paint: (g: CanvasRenderingContext2D, w: number, h: number) => void): MeshBasicMaterial {
-  return new MeshBasicMaterial({ map: canvasTexture(w, h, paint), color: 0xe8e8e8, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 });
-}
-
-/** a glass dome, a jewellery case's glass: clear, catching the light */
-export function glass(): MeshStandardMaterial {
-  return new MeshStandardMaterial({ color: 0xdff4ff, transparent: true, opacity: 0.22, roughness: 0.04, metalness: 0, depthWrite: false });
-}
-
-/** four legs under a top of w × d at height h */
-export function legs(k: Kit, g: Group, colour: string, w: number, d: number, h: number, t = 0.05): void {
-  for (const sx of [-1, 1]) for (const sz of [-1, 1]) g.add(box(k, colour, t, h, t, sx * (w / 2 - t), h / 2, sz * (d / 2 - t)));
-}
-
-/** a leaf blade: a flattened cone laid out from the origin along `az`, drooping */
-export function leaf(k: Kit, colour: string, len: number, w: number, az: number, rise: number): Mesh {
-  const m = new Mesh(new ConeGeometry(w, len, 4).translate(0, len / 2, 0).scale(1, 1, 0.18), mat(k, 'satin', colour));
-  m.rotation.set(0, az, 0, 'YXZ');
-  m.rotateX(Math.PI / 2 - rise);
-  return m;
-}
-
-/** a trophy: the fish itself (Tidewater's model) on a shield-shaped plaque, flank out of the wall */
-function mount(k: Kit, species: string, len: number): Group {
-  const g = new Group();
-  const plaque = new Mesh(new CylinderGeometry(len * 0.36, len * 0.36, 0.035, 24).rotateX(Math.PI / 2).scale(1.35, 0.75, 1), mat(k, 'gloss', '#5a3a22'));
-  plaque.position.z = 0.018;
-  const rim = new Mesh(new TorusGeometry(len * 0.36, 0.012, 6, 32).scale(1.35, 0.75, 1), mat(k, 'gold', ''));
-  rim.position.z = 0.036;
-  const { mesh, uniforms } = k.props.makeFish(species);
-  uniforms.uSwim.value = 0; // stuffed, not swimming
-  // fish-local: x its flank, y its back, z its snout (unit length): flank out of the wall, back up
-  const N = new Vector3(0, 0, 1);
-  const UP = new Vector3(0, 1, 0);
-  const S = new Vector3().crossVectors(N, UP);
-  mesh.matrixAutoUpdate = false;
-  mesh.matrix.copy(new Matrix4().makeBasis(N, UP, S).scale(new Vector3(len, len, len)).setPosition(0, 0, 0.09));
-  g.add(plaque, rim, mesh);
-  return g;
+  const c = document.createElement('canvas');
+  c.width = w;
+  c.height = h;
+  paint(c.getContext('2d')!, w, h);
+  const map = new CanvasTexture(c);
+  map.colorSpace = SRGBColorSpace;
+  return new MeshBasicMaterial({ map, color: 0xe8e8e8, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 });
 }
 
 /* ── the catalogue ─────────────────────────────────────────────────────── */
 
-const WOOD = '#8a5a34';
-const DARK = '#4a2e1a';
+// Each thing's model is in village/wares/ (one file per shop), built with the maker's kit
+// (village/craft.ts). Its spot: the shack is 3.66 × 3.86 m inside (x ±1.83, z ±1.93, the door
+// in the middle of the front wall), Coral's villa 7.06 × 5.26 m (x ±3.53, z ±2.63).
 
 export const GOODS: HomeItem[] = [
   // ── the builder: furniture ──
-  {
-    id: 'bed',
-    shop: 'F',
-    name: 'Driftwood bed',
-    blurb: 'a proper night’s sleep',
-    price: 400,
-    at: [-1.28, 0, -0.9, 0],
-    solid: [0.5, 1.0, 0.6],
-    build(k) {
-      const g = new Group();
-      g.add(box(k, WOOD, 0.95, 0.28, 1.95, 0, 0.2, 0));
-      g.add(box(k, '#efe8da', 0.88, 0.16, 1.85, 0, 0.42, 0));
-      g.add(box(k, '#2f6fa8', 0.92, 0.06, 1.15, 0, 0.52, 0.38));
-      g.add(box(k, '#ffffff', 0.6, 0.1, 0.34, 0, 0.55, -0.7));
-      g.add(box(k, DARK, 0.95, 0.85, 0.07, 0, 0.42, -0.96));
-      legs(k, g, DARK, 0.95, 1.95, 0.08, 0.07);
-      return g;
-    },
-  },
-  {
-    id: 'table',
-    shop: 'F',
-    name: 'Table & two chairs',
-    blurb: 'for when Coral comes round',
-    price: 260,
-    at: [1.12, 0, -0.55, 0],
-    solid: [0.55, 0.75, 0.75],
-    build(k) {
-      const g = new Group();
-      g.add(box(k, WOOD, 0.9, 0.05, 0.7, 0, 0.74, 0));
-      legs(k, g, WOOD, 0.9, 0.7, 0.72);
-      for (const sz of [-1, 1]) {
-        const c = new Group();
-        c.add(box(k, DARK, 0.42, 0.04, 0.42, 0, 0.45, 0));
-        legs(k, c, DARK, 0.42, 0.42, 0.44, 0.035);
-        c.add(box(k, DARK, 0.42, 0.45, 0.04, 0, 0.68, -0.19));
-        c.position.set(0, 0, sz * 0.62);
-        c.rotation.y = sz > 0 ? Math.PI : 0;
-        g.add(c);
-      }
-      return g;
-    },
-  },
-  {
-    id: 'rug',
-    shop: 'F',
-    name: 'Woven rug',
-    blurb: 'sand stays outside',
-    price: 90,
-    at: [-0.05, 0.03, 0.1, 0],
-    build() {
-      const m = new Mesh(
-        new PlaneGeometry(1.5, 1.05).rotateX(-Math.PI / 2),
-        rugPaint(512, 360, (g, w, h) => {
-          const bands = ['#c23b2e', '#e8c170', '#2f6fa8', '#f4ead6', '#3f7f55'];
-          for (let i = 0; i < 18; i++) {
-            g.fillStyle = bands[i % bands.length];
-            g.fillRect(0, (i * h) / 18, w, h / 18 + 1);
-          }
-          g.strokeStyle = '#3a2618';
-          g.lineWidth = 16;
-          g.strokeRect(8, 8, w - 16, h - 16);
-        }),
-      );
-      return m;
-    },
-  },
-  {
-    id: 'shelf',
-    shop: 'F',
-    name: 'Bookshelf',
-    blurb: 'tide tables and paperbacks',
-    price: 220,
-    at: [0.22, 0, -1.73, 0],
-    solid: [0.46, 0.16, 1.7],
-    build(k) {
-      const g = new Group();
-      g.add(box(k, WOOD, 0.9, 1.7, 0.04, 0, 0.85, -0.13));
-      for (const sx of [-1, 1]) g.add(box(k, WOOD, 0.04, 1.7, 0.3, sx * 0.43, 0.85, 0));
-      const colours = ['#c23b2e', '#2f6fa8', '#e8c170', '#3f7f55', '#8a5ac2', '#f4ead6', '#d8508a'];
-      let n = 0;
-      for (let s = 0; s < 4; s++) {
-        const y = 0.06 + s * 0.42;
-        g.add(box(k, WOOD, 0.86, 0.03, 0.28, 0, y, 0));
-        let x = -0.4;
-        while (x < 0.36) {
-          const w = 0.035 + ((n * 37) % 5) * 0.008;
-          const h = 0.24 + ((n * 53) % 4) * 0.03;
-          g.add(box(k, colours[n % colours.length], w, h, 0.2, x + w / 2, y + 0.015 + h / 2, 0.02));
-          x += w + 0.006;
-          n++;
-        }
-      }
-      return g;
-    },
-  },
+  { id: 'bed', shop: 'F', name: 'Driftwood bed', blurb: 'a patchwork quilt, two plump pillows', price: 400, at: [-1.28, 0, -0.9, 0], solid: [0.5, 1.0, 0.6], build: bed },
+  { id: 'table', shop: 'F', name: 'Table & two chairs', blurb: 'for when Coral comes round', price: 260, at: [1.12, 0, -0.55, 0], solid: [0.55, 0.75, 0.75], build: tableChairs },
+  { id: 'rug', shop: 'F', name: 'Kilim rug', blurb: 'hand-woven, sand stays outside', price: 90, at: [-0.05, 0.03, 0.1, 0], build: (k) => rug(k, rugPaint) },
+  { id: 'shelf', shop: 'F', name: 'Bookshelf', blurb: 'tide tables, paperbacks, a conch', price: 220, at: [0.22, 0, -1.73, 0], solid: [0.46, 0.16, 1.7], build: bookshelf },
+  { id: 'chest', shop: 'F', name: 'Sea chest', blurb: 'iron-bound, for the foot of the bed', price: 180, at: [-1.28, 0, 0.42, 0], solid: [0.43, 0.25, 0.5], build: seaChest },
 
   // ── the florist: plants ──
-  {
-    id: 'palm',
-    shop: 'D',
-    name: 'Potted palm',
-    blurb: 'a bit of the island indoors',
-    price: 60,
-    at: [1.5, 0, 1.45, 0],
-    build(k) {
-      const g = new Group();
-      g.add(cyl(k, '#b8643a', 0.2, 0.15, 0.36, 0, 0.18, 0));
-      g.add(cyl(k, '#6a4a2a', 0.035, 0.05, 1.0, 0, 0.8, 0, 7));
-      const crown = new Group();
-      crown.position.y = 1.28;
-      for (let i = 0; i < 9; i++) crown.add(leaf(k, i % 2 ? '#3f8a3a' : '#2f7a30', 0.7, 0.09, (i / 9) * Math.PI * 2, 0.35));
-      g.add(crown);
-      return g;
-    },
-  },
-  {
-    id: 'flowers',
-    shop: 'D',
-    name: 'Hibiscus on a stand',
-    blurb: 'fresh every morning',
-    price: 45,
-    at: [-1.48, 0, 1.48, 0],
-    build(k) {
-      const g = new Group();
-      g.add(cyl(k, DARK, 0.2, 0.2, 0.04, 0, 0.7, 0));
-      g.add(cyl(k, DARK, 0.03, 0.05, 0.7, 0, 0.35, 0, 8));
-      g.add(cyl(k, '#2f6fa8', 0.09, 0.07, 0.24, 0, 0.84, 0));
-      const blooms = ['#e8506a', '#ff8a3a', '#ffd84a', '#d8508a'];
-      for (let i = 0; i < 7; i++) {
-        const a = (i / 7) * Math.PI * 2;
-        const r = 0.08 + (i % 2) * 0.05;
-        g.add(ball(k, blooms[i % blooms.length], 0.05, Math.cos(a) * r, 1.06 + (i % 3) * 0.05, Math.sin(a) * r, 'gloss'));
-        g.add(leaf(k, '#2f7a30', 0.18, 0.04, a, 0.9).translateY(0.95));
-      }
-      return g;
-    },
-  },
-  {
-    id: 'fern',
-    shop: 'D',
-    name: 'Hanging fern',
-    blurb: 'loves the sea air',
-    price: 55,
-    at: [-0.95, 2.2, 1.25, 0], // up out of your eyeline: its leaves hang to about 1.85 m
-    build(k) {
-      const g = new Group();
-      g.add(cyl(k, '#c8a878', 0.01, 0.01, 0.6, 0, 0.35, 0, 4)); // the cord
-      const basket = new Mesh(new SphereGeometry(0.17, 12, 6, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2), mat(k, 'satin', '#8a6a3a'));
-      g.add(basket);
-      for (let i = 0; i < 12; i++) g.add(leaf(k, i % 2 ? '#4a9a3a' : '#3a8a34', 0.42, 0.05, (i / 12) * Math.PI * 2, -0.5));
-      return g;
-    },
-  },
-  {
-    id: 'orchid',
-    shop: 'D',
-    name: 'Orchid',
-    blurb: 'Coral’s favourite',
-    price: 75,
-    at: [1.58, 0, 0.55, 0],
-    build(k) {
-      const g = new Group();
-      g.add(cyl(k, '#f4ead6', 0.1, 0.08, 0.2, 0, 0.1, 0));
-      g.add(cyl(k, '#3f7f55', 0.006, 0.006, 0.6, 0, 0.5, 0, 4));
-      for (let i = 0; i < 6; i++) g.add(ball(k, '#e87ab8', 0.035, 0.03 + i * 0.03, 0.62 + i * 0.045, 0, 'gloss'));
-      for (const a of [0.4, 2.2, 4.1]) g.add(leaf(k, '#2f6a30', 0.2, 0.05, a, 1.2).translateY(0.2));
-      return g;
-    },
-  },
+  { id: 'palm', shop: 'D', name: 'Kentia palm', blurb: 'a bit of the island indoors', price: 60, at: [1.5, 0, 1.45, 0], build: kentia },
+  { id: 'flowers', shop: 'D', name: 'Hibiscus in bloom', blurb: 'fresh flowers every morning', price: 45, at: [-1.48, 0, 1.48, 0.6], build: hibiscus },
+  // up out of your eyeline: its ring just under the ceiling, the fronds hanging to about 1.75 m
+  { id: 'fern', shop: 'D', name: 'Boston fern', blurb: 'in a macramé hanger, loves the sea air', price: 55, at: [-0.95, 2.2, 1.25, 0], hangs: true, build: fern },
+  { id: 'orchid', shop: 'D', name: 'Moth orchid', blurb: 'on a bamboo stand · Coral’s favourite', price: 75, at: [1.58, 0, 0.55, -Math.PI / 2], build: orchid },
+  { id: 'monstera', shop: 'D', name: 'Monstera', blurb: 'the swiss cheese plant, in a basket', price: 85, at: [-0.5, 0, -1.58, 0.3], build: monstera },
 
   // ── the taxidermist: trophies ──
-  {
-    id: 'tarpon',
-    shop: 'K',
-    name: 'Tarpon on a plaque',
-    blurb: 'the silver king, over the bed',
-    price: 600,
-    at: [-0.55, 1.75, -1.9, 0],
-    build: (k) => mount(k, 'tarpon', 1.25),
-  },
-  {
-    id: 'mahi',
-    shop: 'K',
-    name: 'Mahi-mahi on a plaque',
-    blurb: 'all the colours of the sea',
-    price: 320,
-    at: [1.81, 1.7, 0.45, -Math.PI / 2],
-    build: (k) => mount(k, 'mahi', 0.85),
-  },
-  {
-    id: 'snapper',
-    shop: 'K',
-    name: 'Red snapper on a plaque',
-    blurb: 'your first good one',
-    price: 150,
-    at: [-1.81, 1.7, 0.65, Math.PI / 2],
-    build: (k) => mount(k, 'redSnapper', 0.6),
-  },
+  // over the bed, clear of the bookshelf (its plaque runs x −1.77 to −0.27; the shelf starts at −0.23)
+  { id: 'tarpon', shop: 'K', name: 'Tarpon on a plaque', blurb: 'the silver king, over the bed', price: 600, at: [-1.02, 1.85, -1.9, 0], build: tarponMount },
+  { id: 'mahi', shop: 'K', name: 'Mahi-mahi on a plaque', blurb: 'all the colours of the sea', price: 320, at: [1.81, 1.7, 0.45, -Math.PI / 2], build: mahiMount },
+  { id: 'snapper', shop: 'K', name: 'Red snapper on a plaque', blurb: 'your first good one', price: 150, at: [-1.81, 1.7, 0.65, Math.PI / 2], build: snapperMount },
+  { id: 'sailfish', shop: 'K', name: 'Sailfish, leaping', blurb: 'sail up, over the bed', price: 900, at: [-1.81, 1.8, -0.85, Math.PI / 2], build: sailfishMount },
 
   // ── the pawn shop: curios ──
-  {
-    id: 'bottle',
-    shop: 'J',
-    name: 'Ship in a bottle',
-    blurb: 'on an old rum barrel',
-    price: 140,
-    at: [-1.52, 0, 0.42, 0],
-    solid: [0.24, 0.24, 0.6],
-    build(k) {
-      const g = new Group();
-      g.add(cyl(k, '#7a5030', 0.22, 0.2, 0.6, 0, 0.3, 0));
-      for (const y of [0.1, 0.5]) g.add(new Mesh(new TorusGeometry(0.215, 0.012, 6, 20).rotateX(Math.PI / 2), mat(k, 'satin', '#3a3a3a')).translateY(y));
-      const glass = new Mesh(new CylinderGeometry(0.07, 0.07, 0.34, 16).rotateZ(Math.PI / 2), new MeshStandardMaterial({ color: 0xbfe8e0, transparent: true, opacity: 0.35, roughness: 0.05 }));
-      glass.position.y = 0.68;
-      g.add(glass);
-      g.add(cyl(k, '#6a4a2a', 0.025, 0.025, 0.06, 0.2, 0.68, 0).rotateZ(Math.PI / 2));
-      g.add(box(k, DARK, 0.18, 0.03, 0.05, 0, 0.64, 0));
-      g.add(box(k, '#f4ead6', 0.08, 0.08, 0.004, 0.01, 0.7, 0));
-      g.add(cyl(k, DARK, 0.004, 0.004, 0.11, 0, 0.7, 0, 4));
-      return g;
-    },
-  },
-  {
-    id: 'globe',
-    shop: 'J',
-    name: 'Old globe',
-    blurb: 'the island isn’t on it',
-    price: 180,
-    at: [0.85, 0, 0.95, 0.4],
-    solid: [0.2, 0.2, 1.1],
-    build(k) {
-      const g = new Group();
-      g.add(cyl(k, DARK, 0.18, 0.2, 0.04, 0, 0.02, 0));
-      g.add(cyl(k, DARK, 0.025, 0.03, 0.75, 0, 0.4, 0, 8));
-      const sphere = new Mesh(
-        new SphereGeometry(0.2, 24, 16),
-        painted(k, 512, 256, (c, w, h) => {
-          c.fillStyle = '#c8b27a';
-          c.fillRect(0, 0, w, h);
-          c.fillStyle = '#7a8a4a';
-          let s = 7;
-          const r = (): number => ((s = (s * 16807) % 2147483647) - 1) / 2147483646;
-          for (let i = 0; i < 14; i++) {
-            c.beginPath();
-            c.ellipse(r() * w, h * 0.2 + r() * h * 0.6, 20 + r() * 50, 12 + r() * 30, r() * 3, 0, Math.PI * 2);
-            c.fill();
-          }
-          c.strokeStyle = 'rgba(60,40,20,0.35)';
-          for (let i = 1; i < 8; i++) c.strokeRect(-1, (i * h) / 8, w + 2, 0);
-        }),
-      );
-      sphere.position.y = 0.98;
-      sphere.rotation.z = 0.41;
-      const ring = new Mesh(new TorusGeometry(0.23, 0.01, 6, 32), mat(k, 'gold', ''));
-      ring.position.y = 0.98;
-      ring.rotation.z = 0.41;
-      g.add(sphere, ring);
-      return g;
-    },
-  },
-  {
-    id: 'painting',
-    shop: 'J',
-    name: 'Painting of the bay',
-    blurb: 'signed, illegibly',
-    price: 210,
-    at: [1.81, 1.55, -1.25, -Math.PI / 2],
-    build(k) {
-      const g = new Group();
-      g.add(box(k, '#c8a040', 0.86, 0.62, 0.04, 0, 0, 0.02, 'gloss'));
-      const canvas = new Mesh(
-        new PlaneGeometry(0.76, 0.52),
-        painted(k, 512, 350, (c, w, h) => {
-          const sky = c.createLinearGradient(0, 0, 0, h * 0.55);
-          sky.addColorStop(0, '#f28a5a');
-          sky.addColorStop(1, '#ffd08a');
-          c.fillStyle = sky;
-          c.fillRect(0, 0, w, h * 0.55);
-          c.fillStyle = '#ffe8a0';
-          c.beginPath();
-          c.arc(w * 0.62, h * 0.5, 34, 0, Math.PI * 2);
-          c.fill();
-          const sea = c.createLinearGradient(0, h * 0.55, 0, h);
-          sea.addColorStop(0, '#2f7aa8');
-          sea.addColorStop(1, '#154060');
-          c.fillStyle = sea;
-          c.fillRect(0, h * 0.55, w, h * 0.45);
-          c.fillStyle = '#3a2a1a';
-          c.fillRect(w * 0.08, h * 0.62, w * 0.36, 8); // the pier
-          for (let i = 0; i < 6; i++) c.fillRect(w * 0.1 + i * w * 0.06, h * 0.62, 4, 26);
-          c.strokeStyle = 'rgba(255,230,180,0.6)';
-          c.lineWidth = 3;
-          for (let i = 0; i < 9; i++) c.strokeRect(w * 0.55 + (i % 3) * 18, h * 0.6 + i * 12, 30, 0);
-        }),
-      );
-      canvas.position.z = 0.045;
-      g.add(canvas);
-      return g;
-    },
-  },
+  { id: 'bottle', shop: 'J', name: 'Ship in a bottle', blurb: 'a three-master, on an old rum barrel', price: 140, at: [-1.55, 0, 0.95, 0.3], solid: [0.24, 0.24, 0.6], build: shipInBottle },
+  { id: 'globe', shop: 'J', name: 'Mariner’s globe', blurb: 'the island isn’t on it', price: 180, at: [0.85, 0, 0.95, 0.4], solid: [0.26, 0.26, 1.1], build: globe },
+  { id: 'painting', shop: 'J', name: 'Painting of the bay', blurb: 'sunset from the pier, signed illegibly', price: 210, at: [1.81, 1.55, -1.25, -Math.PI / 2], build: painting },
+  { id: 'helmet', shop: 'J', name: 'Brass diving helmet', blurb: 'on the salvage crate it came up in', price: 350, at: [1.5, 0, -1.62, -0.5], solid: [0.24, 0.24, 0.85], build: divingHelmet },
+
   // ── the jeweller: sparkle for Coral's villa ──
-  {
-    id: 'chandelier',
-    shop: 'A',
-    name: 'Crystal chandelier',
-    blurb: 'for the hall of Villa Mar',
-    price: 1500,
-    at: [0, 3.35, -0.5, 0],
-    hangs: true,
-    build(k) {
-      const g = new Group();
-      const chain = cyl(k, '', 0.012, 0.012, 1.4, 0, 1.0, 0, 6, 'gold'); // up to the ceiling
-      chain.userData.noThumb = true;
-      g.add(chain);
-      g.add(cyl(k, '', 0.05, 0.03, 0.25, 0, 0.18, 0, 12, 'gold'));
-      for (const [r, y, n] of [[0.55, 0, 10], [0.36, 0.2, 7]] as const) {
-        g.add(new Mesh(new TorusGeometry(r, 0.018, 6, 32).rotateX(Math.PI / 2), mat(k, 'gold', '')).translateY(y));
-        for (let i = 0; i < n; i++) {
-          const a = (i / n) * Math.PI * 2;
-          const x = Math.cos(a) * r;
-          const z = Math.sin(a) * r;
-          g.add(cyl(k, '#fff6e0', 0.018, 0.018, 0.12, x, y + 0.07, z, 6, 'gloss')); // a candle
-          const drop = new Mesh(new ConeGeometry(0.03, 0.1, 6).rotateX(Math.PI), mat(k, 'gloss', '#e8f6ff'));
-          drop.position.set(x, y - 0.08, z);
-          g.add(drop);
-        }
-      }
-      for (let i = 0; i < 12; i++) {
-        const a = (i / 12) * Math.PI * 2;
-        g.add(ball(k, '#e8f6ff', 0.028, Math.cos(a) * 0.2, -0.2 - (i % 3) * 0.06, Math.sin(a) * 0.2, 'gloss'));
-      }
-      g.add(ball(k, '#e8f6ff', 0.07, 0, -0.34, 0, 'gloss'));
-      return g;
-    },
-  },
-  {
-    id: 'vanity',
-    shop: 'A',
-    name: 'Vanity & jewellery box',
-    blurb: 'mother-of-pearl, lined in velvet',
-    price: 650,
-    at: [-3.18, 0, -1.3, Math.PI / 2],
-    solid: [0.55, 0.28, 0.78],
-    build(k) {
-      const g = new Group();
-      g.add(box(k, '#f4ead6', 1.1, 0.05, 0.5, 0, 0.76, 0, 'gloss'));
-      legs(k, g, '#e8d8b8', 1.1, 0.5, 0.74, 0.045);
-      g.add(box(k, '', 0.9, 1.0, 0.03, 0, 1.35, -0.23, 'gold')); // the mirror's frame
-      g.add(box(k, '#cfe6f0', 0.8, 0.9, 0.01, 0, 1.35, -0.21, 'gloss'));
-      // the box, lid up, pearls spilling out
-      g.add(box(k, '#f0e8e0', 0.3, 0.12, 0.2, 0.25, 0.85, 0.05, 'gloss'));
-      g.add(box(k, '#8a1a3a', 0.26, 0.02, 0.16, 0.25, 0.91, 0.05));
-      const lid = box(k, '#f0e8e0', 0.3, 0.02, 0.2, 0.25, 0.99, -0.06, 'gloss');
-      lid.rotation.x = -1.2;
-      g.add(lid);
-      for (let i = 0; i < 9; i++) g.add(ball(k, '#fbf6ee', 0.012, 0.13 + i * 0.022, 0.92 + Math.sin(i * 0.8) * 0.01, 0.1 + Math.cos(i * 0.9) * 0.03, 'gloss'));
-      g.add(ball(k, '#d8508a', 0.02, 0.33, 0.93, 0.06, 'gloss'));
-      g.add(cyl(k, '#e8d8b8', 0.2, 0.2, 0.06, 0, 0.44, 0.45, 16)); // the stool
-      g.add(cyl(k, '#e8d8b8', 0.03, 0.03, 0.42, 0, 0.21, 0.45, 8));
-      return g;
-    },
-  },
-  {
-    id: 'pearls',
-    shop: 'A',
-    name: 'Pearls on a velvet bust',
-    blurb: 'three strands, from the deep reef',
-    price: 900,
-    at: [-3.05, 0, 0.75, Math.PI / 2],
-    solid: [0.22, 0.22, 1.4],
-    build(k) {
-      const g = new Group();
-      g.add(cyl(k, '#f4ead6', 0.2, 0.24, 0.08, 0, 0.04, 0, 16, 'gloss'));
-      g.add(cyl(k, '#f4ead6', 0.07, 0.09, 0.95, 0, 0.55, 0, 12, 'gloss'));
-      g.add(cyl(k, '#f4ead6', 0.19, 0.19, 0.06, 0, 1.05, 0, 16, 'gloss'));
-      // the bust: shoulders and a neck in deep red velvet
-      const chest = new Mesh(new SphereGeometry(0.17, 16, 10, 0, Math.PI * 2, 0, Math.PI / 2).scale(1.3, 1.2, 0.7), mat(k, 'satin', '#6a0e2a'));
-      chest.position.y = 1.08;
-      g.add(chest);
-      g.add(cyl(k, '#6a0e2a', 0.05, 0.06, 0.18, 0, 1.36, 0, 12));
-      for (const [r, y] of [[0.075, 1.3], [0.1, 1.25], [0.125, 1.2]] as const) {
-        const n = Math.round(r * 110);
-        for (let i = 0; i < n; i++) {
-          const a = -Math.PI * 0.95 + (i / (n - 1)) * Math.PI * 0.9;
-          g.add(ball(k, '#fbf6ee', 0.011, Math.cos(a) * r * 1.2, y - Math.sin(-a) * 0.03, Math.sin(-a) * r * 0.75 + 0.02, 'gloss'));
-        }
-      }
-      return g;
-    },
-  },
-  {
-    id: 'ring',
-    shop: 'A',
-    name: 'Diamond ring under glass',
-    blurb: 'for when you’re ready to ask',
-    price: 2500,
-    at: [3.05, 0, 1.75, -Math.PI / 2],
-    solid: [0.24, 0.24, 1.3],
-    build(k) {
-      const g = new Group();
-      g.add(box(k, '#f4ead6', 0.4, 1.05, 0.4, 0, 0.525, 0, 'gloss'));
-      g.add(box(k, '', 0.44, 0.04, 0.44, 0, 1.07, 0, 'gold'));
-      g.add(box(k, '#8a1a3a', 0.2, 0.06, 0.2, 0, 1.12, 0)); // the cushion
-      const band = new Mesh(new TorusGeometry(0.03, 0.006, 8, 24), mat(k, 'gold', ''));
-      band.position.set(0, 1.18, 0);
-      g.add(band);
-      const stone = new Mesh(new ConeGeometry(0.018, 0.03, 8).rotateX(Math.PI), mat(k, 'gloss', '#f4fbff'));
-      stone.position.set(0, 1.225, 0);
-      g.add(stone);
-      g.add(new Mesh(new SphereGeometry(0.15, 20, 12, 0, Math.PI * 2, 0, Math.PI / 2), glass()).translateY(1.09));
-      return g;
-    },
-  },
+  { id: 'chandelier', shop: 'A', name: 'Crystal chandelier', blurb: 'for the hall of Villa Mar', price: 1500, at: [0, 3.35, -0.5, 0], hangs: true, build: chandelier },
+  { id: 'vanity', shop: 'A', name: 'Vanity & jewellery box', blurb: 'mother-of-pearl, lined in velvet', price: 650, at: [-3.18, 0, -1.3, Math.PI / 2], solid: [0.6, 0.28, 0.78], build: vanity },
+  { id: 'pearls', shop: 'A', name: 'Pearls on a velvet bust', blurb: 'three strands, from the deep reef', price: 900, at: [-3.05, 0, 0.6, Math.PI / 2], solid: [0.22, 0.22, 1.45], build: pearlBust },
+  { id: 'ring', shop: 'A', name: 'Diamond ring under glass', blurb: 'for when you’re ready to ask', price: 2500, at: [3.05, 0, 1.75, -Math.PI / 2], solid: [0.2, 0.2, 1.3], build: ringCloche },
+  { id: 'tiara', shop: 'A', name: 'Mermaid’s tiara', blurb: 'silver waves and aquamarines', price: 1200, at: [-2.35, 0, 1.55, 0.5], solid: [0.26, 0.26, 0.9], build: tiara },
 
   // ── the boutique: the finer things for Coral's villa ──
-  {
-    id: 'chaise',
-    shop: 'E',
-    name: 'Velvet chaise longue',
-    blurb: 'for long afternoons by the window',
-    price: 700,
-    at: [2.95, 0, -1.55, -Math.PI / 2],
-    solid: [0.4, 0.9, 0.7],
-    build(k) {
-      const g = new Group();
-      g.add(box(k, '#1f5a5a', 0.7, 0.22, 1.7, 0, 0.32, 0));
-      g.add(box(k, '#1f5a5a', 0.7, 0.5, 0.16, 0, 0.62, -0.78));
-      const back = box(k, '#1f5a5a', 0.14, 0.34, 1.1, -0.29, 0.56, -0.25);
-      g.add(back);
-      g.add(box(k, '', 0.72, 0.03, 1.72, 0, 0.2, 0, 'gold'));
-      for (const sz of [-0.8, 0.8]) for (const sx of [-0.3, 0.3]) g.add(cyl(k, '', 0.025, 0.018, 0.2, sx, 0.1, sz, 8, 'gold'));
-      g.add(box(k, '#f4ead6', 0.34, 0.12, 0.26, 0.05, 0.5, -0.6)); // a cushion
-      return g;
-    },
-  },
-  {
-    id: 'mirror',
-    shop: 'E',
-    name: 'Gilded standing mirror',
-    blurb: 'she says it flatters the light',
-    price: 450,
-    at: [-1.95, 0, -2.4, 0],
-    solid: [0.45, 0.15, 2.0],
-    build(k) {
-      const g = new Group();
-      const frame = new Mesh(new TorusGeometry(0.42, 0.04, 8, 36).scale(1, 1.85, 1), mat(k, 'gold', ''));
-      frame.position.y = 1.08;
-      g.add(frame);
-      const glassM = new Mesh(new CylinderGeometry(0.4, 0.4, 0.01, 36).rotateX(Math.PI / 2).scale(1, 1.85, 1), mat(k, 'gloss', '#cfe6f0'));
-      glassM.position.set(0, 1.08, -0.005);
-      g.add(glassM);
-      g.add(ball(k, '', 0.06, 0, 1.92, 0, 'gold'));
-      for (const sx of [-1, 1]) {
-        const foot = box(k, '', 0.05, 0.05, 0.4, sx * 0.3, 0.05, 0, 'gold');
-        g.add(foot);
-      }
-      return g;
-    },
-  },
-  {
-    id: 'drapes',
-    shop: 'E',
-    name: 'Silk drapes',
-    blurb: 'rose silk, floor to ceiling',
-    price: 380,
-    at: [-3.42, 0, 1.9, Math.PI / 2],
-    build(k) {
-      // folds of silk hung from a gold rod, caught back with a gold tie
-      const g = new Group();
-      g.add(cyl(k, '', 0.02, 0.02, 1.3, 0, 3.4, 0, 8, 'gold').rotateZ(Math.PI / 2));
-      for (let i = 0; i < 7; i++) g.add(cyl(k, i % 2 ? '#e8708a' : '#d8506e', 0.07, 0.1, 3.35, -0.5 + i * 0.16, 1.7, 0.03 * (i % 2), 10));
-      g.add(new Mesh(new TorusGeometry(0.55, 0.025, 6, 20, Math.PI), mat(k, 'gold', '')).translateY(1.2).rotateZ(Math.PI));
-      return g;
-    },
-  },
-  {
-    id: 'piano',
-    shop: 'E',
-    name: 'Baby grand piano',
-    blurb: 'she plays. of course she plays',
-    price: 2000,
-    at: [1.75, 0, 0.55, -0.35],
-    solid: [0.75, 0.8, 1.0],
-    build(k) {
-      const g = new Group();
-      const black = '#0e0e12';
-      // the case: square at the keyboard, rounding off toward the tail
-      g.add(box(k, black, 1.4, 0.3, 0.9, 0, 0.82, -0.2, 'gloss'));
-      const tail = new Mesh(new CylinderGeometry(0.7, 0.7, 0.3, 24, 1, false, Math.PI / 2, Math.PI), mat(k, 'gloss', black));
-      tail.position.set(0, 0.82, -0.65);
-      tail.scale.z = 0.9;
-      g.add(tail);
-      const lid = box(k, black, 1.36, 0.02, 1.3, 0.1, 1.2, -0.55, 'gloss');
-      lid.rotation.z = 0.5;
-      g.add(lid);
-      g.add(box(k, black, 1.4, 0.06, 0.24, 0, 0.74, 0.37, 'gloss'));
-      g.add(box(k, '#f8f6f0', 1.22, 0.025, 0.14, 0, 0.785, 0.39));
-      for (let i = 0; i < 25; i++) if (i % 7 !== 2 && i % 7 !== 6) g.add(box(k, black, 0.022, 0.02, 0.08, -0.58 + i * 0.049, 0.805, 0.36));
-      for (const [x, z] of [[-0.6, 0.3], [0.6, 0.3], [0, -1.2]]) g.add(cyl(k, black, 0.05, 0.04, 0.68, x, 0.34, z, 10, 'gloss'));
-      const bench = new Group();
-      bench.add(box(k, black, 0.8, 0.06, 0.36, 0, 0.5, 0, 'gloss'));
-      legs(k, bench, black, 0.8, 0.36, 0.48, 0.04);
-      bench.position.z = 0.95;
-      g.add(bench);
-      return g;
-    },
-  },
+  { id: 'chaise', shop: 'E', name: 'Velvet chaise longue', blurb: 'for long afternoons by the window', price: 700, at: [2.05, 0, -2.2, -Math.PI / 2], solid: [0.4, 0.9, 0.7], build: chaise },
+  { id: 'mirror', shop: 'E', name: 'Gilded cheval mirror', blurb: 'she says it flatters the light', price: 450, at: [-1.95, 0, -2.35, 0], solid: [0.55, 0.25, 2.0], build: chevalMirror },
+  { id: 'drapes', shop: 'E', name: 'Silk drapes', blurb: 'rose silk, floor to ceiling', price: 380, at: [-3.45, 0, 1.75, Math.PI / 2], build: drapes },
+  { id: 'piano', shop: 'E', name: 'Baby grand piano', blurb: 'she plays. of course she plays', price: 2000, at: [1.3, 0, 0.25, -0.35], solid: [0.75, 1.15, 1.0], build: piano },
+  { id: 'screen', shop: 'E', name: 'Painted silk screen', blurb: 'birds of paradise in blossom', price: 550, at: [2.45, 0, 2.3, Math.PI], solid: [0.7, 0.2, 1.8], build: screen },
 ];
 
 /* ── the shack ─────────────────────────────────────────────────────────── */
@@ -730,7 +171,62 @@ export class Shack {
 /* ── the shops ─────────────────────────────────────────────────────────── */
 
 const BW = 1200;
-const BH = 700;
+const BH = 800;
+/** each thing on the counter fits in a cube this big (m) */
+const SHOW = 0.44;
+
+/** the bounds of a thing as built (its parts that stay out of pictures left out too) */
+function boundsOf(o: Object3D): Box3 {
+  o.updateMatrixWorld(true);
+  return new Box3().setFromObject(o);
+}
+
+/** the parts of a thing only its room needs (a chandelier's chain to the ceiling) */
+function dropExtras(o: Object3D): Object3D {
+  const skip: Object3D[] = [];
+  o.traverse((c) => c.userData.noThumb && skip.push(c));
+  for (const c of skip) c.removeFromParent();
+  return o;
+}
+
+/**
+ * How a thing is shown on the counter: shrunk to fit its place, standing on the counter top.
+ * A wall piece leans back on a little easel; a hanging one hangs from a gallows.
+ */
+function onShow(k: Kit, item: HomeItem): Group {
+  const g = new Group();
+  const o = dropExtras(item.build(k));
+  const wall = item.at[1] > 1 && !item.hangs;
+  let bb = boundsOf(o);
+  const size = bb.getSize(new Vector3());
+  const s = Math.min(1, SHOW / Math.max(size.x, size.y, size.z, 1e-3));
+  o.scale.setScalar(s);
+  if (wall) o.rotation.x = -0.22;
+  bb = boundsOf(o);
+  const c = bb.getCenter(new Vector3());
+  const b = new Batch();
+  const wood = M.wood(k.renderer, 'walnut', 0.4);
+  if (item.hangs) {
+    // the gallows: a turned post at the back, an arm over, a hook; the thing hangs clear of the top
+    const H = bb.max.y - bb.min.y + 0.1;
+    o.position.set(-c.x, H - bb.max.y + 0.02, -c.z);
+    b.at(wood, rounded(0.2, 0.02, 0.14, 0.006), 0, 0.01, -0.16);
+    b.at(wood, turned([[0.014, 0], [0.012, H + 0.06], [0, H + 0.07]], 10), 0, 0.02, -0.16);
+    b.at(wood, rounded(0.02, 0.02, 0.2, 0.006), 0, H + 0.06, -0.07);
+    b.add(M.brass(k.renderer), stalk([new Vector3(0, H + 0.05, 0), new Vector3(0, H + 0.02, 0)], 0.003, 0.003, 5, 2));
+  } else if (wall) {
+    // a little easel behind it
+    o.position.set(-c.x, 0.03 - bb.min.y + 0.02, -c.z);
+    const top = bb.max.y - bb.min.y + 0.05;
+    for (const sx of [-1, 1]) b.at(wood, rounded(0.018, top, 0.018, 0.005), sx * 0.1, top / 2, -0.04, 0.2, 0, sx * 0.08);
+    b.at(wood, rounded(0.018, top * 0.9, 0.018, 0.005), 0, top * 0.44, -0.16, -0.35, 0, 0);
+    b.at(wood, rounded(0.3, 0.02, 0.05, 0.005), 0, 0.03, 0.01);
+  } else {
+    o.position.set(-c.x, -bb.min.y, -c.z);
+  }
+  g.add(o, b.group());
+  return g;
+}
 
 export class HomeShopCounter {
   private readonly board: InteractivePanel;
@@ -751,26 +247,21 @@ export class HomeShopCounter {
     this.goods = GOODS.filter((g) => g.shop === shop);
     const [cx, cz, hx, hz, top] = shopCounter(room.d);
 
-    // the counter, and the goods standing on it (the big ones as a maker's model), baked into
-    // one draw per material
+    // the counter, and the goods standing on it (shrunk to a maker's model), baked into one
+    // draw per material
     const display = new Group();
-    const counter = new Group();
-    counter.add(box(kit, '#6a4428', hx * 2, top, hz * 2, 0, top / 2, 0));
-    counter.add(box(kit, '#4a2e1a', hx * 2 + 0.08, 0.05, hz * 2 + 0.08, 0, top + 0.025, 0, 'gloss'));
-    counter.position.set(cx, 0, cz);
-    display.add(counter);
+    const counter = new Batch();
+    const wood = M.wood(kit.renderer, 'walnut', 0.45);
+    counter.at(wood, rounded(hx * 2, top - 0.05, hz * 2, 0.02), cx, (top - 0.05) / 2, cz);
+    counter.at(M.wood(kit.renderer, 'mahogany', 0.25), rounded(hx * 2 + 0.08, 0.05, hz * 2 + 0.08, 0.015), cx, top - 0.025, cz);
+    // panels on its front, and a brass kick rail
+    for (let i = 0; i < 4; i++) counter.at(M.wood(kit.renderer, 'mahogany', 0.4), rounded(hx * 0.42, top * 0.62, 0.02, 0.008), cx - hx + (hx * 2 * (i + 0.5)) / 4, top * 0.46, cz + hz + 0.005);
+    counter.at(M.brass(kit.renderer), turned([[0.012, -hx], [0.012, hx]], 10), cx, 0.12, cz + hz + 0.05, 0, 0, Math.PI / 2);
+    display.add(counter.group());
     const n = this.goods.length;
     this.goods.forEach((g, i) => {
-      const o = g.build(kit);
-      // fit it in a 0.5 m cube, standing on the counter (wall pieces lean back on a little easel)
-      const wall = g.at[1] > 1 && !g.hangs;
-      const s = wall ? 0.42 : scaleToFit(o, 0.5);
-      o.scale.setScalar(s);
-      const x = cx - hx + ((i + 0.5) * hx * 2) / n;
-      o.position.set(x, top + 0.05 + (wall ? 0.28 : 0), cz + (wall ? -0.1 : 0));
-      if (wall) o.rotation.x = -0.2;
-      // a hanging piece stands on its lowest point
-      if (g.hangs) o.position.y += s * 0.4;
+      const o = onShow(kit, g);
+      o.position.set(cx - hx + ((i + 0.5) * hx * 2) / n, top, cz - 0.02);
       display.add(o);
     });
     room.contents.add(mergeStatic(display));
@@ -836,25 +327,25 @@ export class HomeShopCounter {
     c.fillText(`wallet $${Math.floor(this.state.money).toLocaleString('en-US')}`, BW - 40, 76);
 
     const buttons: { id: string; x: number; y: number; w: number; h: number; enabled?: boolean }[] = [];
-    const rowH = 118;
+    const rowH = 112;
     this.goods.forEach((g, i) => {
-      const y = 146 + i * rowH;
+      const y = 140 + i * rowH;
       const owned = this.state.home.includes(g.id);
       drawThumb(c, this.pics.get(g.id), 36, y + 4, rowH - 10);
       c.textAlign = 'left';
       c.font = font(700, 40);
       c.fillStyle = owned ? INK.dim : INK.hot;
-      c.fillText(g.name, 160, y + 44, 530);
+      c.fillText(g.name, 160, y + 44, 560);
       c.font = font(500, 26);
       c.fillStyle = INK.dim;
-      c.fillText(g.blurb, 160, y + 82, 530);
+      c.fillText(g.blurb, 160, y + 80, 560);
       c.textAlign = 'right';
       c.font = font(700, 40);
       c.fillStyle = owned ? INK.dim : INK.amber;
-      c.fillText(`$${g.price}`, 880, y + 62);
+      c.fillText(`$${g.price.toLocaleString('en-US')}`, 890, y + 60);
       const bx = 910;
       const bw = 250;
-      const bh = 84;
+      const bh = 80;
       const id = `buy:${g.id}`;
       if (!owned) buttons.push({ id, x: bx, y: y + 12, w: bw, h: bh });
       roundRect(c, bx, y + 12, bw, bh, 16);
@@ -864,36 +355,15 @@ export class HomeShopCounter {
       c.textAlign = 'center';
       c.font = font(700, 36);
       c.fillStyle = owned ? INK.good : afford ? '#1a1206' : INK.dim;
-      c.fillText(owned ? (this.villa ? 'CORAL’S ♥' : 'AT HOME ✓') : 'BUY', bx + bw / 2, y + 66);
+      c.fillText(owned ? (this.villa ? 'CORAL’S ♥' : 'AT HOME ✓') : 'BUY', bx + bw / 2, y + 64);
     });
     b.buttons = buttons;
     if (this.note) {
       c.textAlign = 'left';
       c.font = font(600, 28);
       c.fillStyle = this.noteColour;
-      c.fillText(this.note, 40, BH - 36, BW - 80);
+      c.fillText(this.note, 40, BH - 32, BW - 80);
     }
     b.commit();
   }
-}
-
-/** the scale that fits an object's bounds in a cube of side `size` (never enlarges) */
-export function scaleToFit(o: Object3D, size: number): number {
-  o.updateMatrixWorld(true);
-  const min = new Vector3(Infinity, Infinity, Infinity);
-  const max = new Vector3(-Infinity, -Infinity, -Infinity);
-  const v = new Vector3();
-  o.traverse((m) => {
-    const g = (m as Mesh).geometry;
-    if (!g) return;
-    g.computeBoundingBox();
-    const bb = g.boundingBox!;
-    for (const x of [bb.min.x, bb.max.x]) for (const y of [bb.min.y, bb.max.y]) for (const z of [bb.min.z, bb.max.z]) {
-      v.set(x, y, z).applyMatrix4(m.matrixWorld);
-      min.min(v);
-      max.max(v);
-    }
-  });
-  const ext = Math.max(max.x - min.x, max.y - min.y, max.z - min.z);
-  return ext > size ? size / ext : 1;
 }
