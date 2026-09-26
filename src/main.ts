@@ -34,6 +34,7 @@ import { bankDeps, bootBank } from './net/bank.ts';
 import { bootCloudSave } from './net/cloudSave.ts';
 import { RouletteTable } from './casino/RouletteTable.ts';
 import { SlotMachine } from './casino/SlotMachine.ts';
+import { casinoEnv } from './casino/look.ts';
 import { BlackjackTable } from './casino/BlackjackTable.ts';
 import { PointerSystem } from './ui/pointer.ts';
 import { buildInteriors, interiorAt, openColliders, type Interior } from './village/interiors.ts';
@@ -174,7 +175,10 @@ World.create(container, {
   const fx = new WaterFx((x, z) => ocean.heightAt(x, z), ocean.swell);
   scene.add(fx.group);
   const wallet = new WristWallet(game, [world.player.raySpaces.left, world.player.raySpaces.right]);
-  Object.assign(fishingDeps, { props: loadProps(propsBuf), state: game, ocean, terrain: heightfield, surfaces, layout: json.layout, wallet, fx });
+  const props = loadProps(propsBuf);
+  // the silvery fish reflect the casinos' studio light (a soft, neutral room)
+  props.setEnv(casinoEnv(world.renderer));
+  Object.assign(fishingDeps, { props, state: game, ocean, terrain: heightfield, surfaces, layout: json.layout, wallet, fx });
   // point-and-click panels first: a hand on a button claims its trigger before fishing sees it
   world.registerSystem(PointerSystem);
   world.registerSystem(FishingSystem);

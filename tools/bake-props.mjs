@@ -143,14 +143,30 @@ for (const id of FISH_IDS) {
     col[i * 4 + 3] = part >= PART.DORSAL1 && part <= PART.FINLET ? 1 : 0; // fin flag (flutter)
     along[i] = Math.round(sat(u) * 255);
   }
+  // the skin shader's inputs (src/fishing/fishSkin.ts): per vertex Tidewater's aData (u, part +
+  // jaw, across / t, height / w), per species its table rows (FishMaterial.js buildTable)
+  arrays[`fish.${id}.data`] = new Float32Array(D);
+  const L = S.body;
+  const rows = [
+    ...back, S.metal * 0.55,
+    ...flank, S.irid ?? 0,
+    ...belly, K.rough,
+    ...fin, S.mouth.tip,
+    ...edge, S.scales,
+    ...iris, S.scaleVis,
+    0.5 - S.eye.u * L, S.eye.y, S.eye.r, 0.5 - S.opercle * L,
+    S.lateral, S.arch, 0.5 - S.mouth.corner * L, S.mouth.y,
+  ];
   arrays[`fish.${id}.position`] = new Float32Array(P);
   arrays[`fish.${id}.normal`] = toInt8(g.attributes.normal.array);
   arrays[`fish.${id}.color`] = col;
   arrays[`fish.${id}.along`] = along;
   const idx = g.index.array;
   arrays[`fish.${id}.index`] = n > 65535 ? new Uint32Array(idx) : new Uint16Array(idx);
-  meta.fish[id] = { vertices: n, triangles: idx.length / 3, metal: S.metal ?? 0 };
+  meta.fish[id] = { vertices: n, triangles: idx.length / 3, metal: S.metal ?? 0, pattern: S.pattern, rows };
 }
+
+meta.part = PART;
 
 mkdirSync(OUT, { recursive: true });
 const buf = pack(arrays, meta);

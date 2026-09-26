@@ -41,7 +41,7 @@ import {
   Matrix4,
   Mesh,
   MeshBasicMaterial,
-  MeshPhongMaterial,
+  MeshStandardMaterial,
   Quaternion,
   RingGeometry,
   SRGBColorSpace,
@@ -104,7 +104,7 @@ export const backpackView: {
 interface FishModel {
   mesh: Mesh;
   u: FishUniforms;
-  mat: MeshPhongMaterial;
+  mat: MeshStandardMaterial;
 }
 
 interface Anim {
@@ -310,7 +310,7 @@ export class BackpackSystem extends createSystem({}) {
 
   private makeModel(p: Piece): FishModel {
     const { mesh, uniforms } = backpackDeps.props!.makeFish(p.species);
-    const mat = mesh.material as MeshPhongMaterial;
+    const mat = mesh.material;
     mat.emissive.setHex(TIER_GLOW[p.tier] ?? 0);
     uniforms.uSwim.value = 0.012;
     uniforms.uFreq.value = 0.8;

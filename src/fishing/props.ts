@@ -5,19 +5,25 @@
  * (game/FishingRod.js) to GLSL: the blank bends toward the line with a fast action (only the tip
  * under a light load, down into the butt under a heavy one), the rotor spins, the bail flips
  * open for the cast, the crank turns, the spool oscillates and slips back when the drag gives.
- * The fish get a swimming body wave that grows toward the tail, with fins fluttering over it.
+ * The fish get a swimming body wave that grows toward the tail, with fins fluttering over it,
+ * and Tidewater's own procedural skin (fishing/fishSkin.ts): scales, markings, fin rays, eyes,
+ * the silvery sheen.
  */
 
 import {
   BufferAttribute,
   BufferGeometry,
+  DoubleSide,
   Mesh,
   MeshLambertMaterial,
   MeshPhongMaterial,
+  MeshStandardMaterial,
   Vector4,
   type IUniform,
+  type Texture,
 } from 'three';
 import { unpack, type Typed } from '../world/data.ts';
+import { FISH_SKIN_PARS, fishSkinSurface } from './fishSkin.ts';
 
 /* Tidewater FishingRod.js rod frame: +Y along the blank (butt 0, tip ROD_L), reel toward −Z. */
 export const ROD_L = 2.13;
@@ -59,7 +65,9 @@ export interface Props {
   bobberGeometry: BufferGeometry;
   makeRod(): { mesh: Mesh; uniforms: RodUniforms };
   makeBobber(): Mesh;
-  makeFish(species: string): { mesh: Mesh; uniforms: FishUniforms };
+  makeFish(species: string): { mesh: Mesh<BufferGeometry, MeshStandardMaterial>; uniforms: FishUniforms };
+  /** the reflections the silvery fish show (set once the renderer can make one) */
+  setEnv(env: Texture): void;
 }
 
 const f = (x: number): string => x.toFixed(4);
@@ -133,6 +141,9 @@ const FISH_VERTEX = /* glsl */ `
   // transpose of that shear, n' = (nx, ny, nz + nx * dside/du)
   float dside = uSwim * (2.0 * u * sin(ph) + env * 5.2 * cos(ph));
   vec3 objectNormal = normalize(vec3(normal.x, normal.y, normal.z + normal.x * dside));
+  vFishData = data;
+  vFishLocal = position;
+  vFishL = length(modelMatrix[0].xyz);
 `;
 
 function geometry(arrays: Record<string, Typed>, name: string, extra: Record<string, [number, boolean]> = {}): BufferGeometry {
@@ -163,7 +174,11 @@ function geometry(arrays: Record<string, Typed>, name: string, extra: Record<str
 
 export function loadProps(buf: ArrayBuffer): Props {
   const { arrays, meta } = unpack(buf);
-  const fishMeta = (meta as { fish: Record<string, { metal: number }> }).fish;
+  const fishMeta = (meta as { fish: Record<string, { metal: number; pattern: number; rows: number[] }> }).fish;
+  const part = (meta as { part: Record<string, number> }).part;
+  const surface = fishSkinSurface(part);
+  let env: Texture | null = null;
+  const fishMats = new Set<MeshStandardMaterial>();
   const rodGeometry = geometry(arrays, 'rod', { anim: [1, false] });
   const bobberGeometry = geometry(arrays, 'bobber');
   const fishGeo = new Map<string, BufferGeometry>();
@@ -208,28 +223,42 @@ export function loadProps(buf: ArrayBuffer): Props {
     makeFish(species: string) {
       let g = fishGeo.get(species);
       if (!g) {
-        g = geometry(arrays, `fish.${species}`, { along: [1, true] });
+        g = geometry(arrays, `fish.${species}`, { along: [1, true], data: [4, false] });
         fishGeo.set(species, g);
       }
       const uniforms: FishUniforms = { uTime: { value: 0 }, uSwim: { value: 0.06 }, uFreq: { value: 2 } };
-      const metal = fishMeta[species]?.metal ?? 0;
-      const mat = new MeshPhongMaterial({
-        vertexColors: true,
-        shininess: 30 + metal * 60,
-        specular: 0x222222 + Math.round(metal * 0x55) * 0x010101,
-      });
+      const fm = fishMeta[species];
+      const rows = Array.from({ length: 8 }, (_, i) => new Vector4().fromArray(fm?.rows ?? [], i * 4));
+      const skin = { uRows: { value: rows }, uPattern: { value: fm?.pattern ?? 0 }, uSeed: { value: Math.random() } };
+      const mat = new MeshStandardMaterial({ side: DoubleSide, envMap: env, envMapIntensity: 0.9 });
       mat.onBeforeCompile = (shader) => {
-        Object.assign(shader.uniforms, uniforms);
+        Object.assign(shader.uniforms, uniforms, skin);
         shader.vertexShader = shader.vertexShader
-          .replace('#include <common>', '#include <common>\nattribute float along;\nattribute float fin;\nuniform float uTime;\nuniform float uSwim;\nuniform float uFreq;')
+          .replace(
+            '#include <common>',
+            '#include <common>\nattribute float along;\nattribute float fin;\nattribute vec4 data;\nuniform float uTime;\nuniform float uSwim;\nuniform float uFreq;\nvarying vec4 vFishData;\nvarying vec3 vFishLocal;\nvarying float vFishL;',
+          )
           .replace('#include <beginnormal_vertex>', FISH_VERTEX)
           .replace('#include <begin_vertex>', 'vec3 transformed = fishP;');
+        shader.fragmentShader = shader.fragmentShader
+          .replace('#include <common>', `#include <common>\n${FISH_SKIN_PARS}`)
+          .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>\n${surface}`);
       };
-      mat.customProgramCacheKey = () => 'tidewater-fish';
+      mat.customProgramCacheKey = () => 'tidewater-fish-skin';
+      fishMats.add(mat);
+      mat.addEventListener('dispose', () => fishMats.delete(mat));
       const mesh = new Mesh(g, mat);
       mesh.name = `fish_${species}`;
       mesh.frustumCulled = false;
       return { mesh, uniforms };
+    },
+
+    setEnv(tex: Texture) {
+      env = tex;
+      for (const m of fishMats) {
+        m.envMap = tex;
+        m.needsUpdate = true;
+      }
     },
   };
 }
