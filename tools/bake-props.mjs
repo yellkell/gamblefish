@@ -104,9 +104,30 @@ const smooth = (e0, e1, x) => {
   return t * t * (3 - 2 * t);
 };
 
+/**
+ * Keep each eye inside the head. On several of Tidewater's anatomies the eye reaches right up
+ * to the dorsal outline (the red snapper, the glasseye, the tuna, the tarpon, the billfish), so
+ * in a close VR view it sat on top of the head like a bead. The eye is moved down until its top
+ * is at most three-quarters of the way up the head there, and made smaller only if that isn't
+ * enough (it never drops below a sixth of the way up).
+ */
+const fitted = new Set();
+function fitEye(S) {
+  if (fitted.has(S)) return;
+  fitted.add(S);
+  const E = S.eye;
+  const T = section(S, E.u).T;
+  const top = 0.75 * T;
+  if (E.y + E.r <= top) return;
+  const y = Math.max(T / 6, top - E.r);
+  const r = Math.min(E.r, top - y);
+  S.eye = { ...E, y, r };
+}
+
 for (const id of FISH_IDS) {
   const model = FISH[id].model;
   const S = SPECIES[model];
+  fitEye(S);
   const K = SKIN[model];
   const g = fishGeometry(S, { lod: 1, pose: 'swim', eyes: true });
   const n = g.attributes.position.count;

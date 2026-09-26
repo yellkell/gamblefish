@@ -117,6 +117,8 @@ const clipRail = (kind, alongX, a0, a1, c, half) => {
     const specs = layout.call(this, rand);
     for (const h of specs.houses ?? []) if (DEMOLISHED.includes(h.name)) demolished.set(h.name, h);
     specs.houses = (specs.houses ?? []).filter((h) => !DEMOLISHED.includes(h.name));
+    // the village's four outhouses (Tidewater's sheds) are gone too: no shed, no pad, no colliders
+    specs.sheds = [];
     for (const h of specs.houses) houseAt.set(`${h.x},${h.z}`, h);
     boathouse = specs.boathouse ?? null;
     return specs;
