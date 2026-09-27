@@ -30,7 +30,7 @@
  */
 
 import { createSystem, InputComponent } from '@iwsdk/core';
-import { Euler, Matrix4, Mesh, Quaternion, Vector2, Vector3, type Object3D } from 'three';
+import { Mesh, Quaternion, Vector2, Vector3, type Object3D } from 'three';
 import { Line2 } from 'three/examples/jsm/lines/Line2.js';
 import { LineGeometry } from 'three/examples/jsm/lines/LineGeometry.js';
 import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
@@ -50,7 +50,8 @@ import type { WorldJson } from '../world/data.ts';
 import type { Heightfield } from '../world/heightfield.ts';
 import type { Ocean } from '../world/ocean.ts';
 import type { Surfaces } from '../world/surfaces.ts';
-import { CatchCard, RodGauge, Toast } from './hud.ts';
+import { CatchCard, Toast } from './hud.ts';
+import { CLAMP_Y, RodGauge } from './rodGauge.ts';
 import type { FishUniforms, Props } from './props.ts';
 import { LINE_PER_CRANK, Rod } from './rod.ts';
 import { SHARK_ID, SharkFight, sharkUnlocked, RUNS } from './shark.ts';
@@ -214,8 +215,8 @@ export class FishingSystem extends createSystem({}) {
     this.scene.add(this.line);
 
     this.gauge = new RodGauge();
-    this.gauge.panel.mesh.visible = false;
-    this.scene.add(this.gauge.panel.mesh);
+    this.gauge.group.visible = false;
+    this.scene.add(this.gauge.group);
     this.toast = new Toast();
     this.toast.panel.mesh.visible = false;
     this.scene.add(this.toast.panel.mesh);
@@ -1087,14 +1088,11 @@ export class FishingSystem extends createSystem({}) {
   }
 
   private updateGauge(): void {
-    const m = this.gauge.panel.mesh;
     const show = this.state !== 'stowed';
-    m.visible = show;
+    this.gauge.group.visible = show;
     if (!show) return;
-    // clipped to the rod just ahead of the fore grip, lying along the blank, facing up at you
-    m.matrix.copy(this.rod.mesh.matrix).multiply(GAUGE_MOUNT);
-    m.matrixAutoUpdate = false;
-    m.matrixWorldNeedsUpdate = true;
+    // clamped to the blank just ahead of the fore grip, riding its bend, facing up at you
+    this.gauge.place(this.rod.mesh.matrix, this.rod.blankOffset(CLAMP_Y, _gaugeBend));
     const s = fishingDeps.state!;
     const f = this.fight;
     const b = this.bite;
@@ -1161,10 +1159,4 @@ export class FishingSystem extends createSystem({}) {
   }
 }
 
-/** The gauge plate on the rod: just ahead of the fore grip, 4.5 cm above the blank, its text
- *  running up the rod and the plate tipped back ~50° to face the angler behind it. */
-const GAUGE_MOUNT = new Matrix4().compose(
-  new Vector3(0, 0.66, 0.045),
-  new Quaternion().setFromEuler(new Euler(0.9, 0, 0)),
-  new Vector3(1, 1, 1),
-);
+const _gaugeBend = new Vector3();

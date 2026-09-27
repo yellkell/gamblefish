@@ -54,6 +54,7 @@ export class Rod {
   private bendVel = 0;
   private load = 0.15;
   private readonly bendDir = new Vector3(0, 0, -1);
+  private shapeP = bendPower(0.15);
 
   rotor = 0;
   crank = 0;
@@ -97,6 +98,7 @@ export class Rod {
     _v.y = 0;
     if (_v.lengthSq() > 1e-6) this.bendDir.lerp(_v.normalize(), 1 - Math.exp(-dt * 10)).normalize();
     const P = bendPower(this.load);
+    this.shapeP = P;
     this.u.rodBend.value.set(this.bendDir.x, 0, this.bendDir.z, this.bend);
     this.u.rodShape.value.set(P, 0, 0, 0);
 
@@ -139,6 +141,12 @@ export class Rod {
       }
     }
     return out;
+  }
+
+  /** Where the bent blank's axis is at rod height `y`, relative to the straight rod (rod space). */
+  blankOffset(y: number, out: Vector3): Vector3 {
+    bendAt(y, this.bend, this.shapeP, _b);
+    return out.set(this.bendDir.x * _b.lat, -_b.drop, this.bendDir.z * _b.lat);
   }
 
   /** World → rod space. */
