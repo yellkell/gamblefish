@@ -56,7 +56,10 @@ JavaScript, though, and that does carry over:
   - `world.json` — the layout and Tidewater's collision world.
 - The runtime (`src/world/`) rebuilds all of this in three.js for Quest:
   - LOD terrain chunks.
-  - A single-pass Gerstner ocean, coloured by Tidewater's depth map.
+  - A single-pass Gerstner ocean shaded with Tidewater's water optics (by way of FIRE FIGHT 2's
+    cove sea): light absorbed and scattered along the refracted ray down to the seabed, the sand
+    and its caustics seen through it, exact Fresnel, the sky's own colours in the reflection, a
+    GGX sun path, drifting ripple layers and a lace of foam at the waterline.
   - A gradient sky with fog.
   - Four Lambert draws for the village.
 

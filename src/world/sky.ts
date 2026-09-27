@@ -38,6 +38,12 @@ export interface SkyState {
   fogFar: number;
   /** the light on unlit things (the sea's body colour): 1 in the afternoon, dim and blue at night */
   ambient: Color;
+  /**
+   * The scene's light in its own units, for shaders that light themselves (world/ocean.ts): the
+   * key light's irradiance (sun, or moon at night) and the sky's on a flat surface facing up.
+   */
+  sunE: Color;
+  skyE: Color;
   /** 0 by day .. 1 after dark (a uniform: shared with the materials that light up at night) */
   night: { value: number };
   /** the hour, 0..24 */
@@ -152,6 +158,8 @@ export function createSky(scene: Scene): Sky {
     fogNear: 220,
     fogFar: 3200,
     ambient: new Color(1, 1, 1),
+    sunE: new Color(),
+    skyE: new Color(),
     night: { value: 0 },
     hour: START_HOUR,
   };
@@ -259,6 +267,8 @@ export function createSky(scene: Scene): Sky {
     const moonShow = Math.min(1, Math.max(0, (-sunEl - 0.035) / 0.12)) * Math.min(1, Math.max(0, _moon.y / 0.08));
     state.sunColor.copy(light.color).multiplyScalar(moonUp ? 0.9 * moonShow : 1.6);
     light.position.copy(moonUp && _moon.y > 0 ? _moon : _sun.y > 0 ? _sun : _moon).multiplyScalar(100);
+    state.sunE.copy(light.color).multiplyScalar(light.intensity);
+    state.skyE.copy(hemi.color).multiplyScalar(hemi.intensity);
 
     // the light on things that don't take the scene's lights (the sea's colour): how bright the
     // key and fill are against the afternoon's, tinted half-way to the key light's colour
