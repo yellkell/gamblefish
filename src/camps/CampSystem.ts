@@ -39,9 +39,9 @@ import { Toast } from '../fishing/hud.ts';
 import type { FishUniforms, Props } from '../fishing/props.ts';
 import { FISH, type GameState } from '../fishing/tidewater.ts';
 import { pulseHand } from '../input/haptics.ts';
-import { font } from '../ui/fonts.ts';
-import { INK, Panel, roundRect } from '../ui/panel.ts';
+import { INK, Panel } from '../ui/panel.ts';
 import { InteractivePanel, pointerView, register } from '../ui/pointer.ts';
+import { Lettering, LOOKS, mount } from '../ui/boards.ts';
 import type { BoxCollider } from '../world/data.ts';
 import { Chest, CHEST_H } from './chest.ts';
 import { buildCrowd, type Crowd } from './dancers.ts';
@@ -117,6 +117,9 @@ interface Flight {
   done?: () => void;
 }
 
+/** the tiers' inks on bark cloth (the backpack's are for dark glass) */
+const TIER_INK = ['#6a5a4a', '#3f6284', '#a86a00', '#a8307e'];
+
 const _v = new Vector3();
 const _w = new Vector3();
 const UP = new Vector3(0, 1, 0);
@@ -139,6 +142,9 @@ export class CampSystem extends createSystem({}) {
   /** the chest pack: the tray, its fish, the readout behind it and the buttons either side */
   private tray!: Tray;
   private info!: Panel;
+  private infoLetters!: Lettering;
+  private buttonLetters!: Lettering;
+  private logLetters!: Lettering;
   private buttons!: InteractivePanel;
   private logs!: InteractivePanel;
   private readonly models = new Map<ChestFish, FishModel>();
@@ -203,10 +209,14 @@ export class CampSystem extends createSystem({}) {
     this.tray = new Tray();
     this.tray.build(...CHEST_GRID);
     this.scene.add(this.tray.group);
-    this.info = new Panel([640, 200], [0.44, 0.1375]);
+    this.info = new Panel([640, 220], [0.44, 0.15125]);
+    this.infoLetters = new Lettering(this.info, LOOKS.tapa, 13);
+    mount(this.info, LOOKS.tapa, { outdoor: true });
     this.tray.group.add(this.info.mesh);
     this.buttons = new InteractivePanel([320, 272], [0.17, 0.1445]);
     this.buttons.mesh.rotation.x = -Math.PI / 2;
+    this.buttonLetters = new Lettering(this.buttons, LOOKS.tapa, 5);
+    mount(this.buttons, LOOKS.tapa, { outdoor: true, frame: false });
     this.buttons.paint = () => this.paintButtons();
     this.buttons.onClick = (id) => (id === 'all' ? this.takeAll() : this.closeChest());
     this.buttons.repaintOnFonts(() => this.paintButtons());
@@ -214,6 +224,8 @@ export class CampSystem extends createSystem({}) {
     register(this.buttons);
     this.logs = new InteractivePanel([320, 272], [0.17, 0.1445]);
     this.logs.mesh.rotation.x = -Math.PI / 2;
+    this.logLetters = new Lettering(this.logs, LOOKS.tapa, 7);
+    mount(this.logs, LOOKS.tapa, { outdoor: true, frame: false });
     this.logs.paint = () => this.paintLogs();
     this.logs.onClick = () => this.takeLogs();
     this.logs.repaintOnFonts(() => this.paintLogs());
@@ -707,110 +719,50 @@ export class CampSystem extends createSystem({}) {
     const key = `${c.site.id}|${used}|${worth}|${e.logs}|${h ? e.fish.indexOf(h) : '-'}|${backpackView.holding}|${found}`;
     if (key === this.infoKey) return;
     this.infoKey = key;
-    const g = this.info.ctx;
-    this.info.clear();
-    roundRect(g, 4, 4, 632, 192, 18);
-    g.fillStyle = 'rgba(22, 12, 6, 0.9)';
-    g.fill();
-    g.lineWidth = 3;
-    g.strokeStyle = '#c8a26a';
-    g.stroke();
-    g.textBaseline = 'alphabetic';
-    g.textAlign = 'left';
-    g.font = font(700, 30);
-    g.fillStyle = INK.hot;
-    g.fillText(c.site.name.toUpperCase(), 22, 42, 300);
-    g.font = font(600, 22);
-    g.fillStyle = INK.dim;
+    // bark cloth printed with tapa bands, in a bamboo frame (ui/boards.ts)
+    const L = this.infoLetters;
+    L.begin();
+    L.title(c.site.name.toUpperCase(), 28, 72, 32, 'left', 380);
+    L.text(`worth $${worth}`, 612, 68, 24, 'accent', 'right', 700);
     // a hidden camp's chest keeps the count of the camps you've found; the beach party's, its fill
-    g.fillText(c.site.beach ? `${used} / ${total}` : `${found} of ${CAMPS.length} camps found`, 330, 42, 170);
-    g.textAlign = 'right';
-    g.fillStyle = INK.amber;
-    g.fillText(`worth $${worth}`, 618, 42);
-    g.textAlign = 'left';
+    L.text(c.site.beach ? `${used} / ${total} slots` : `${found} of ${CAMPS.length} camps found`, 28, 100, 21, 'dim', 'left', 600);
     if (h) {
-      g.font = font(700, 20);
-      g.fillStyle = TIER_CSS[h.tier];
-      g.fillText(TIERS[h.tier].toUpperCase(), 22, 82);
-      g.font = font(700, 32);
-      g.fillStyle = INK.hot;
-      g.fillText(FISH[h.species].name, 22, 116, 420);
-      g.font = font(500, 22);
-      g.fillStyle = INK.dim;
-      g.fillText(`${Math.round(h.cm)} cm · ${h.kg.toFixed(2)} kg`, 22, 148);
-      g.font = font(700, 34);
-      g.fillStyle = INK.amber;
-      g.textAlign = 'right';
-      g.fillText(`$${h.value}`, 618, 116);
-      g.font = font(600, 20);
-      g.fillStyle = backpackView.holding ? INK.danger : INK.good;
-      g.fillText(backpackView.holding ? 'your hands are full' : 'click: into your backpack · grip: take it', 618, 180);
+      L.text(TIERS[h.tier].toUpperCase(), 28, 128, 19, TIER_INK[h.tier], 'left', 700);
+      L.text(FISH[h.species].name, 28, 160, 30, 'ink', 'left', 700, 400);
+      L.text(`${Math.round(h.cm)} cm · ${h.kg.toFixed(2)} kg`, 28, 188, 21, 'dim', 'left', 500);
+      L.text(`$${h.value}`, 612, 160, 32, 'accent', 'right', 700);
+      L.text(backpackView.holding ? 'your hands are full' : 'click: backpack · grip: in hand', 612, 188, 19, backpackView.holding ? 'bad' : 'good', 'right', 600);
     } else if (!e.fish.length && !e.logs) {
-      g.font = font(500, 24);
-      g.fillStyle = INK.dim;
-      g.fillText(c.site.beach ? 'Empty. More fish and logs for you tomorrow.' : 'Empty. You have all they had to give.', 22, 110);
+      L.text(c.site.beach ? 'Empty. More fish and logs for you tomorrow.' : 'Empty. You have all they had to give.', 28, 156, 24, 'dim', 'left', 500);
     } else {
-      g.font = font(700, 22);
-      g.fillStyle = INK.amber;
-      g.fillText(c.site.beach ? "TODAY'S GIFT FROM THE DANCERS" : 'A GIFT FROM THE DANCERS', 22, 84);
-      g.font = font(500, 22);
-      g.fillStyle = INK.dim;
-      g.fillText('Reach in: click a fish to pack it in your backpack,', 22, 118);
-      g.fillText('grip it to take it in hand, or point at the logs.', 22, 150);
+      L.text(c.site.beach ? "TODAY'S GIFT FROM THE DANCERS" : 'A GIFT FROM THE DANCERS', 28, 134, 22, 'accent', 'left', 700);
+      L.text('Click a fish to pack it, grip to take it in hand, or point at the logs.', 28, 162, 20, 'ink', 'left', 500, 584);
     }
     // all eight found: where the ninth is
-    if (!h && !c.site.beach && found >= CAMPS.length) {
-      g.font = font(600, 19);
-      g.fillStyle = INK.amber;
-      g.fillText('All eight found! A fire is lit for you on the main beach, west of the timber yard.', 22, 182, 596);
-    }
-    this.info.commit();
+    if (!h && !c.site.beach && found >= CAMPS.length) L.text('All eight found! A fire is lit for you on the main beach, west of the timber yard.', 28, 188, 18, 'accent', 'left', 600, 584);
+    L.end();
   }
 
+  /** TAKE ALL and CLOSE: two carved tags lying on the tray's rim. */
   private paintButtons(): void {
-    const b = this.buttons;
-    const c = b.ctx;
-    const [W, H] = b.px;
+    const L = this.buttonLetters;
+    const [W, H] = this.buttons.px;
     const e = this.openCamp ? this.save(this.openCamp) : null;
     const any = !!e && (e.fish.length > 0 || e.logs > 0);
-    b.clear();
-    const list = [
-      { id: 'all', text: 'TAKE ALL', on: any },
-      { id: 'close', text: 'CLOSE', on: true },
-    ];
-    b.buttons = list.map((t, i) => ({ id: t.id, x: 0, y: (i * H) / 2, w: W, h: H / 2, enabled: t.on }));
-    list.forEach((t, i) => {
-      const hot = b.hover === t.id && t.on;
-      roundRect(c, 6, (i * H) / 2 + 6, W - 12, H / 2 - 12, 22);
-      c.fillStyle = t.id === 'all' && t.on ? (hot ? '#ffc640' : INK.amber) : hot ? 'rgba(40, 52, 60, 0.95)' : INK.glass;
-      c.fill();
-      c.lineWidth = 4;
-      c.strokeStyle = t.id === 'all' && t.on ? '#1a1206' : INK.rim;
-      c.stroke();
-      c.textAlign = 'center';
-      c.textBaseline = 'middle';
-      c.font = font(700, 50);
-      c.fillStyle = t.id === 'all' ? (t.on ? '#1a1206' : INK.dim) : INK.hot;
-      c.fillText(t.text, W / 2, (i * H) / 2 + H / 4 + 2, W - 30);
-    });
-    b.commit();
+    L.begin(false);
+    L.button('all', 'TAKE ALL', 8, 8, W - 16, H / 2 - 16, any ? 'go' : 'off', 50);
+    L.button('close', 'CLOSE', 8, H / 2 + 8, W - 16, H / 2 - 16, 'go', 50);
+    L.end();
   }
 
+  /** The logs: a carved tag with their ends on it. */
   private paintLogs(): void {
-    const b = this.logs;
-    const c = b.ctx;
-    const [W, H] = b.px;
+    const L = this.logLetters;
+    const c = L.c;
+    const [W, H] = this.logs.px;
     const n = this.openCamp ? this.save(this.openCamp).logs : 0;
-    b.clear();
-    b.buttons = [{ id: 'logs', x: 0, y: 0, w: W, h: H, enabled: n > 0 }];
-    const hot = b.hover === 'logs' && n > 0;
-    roundRect(c, 6, 6, W - 12, H - 12, 22);
-    c.fillStyle = hot ? 'rgba(90, 60, 32, 0.96)' : 'rgba(46, 30, 18, 0.94)';
-    c.fill();
-    c.lineWidth = 5;
-    c.strokeStyle = n > 0 ? '#c8a26a' : INK.rim;
-    c.stroke();
-    // a stack of log ends
+    L.begin(false);
+    L.button('logs', '', 8, 8, W - 16, H - 16, n > 0 ? 'go' : 'off', 40);
     for (const [x, y] of [
       [118, 118],
       [160, 118],
@@ -835,34 +787,21 @@ export class CampSystem extends createSystem({}) {
       c.stroke();
     }
     c.globalAlpha = 1;
-    c.textAlign = 'center';
-    c.textBaseline = 'middle';
-    c.font = font(700, 46);
-    c.fillStyle = n > 0 ? '#ffd89a' : INK.dim;
-    c.fillText(n > 0 ? `TAKE ${n} LOG${n === 1 ? '' : 'S'}` : 'NO LOGS', W / 2, 200, W - 30);
-    b.commit();
+    L.text(n > 0 ? `TAKE ${n} LOG${n === 1 ? '' : 'S'}` : 'NO LOGS', W / 2, 214, 44, n > 0 ? '#fbeed6' : 'rgba(251, 238, 214, 0.5)', 'center', 700, W - 40);
+    L.end();
   }
 
   /** The sign over a shut chest: point and click to open it. */
   private makeSign(): InteractivePanel {
     const p = new InteractivePanel([420, 150], [0.36, 0.129]);
+    const letters = new Lettering(p, LOOKS.tapa, 3);
+    mount(p, LOOKS.tapa, { outdoor: true, frame: false });
     p.paint = () => {
-      const c = p.ctx;
+      // a carved tag, cut out, lit by the firelight's evening like everything round it
       const [W, H] = p.px;
-      p.clear();
-      p.buttons = [{ id: 'open', x: 0, y: 0, w: W, h: H }];
-      roundRect(c, 6, 6, W - 12, H - 12, 26);
-      c.fillStyle = p.hover ? '#ffc640' : 'rgba(46, 30, 18, 0.94)';
-      c.fill();
-      c.lineWidth = 5;
-      c.strokeStyle = p.hover ? '#1a1206' : '#c8a26a';
-      c.stroke();
-      c.textAlign = 'center';
-      c.textBaseline = 'middle';
-      c.font = font(700, 54);
-      c.fillStyle = p.hover ? '#1a1206' : '#ffd89a';
-      c.fillText('OPEN THEIR GIFT', W / 2, H / 2 + 2, W - 40);
-      p.commit();
+      letters.begin(false);
+      letters.button('open', 'OPEN THEIR GIFT', 8, 8, W - 16, H - 16, 'go', 52);
+      letters.end();
     };
     p.repaintOnFonts(() => p.paint());
     p.paint();

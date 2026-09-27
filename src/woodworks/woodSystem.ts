@@ -48,8 +48,9 @@ import type { GameState } from '../fishing/tidewater.ts';
 import { introActive } from '../experience/introGate.ts';
 import { pulseHand } from '../input/haptics.ts';
 import { font, onFontsReady } from '../ui/fonts.ts';
-import { INK, roundRect } from '../ui/panel.ts';
+import { INK } from '../ui/panel.ts';
 import { InteractivePanel, register } from '../ui/pointer.ts';
+import { Lettering, LOOKS, mount } from '../ui/boards.ts';
 import type { BoxCollider } from '../world/data.ts';
 import { EAST_PILE, EAST_TREES, WEST_TREES, YARD } from './lots.ts';
 import { Walks } from './walks.ts';
@@ -207,6 +208,7 @@ export class WoodSystem extends createSystem({}) {
   private readonly logGeo = new CylinderGeometry(0.08, 0.09, 0.6, 8).rotateZ(Math.PI / 2);
   private readonly logMat = new MeshLambertMaterial({ color: 0x8a6440 });
   private board!: InteractivePanel;
+  private letters!: Lettering;
   private yardAxe!: Object3D;
   private ready = false;
 
@@ -387,6 +389,8 @@ export class WoodSystem extends createSystem({}) {
     g.add(this.yardAxe);
     // the board on the counter
     this.board = new InteractivePanel([900, 640], [0.84, 0.597]);
+    this.letters = new Lettering(this.board, LOOKS.timber, 17);
+    mount(this.board, LOOKS.timber, { outdoor: true });
     this.board.mesh.position.set(0, 1.32, 0.66);
     this.board.mesh.rotation.x = -0.25;
     g.add(this.board.mesh);
@@ -466,28 +470,15 @@ export class WoodSystem extends createSystem({}) {
   }
 
   private paintBoard(): void {
-    const b = this.board;
-    if (!b) return;
-    const c = b.ctx;
-    const [W, H] = b.px;
+    if (!this.board) return;
+    // painted planks, lettered by hand, like the build boards (ui/boards.ts)
+    const L = this.letters;
     const s = woodDeps.state!;
     const w = s.woodworks;
-    b.clear();
-    roundRect(c, 6, 6, W - 12, H - 12, 28);
-    c.fillStyle = 'rgba(38, 26, 16, 0.94)';
-    c.fill();
-    c.lineWidth = 6;
-    c.strokeStyle = '#c8a26a';
-    c.stroke();
-    c.textBaseline = 'alphabetic';
-    c.textAlign = 'left';
-    c.font = font(700, 54);
-    c.fillStyle = '#ffd89a';
-    c.fillText('TIMBER YARD', 44, 82);
-    c.textAlign = 'right';
-    c.font = font(600, 30);
-    c.fillStyle = INK.amber;
-    c.fillText(`$${s.money.toLocaleString('en-US')}  ·  ${w.wood} logs`, W - 44, 80);
+    const [W] = this.board.px;
+    L.begin();
+    L.title('TIMBER YARD', 44, 86, 56, 'left', 460);
+    L.text(`$${s.money.toLocaleString('en-US')}  ·  ${w.wood} logs`, W - 44, 80, 30, 'accent', 'right', 700);
     const rows: [string, string, string, number, boolean][] = [
       ['axe', 'AXE', 'chop your own in the woodlot behind', PRICES.axe, !w.axe],
       ['bundle', 'BUNDLE OF 10 LOGS', 'straight into your backpack', PRICES.bundle, true],
@@ -497,53 +488,31 @@ export class WoodSystem extends createSystem({}) {
     const buys = woodDeps.buysLogs?.() ?? false;
     const pitch = buys ? 122 : 160;
     const rowH = pitch - 22;
-    const buttons: { id: string; x: number; y: number; w: number; h: number }[] = [];
     const row = (i: number, name: string, sub: string, textW: number): number => {
       const y = (buys ? 118 : 130) + i * pitch;
-      roundRect(c, 36, y, W - 72, rowH, 20);
-      c.fillStyle = 'rgba(255, 255, 255, 0.05)';
-      c.fill();
-      c.textAlign = 'left';
-      c.font = font(700, buys ? 38 : 44);
-      c.fillStyle = INK.hot;
-      c.fillText(name, 66, y + rowH * 0.43, textW);
-      c.font = font(500, buys ? 24 : 26);
-      c.fillStyle = INK.dim;
-      c.fillText(sub, 66, y + rowH * 0.74, textW);
+      // a rule painted under each row
+      L.c.fillStyle = 'rgba(30, 18, 8, 0.25)';
+      L.c.fillRect(44, y + rowH + 8, W - 88, 3);
+      L.text(name, 60, y + rowH * 0.46, buys ? 38 : 44, 'ink', 'left', 700, textW);
+      L.text(sub, 60, y + rowH * 0.76, buys ? 24 : 26, 'dim', 'left', 500, textW);
       return y;
     };
-    const button = (id: string, x: number, y: number, bw: number, text: string, on: boolean): void => {
-      const pad = buys ? 16 : 24;
-      const bh = rowH - pad * 2;
-      buttons.push({ id, x, y: y + pad, w: bw, h: bh });
-      roundRect(c, x, y + pad, bw, bh, 18);
-      c.fillStyle = b.hover === id && on ? '#ffffff' : on ? '#ffc070' : 'rgba(255,255,255,0.1)';
-      c.fill();
-      c.textAlign = 'center';
-      c.font = font(700, buys ? 34 : 40);
-      c.fillStyle = on ? '#2a1808' : INK.dim;
-      c.fillText(text, x + bw / 2, y + pad + bh / 2 + (buys ? 12 : 14), bw - 16);
-    };
+    const pad = buys ? 16 : 24;
     rows.forEach(([id, name, sub, price, can], i) => {
       const y = row(i, name, sub, 470);
-      const bx = W - 300;
       if (!can) {
-        c.textAlign = 'center';
-        c.font = font(700, 38);
-        c.fillStyle = INK.good;
-        c.fillText('✓ YOURS', bx + 125, y + rowH / 2 + 13);
+        L.text('✓ YOURS', W - 175, y + rowH / 2 + 13, 38, 'good', 'center', 700);
         return;
       }
-      button(id, bx, y, 250, `$${price}`, s.money >= price);
+      L.button(id, `$${price}`, W - 300, y + pad, 250, rowH - pad * 2, s.money >= price ? 'go' : 'off', buys ? 34 : 40);
     });
     if (buys) {
       const some = Math.min(SELL_SOME, w.wood);
       const y = row(3, 'WE BUY LOGS', `$${BUYS_AT} a log, for the ones you've no use for`, 380);
-      button('sell', W - 440, y, 190, `${some || SELL_SOME} · $${(some || SELL_SOME) * BUYS_AT}`, some > 0);
-      button('sellAll', W - 240, y, 190, `ALL · $${w.wood * BUYS_AT}`, w.wood > 0);
+      L.button('sell', `${some || SELL_SOME} · $${(some || SELL_SOME) * BUYS_AT}`, W - 440, y + pad, 190, rowH - pad * 2, some > 0 ? 'go' : 'off', 32);
+      L.button('sellAll', `ALL · $${w.wood * BUYS_AT}`, W - 240, y + pad, 190, rowH - pad * 2, w.wood > 0 ? 'go' : 'off', 32);
     }
-    b.buttons = buttons;
-    b.commit();
+    L.end();
     if (this.yardAxe) this.yardAxe.visible = !w.axe;
   }
 

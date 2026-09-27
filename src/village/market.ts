@@ -31,7 +31,7 @@ import type { Piece } from '../backpack/logic.ts';
 import { TIERS } from '../backpack/logic.ts';
 import type { GameState } from '../fishing/tidewater.ts';
 import { font } from '../ui/fonts.ts';
-import { INK, roundRect } from '../ui/panel.ts';
+import { Lettering, lookFor, mount } from '../ui/boards.ts';
 import { InteractivePanel, register } from '../ui/pointer.ts';
 import { Character } from './characters.ts';
 import type { BuildingFrame } from './signs.ts';
@@ -51,6 +51,7 @@ export class FishMarket {
   readonly group = new Group();
   private readonly joe: Character;
   private readonly panel: InteractivePanel;
+  private readonly letters: Lettering;
   private readonly scalePan = new Group();
   private readonly needle: Mesh;
   private needleAngle = 0;
@@ -103,6 +104,10 @@ export class FishMarket {
 
     // the board: Joe's words, what your backpack's worth, SELL ALL
     this.panel = new InteractivePanel([640, 300], [0.9, 0.42]);
+    // Joe's chalkboard, in a blue-painted frame on the stall (ui/boards.ts): out in the weather,
+    // lit by the day like the stall is
+    this.letters = new Lettering(this.panel, lookFor('stall'), 5);
+    mount(this.panel, lookFor('stall'), { outdoor: true });
     this.panel.mesh.position.set(-0.6, g0 + 1.85, 1.1);
     this.panel.mesh.rotation.x = -0.12;
     this.group.add(this.panel.mesh);
@@ -127,43 +132,18 @@ export class FishMarket {
   }
 
   private paint(): void {
-    const c = this.panel.ctx;
+    const L = this.letters;
     const inv = this.state.inventory as unknown as Piece[];
     const placed = inv.filter((f) => f.placed);
     const worth = placed.reduce((a, f) => a + f.value, 0);
-    this.panel.clear();
-    roundRect(c, 4, 4, 632, 292, 22);
-    c.fillStyle = 'rgba(24, 18, 12, 0.92)';
-    c.fill();
-    c.lineWidth = 4;
-    c.strokeStyle = '#b89a72';
-    c.stroke();
-    c.textBaseline = 'alphabetic';
-    c.textAlign = 'left';
-    c.font = font(700, 40);
-    c.fillStyle = '#f6ecd4';
-    c.fillText("JOE'S FISH MARKET", 28, 58);
-    c.font = font(500, 26);
-    c.fillStyle = INK.dim;
-    c.fillText(`“${this.line}”`, 28, 102, 584);
-    c.font = font(600, 24);
-    c.fillStyle = INK.hot;
-    c.fillText(placed.length ? `In your backpack: ${placed.length} fish, worth $${worth}` : 'Your backpack is empty.', 28, 150);
-    c.font = font(500, 20);
-    c.fillStyle = INK.dim;
-    c.fillText('Hold a fish over the scale and click to sell it.', 28, 184);
-    // SELL ALL
+    L.begin();
+    L.title("JOE'S FISH MARKET", 30, 62, 42, 'left', 580);
+    L.text(`“${this.line}”`, 30, 106, 26, 'dim', 'left', 500, 580);
+    L.text(placed.length ? `In your backpack: ${placed.length} fish, worth $${worth}` : 'Your backpack is empty.', 30, 152, 26, 'ink', 'left', 600, 580);
+    L.text('Hold a fish over the scale and click to sell it.', 30, 186, 21, 'dim', 'left', 500, 580);
     const on = placed.length > 0;
-    const b = { id: 'all', x: 28, y: 206, w: 584, h: 68, enabled: on };
-    this.panel.buttons = [b];
-    roundRect(c, b.x, b.y, b.w, b.h, 14);
-    c.fillStyle = !on ? 'rgba(255,255,255,0.06)' : this.panel.hover === 'all' ? '#ffc640' : INK.amber;
-    c.fill();
-    c.font = font(700, 32);
-    c.textAlign = 'center';
-    c.fillStyle = on ? '#1a1206' : INK.dim;
-    c.fillText(on ? `SELL ALL  ·  $${worth}` : 'SELL ALL', b.x + b.w / 2, b.y + 45);
-    this.panel.commit();
+    L.button('all', on ? `SELL ALL  ·  $${worth}` : 'SELL ALL', 30, 208, 580, 66, on ? 'go' : 'off', 32);
+    L.end();
   }
 
   /** The fish drops on the pan, the dial swings to its weight, the price pops: sold. */

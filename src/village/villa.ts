@@ -9,8 +9,8 @@
 
 import { Group, Mesh, PlaneGeometry, TorusGeometry, type Camera } from 'three';
 import type { GameState } from '../fishing/tidewater.ts';
-import { font } from '../ui/fonts.ts';
-import { INK, Panel, roundRect } from '../ui/panel.ts';
+import { Panel } from '../ui/panel.ts';
+import { Lettering, LOOKS, mount } from '../ui/boards.ts';
 import type { BoxCollider } from '../world/data.ts';
 import { Character } from './characters.ts';
 import { Batch, M, rounded, turned } from './craft.ts';
@@ -41,6 +41,7 @@ const PAGE: [number, number] = [900, 300];
 export class Villa {
   private readonly coral: Character;
   private readonly board = new Panel(PAGE, [1.5, 0.5]);
+  private readonly letters = new Lettering(this.board, LOOKS.sampler, 21);
   private readonly gifts: string[];
   private said = -1;
 
@@ -124,7 +125,8 @@ export class Villa {
     room.group.parent?.add(this.coral.group);
 
     // the hearts, over the sofa
-    this.board.mesh.position.set(0, 2.35, -d / 2 + 0.03);
+    mount(this.board, LOOKS.sampler, { renderer: kit.renderer });
+    this.board.mesh.position.set(0, 2.35, -d / 2 + 0.03 + LOOKS.sampler.frame.d);
     room.contents.add(this.board.mesh);
     this.board.repaintOnFonts(() => this.paint(true));
     state.onChange(() => this.paint());
@@ -142,32 +144,17 @@ export class Villa {
     // a new gift: she's pleased to see you (the wave), and says so
     if (this.said >= 0 && n > this.said) this.coral.talking = true;
     this.said = n;
-    const c = this.board.ctx;
-    const [W, H] = PAGE;
-    this.board.clear();
-    roundRect(c, 6, 6, W - 12, H - 12, 24);
-    c.fillStyle = 'rgba(40, 14, 22, 0.9)';
-    c.fill();
-    c.lineWidth = 5;
-    c.strokeStyle = '#e8506a';
-    c.stroke();
-    c.textBaseline = 'alphabetic';
-    c.textAlign = 'center';
-    c.font = font(700, 40);
-    c.fillStyle = '#ffd8de';
-    c.fillText(`${LOVE_INTEREST.name.toUpperCase()}’S HEART`, W / 2, 62);
+    // a sampler, cross-stitched on linen, framed over the sofa (ui/boards.ts)
+    const L = this.letters;
+    const [W] = PAGE;
+    L.begin();
+    L.title(`${LOVE_INTEREST.name.toUpperCase()}’S HEART`, W / 2, 84, 40, 'center', W - 120);
     const total = this.gifts.length;
-    c.font = font(700, 56);
     const hearts = Array.from({ length: total }, (_, i) => (i < n ? '♥' : '♡')).join(' ');
-    c.fillStyle = '#e8506a';
-    c.fillText(hearts, W / 2, 140, W - 60);
-    c.font = font(600, 28);
-    c.fillStyle = INK.hot;
-    c.fillText(`“${WORDS[Math.min(n, WORDS.length - 1)]}”`, W / 2, 206, W - 60);
-    c.font = font(500, 22);
-    c.fillStyle = INK.dim;
-    c.fillText(n < total ? 'the JEWELLER and the BOUTIQUE deliver here' : 'every gift given', W / 2, 256);
-    this.board.commit();
+    L.text(hearts, W / 2, 148, 52, 'accent', 'center', 700, W - 100);
+    L.text(`“${WORDS[Math.min(n, WORDS.length - 1)]}”`, W / 2, 206, 28, 'ink', 'center', 600, W - 100);
+    L.text(n < total ? 'the Jeweller and the Boutique deliver here' : 'every gift given', W / 2, 250, 22, 'dim', 'center', 500);
+    L.end();
   }
 
   /** per frame, while the villa can be seen */
