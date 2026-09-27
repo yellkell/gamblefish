@@ -170,7 +170,12 @@ and the vendors.
   coins, a saw and hammer, the pawnbroker's three balls or a mounted fish; a fish-shaped board on
   the fish market; lacquer and gilt for the jeweller, the boutique and the florist; stars and a
   crystal ball for the fortune teller; neon with a wheel, cherries or a spade on the casinos. Your
-  shack, Coral's villa and the boatyard have none.
+  shack, Coral's villa and the boatyard have none. The pier's entrance arch hangs a fish-shaped
+  FISHING PIER board on two chains, lettered on both faces (in place of Tidewater's plain board).
+- **Roofs** (`src/world/village.ts`): the bake keeps Tidewater's roof coordinates, and the village's
+  own draws texture the roofs from them in the fragment stage: thatch streaked down the slope in
+  courses, older and greyer in patches; corrugated metal with its ribs, sheet seams and laps, and
+  rust streaking down from the eave. No textures, no extra draws; the detail fades with distance.
 - **The village:** the Rum Shack (I) and the empty Captain's Table (M) are gone, and
   each spot is now a small garden. The beds' heliconias and birds of paradise are made the way the
   Florist's plants are (`src/world/beds.ts`): leaves on their own stalks, and flower spikes of red

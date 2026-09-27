@@ -487,6 +487,9 @@ village.group.traverse((o) => {
   const name = o.name;
   // fish props are GPU-instanced shader geometry: not shipped (yet)
   if (name.startsWith('village_fish') || name.startsWith('FishProps')) return;
+  // the painted fish board under the pier's entrance arch: the village hangs its own sign there
+  // (village/signs.ts), from the same point (world.json pierSign)
+  if (name.startsWith('village_sign_')) return;
   const kind = name.replace(/^village_(sign_|lantern_)?/, '');
   const cls = kind === 'fabric' || kind === 'nets' ? 'cloth' : kind === 'wood' || kind === 'thatch' ? kind : 'solid';
   o.updateWorldMatrix(true, false);
@@ -501,6 +504,10 @@ for (const [cls, parts] of Object.entries(groups)) {
   const col = [];
   const glow = [];
   const idx = [];
+  // the roofs' own texture coordinates (Tidewater's: metres up the slope from the eave, and along
+  // it) and what each vertex is: [255 a metal roof / 128 thatch / 0 anything else, its rust or age]
+  const ruv = [];
+  const roof = [];
   const v = new E.Vector3();
   const nm = new E.Matrix3();
   for (const { o, kind } of parts) {
@@ -509,6 +516,8 @@ for (const [cls, parts] of Object.entries(groups)) {
     const Nn = g.attributes.normal.array;
     const tint = g.attributes.tint?.array;
     const vd = g.attributes.vdata?.array;
+    const UV = g.attributes.uv?.array;
+    const roofKind = kind === 'roofMetal' ? 255 : kind === 'thatch' ? 128 : 0;
     const I = g.index ? g.index.array : null;
     const start = g.drawRange.start;
     const count = g.drawRange.count === null || g.drawRange.count === Infinity ? (I ? I.length : P.length / 3) - start : g.drawRange.count;
@@ -530,6 +539,8 @@ for (const [cls, parts] of Object.entries(groups)) {
         const c = vertexColour(kind, tn, dt);
         col.push(...c.map((x) => Math.round(sat(x) * 255)), 255); // linear: three reads vertex colour as linear
         glow.push(Math.round(glowOf(kind, dt) * 255));
+        ruv.push(roofKind && UV ? UV[src * 2] : 0, roofKind && UV ? UV[src * 2 + 1] : 0);
+        roof.push(roofKind, roofKind ? Math.round(sat(dt[1]) * 255) : 0);
       }
       idx.push(dst);
     }
@@ -539,6 +550,10 @@ for (const [cls, parts] of Object.entries(groups)) {
   villageArrays[`${cls}.color`] = new Uint8Array(col);
   villageArrays[`${cls}.index`] = pos.length / 3 > 65535 ? new Uint32Array(idx) : new Uint16Array(idx);
   if (glow.some((g) => g > 0)) villageArrays[`${cls}.glow`] = new Uint8Array(glow);
+  if (roof.some((r, i) => i % 2 === 0 && r > 0)) {
+    villageArrays[`${cls}.ruv`] = new Float32Array(ruv);
+    villageArrays[`${cls}.roof`] = new Uint8Array(roof);
+  }
   villageMeta[cls] = { vertices: pos.length / 3, triangles: idx.length / 3 };
 }
 
@@ -862,6 +877,8 @@ const world = {
   footprints: village.getFootprints(),
   // the village's lamps (lanterns, path lights, lamp posts): where it's lit after dark
   lamps: village.lights.map((l) => [r3(l.position.x), r3(l.position.y), r3(l.position.z), l.kind ?? '']),
+  // where the sign hangs under the pier's entrance arch: the tops of its two chains (x, y, z)
+  pierSign: village.pierInfo?.signPivot ? [r3(village.pierInfo.signPivot.x), r3(village.pierInfo.signPivot.y), r3(village.pierInfo.signPivot.z)] : null,
   buildings,
   colliders: { boxes, cylinders },
 };

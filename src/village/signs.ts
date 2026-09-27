@@ -23,6 +23,7 @@ import {
   BufferGeometry,
   CanvasTexture,
   Color,
+  CylinderGeometry,
   DoubleSide,
   Group,
   InstancedMesh,
@@ -35,6 +36,7 @@ import {
   SRGBColorSpace,
   Vector3,
 } from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { font, onFontsReady } from '../ui/fonts.ts';
 import { ROLES, type BuildingRole } from './roles.ts';
 
@@ -499,7 +501,11 @@ interface Look {
   hi: string;
 }
 
+/** the sign under the pier's entrance arch: not a building's, the pier's own */
+const PIER: BuildingRole = { role: 'shop', title: 'FISHING PIER', sub: 'cast from the head', colour: '#2f8f8c', does: 'the way out to the fishing' };
+
 const LOOKS: Record<string, Look> = {
+  pier: { style: 'fish', board: '#2f7f7c', text: '#f6ecd4', ink: '#f6ecd4', hi: '#f6ecd4' },
   S3: { style: 'painted', emblem: 'rod', board: '#2e5872', text: '#f6ecd4', ink: '#f6ecd4', hi: '#e8b040' },
   S2: { style: 'painted', emblem: 'hook', board: '#35603c', text: '#f6ecd4', ink: '#e8e4d8', hi: '#e0826a' },
   stall: { style: 'fish', board: '#2f6fa8', text: '#f6ecd4', ink: '#f6ecd4', hi: '#f6ecd4' },
@@ -607,36 +613,49 @@ function paintSign(c: CanvasRenderingContext2D, ox: number, oy: number, name: st
       break;
     }
     case 'fish': {
-      // the board cut as a fish, nose to the right: planks inside its outline, an eye and a gill
+      // the board cut as a plump fish, nose to the right: its back and belly run straight along
+      // the middle so the lettering sits wholly on the board; planks inside, an eye and a gill
+      const fish = (): void => {
+        c.beginPath();
+        c.moveTo(w - 6, h * 0.52);
+        c.bezierCurveTo(w - 14, h * 0.18, w - 60, 8, w - 118, 8);
+        c.lineTo(160, 8);
+        c.bezierCurveTo(118, 8, 96, h * 0.3, 84, h * 0.5);
+        c.lineTo(10, 8);
+        c.lineTo(34, h * 0.5);
+        c.lineTo(10, h - 8);
+        c.lineTo(84, h * 0.5);
+        c.bezierCurveTo(96, h * 0.7, 118, h - 8, 160, h - 8);
+        c.lineTo(w - 118, h - 8);
+        c.bezierCurveTo(w - 60, h - 8, w - 14, h * 0.82, w - 6, h * 0.52);
+        c.closePath();
+      };
       c.save();
-      c.beginPath();
-      c.moveTo(w - 8, h * 0.5);
-      c.bezierCurveTo(w - 70, 2, 130, 0, 78, h * 0.5);
-      c.bezierCurveTo(130, h, w - 70, h - 2, w - 8, h * 0.5);
-      c.moveTo(92, h * 0.5);
-      c.lineTo(8, 10);
-      c.lineTo(34, h * 0.5);
-      c.lineTo(8, h - 10);
-      c.closePath();
+      fish();
       c.clip();
       c.fillStyle = '#10202e';
       c.fillRect(0, 0, w, h);
       plankBoard(c, 0, 0, w, h, look.board, seed);
       c.restore();
+      fish();
+      c.lineJoin = 'round';
+      c.lineWidth = 6;
+      c.strokeStyle = '#0c1a28';
+      c.stroke();
       c.strokeStyle = '#f6ecd4';
       c.lineWidth = 3;
       c.beginPath();
-      c.arc(w - 58, h * 0.4, 9, 0, Math.PI * 2);
+      c.arc(w - 46, h * 0.4, 9, 0, Math.PI * 2);
       c.stroke();
       c.fillStyle = '#10202e';
       c.beginPath();
-      c.arc(w - 58, h * 0.4, 5, 0, Math.PI * 2);
+      c.arc(w - 46, h * 0.4, 5, 0, Math.PI * 2);
       c.fill();
       c.beginPath();
-      c.moveTo(w - 84, h * 0.22);
-      c.quadraticCurveTo(w - 72, h * 0.5, w - 84, h * 0.78);
+      c.moveTo(w - 84, h * 0.16);
+      c.quadraticCurveTo(w - 70, h * 0.5, w - 84, h * 0.84);
       c.stroke();
-      lettering(c, r, look, 100, w - 128, h, 'rgba(10,24,40,0.85)', 58);
+      lettering(c, r, look, 128, w - 104, h, 'rgba(10,24,40,0.85)', 56);
       break;
     }
     case 'fine': {
@@ -716,7 +735,11 @@ export class VillageSigns {
   private readonly bulbPhase: number[] = [];
   private tick = 0;
 
-  constructor(buildings: BuildingFrame[]) {
+  /**
+   * @param pierSign where the pier's sign hangs under its entrance arch (the tops of its chains:
+   *   world.json `pierSign`), if there is one
+   */
+  constructor(buildings: BuildingFrame[], pierSign: [number, number, number] | null = null) {
     this.group.name = 'village-signs';
     const cv = document.createElement('canvas');
     cv.width = ATLAS;
@@ -728,8 +751,10 @@ export class VillageSigns {
       // (home, and Coral's, and the boatyard everyone knows, go without)
       if (role && role.sign !== false) placed.push({ frame: b, role, tile: placed.length });
     });
+    const pierTile = pierSign ? placed.length : -1;
     const paint = (): void => {
       placed.forEach((p, i) => paintSign(ctx, (p.tile % COLS) * SW, Math.floor(p.tile / COLS) * SH, p.frame.name, p.role, i + 1));
+      if (pierTile >= 0) paintSign(ctx, (pierTile % COLS) * SW, Math.floor(pierTile / COLS) * SH, 'pier', PIER, pierTile + 1);
     };
     paint();
     const tex = new CanvasTexture(cv);
@@ -844,6 +869,47 @@ export class VillageSigns {
       }
     }
 
+    // the pier's sign: a board hanging on two chains under the entrance arch, facing the village
+    // and (its back, lettered the right way round) the sea
+    let chains: BufferGeometry | null = null;
+    if (pierSign && pierTile >= 0) {
+      const [px, py, pz] = pierSign;
+      const sw = 1.9;
+      const sh = (sw * SH) / SW;
+      const cy = py - 0.42;
+      const u0 = ((pierTile % COLS) * SW) / ATLAS;
+      const v1 = 1 - (Math.floor(pierTile / COLS) * SH) / ATLAS;
+      const u1 = u0 + SW / ATLAS;
+      const v0 = v1 - SH / ATLAS;
+      for (const side of [-1, 1]) {
+        // side −1 faces the village (−z), +1 the sea; seen from either, the nose points right
+        const zf = pz + side * 0.012;
+        const corners: [number, number, number, number][] = [
+          [-sw / 2, -sh / 2, side < 0 ? u1 : u0, v0],
+          [sw / 2, -sh / 2, side < 0 ? u0 : u1, v0],
+          [sw / 2, sh / 2, side < 0 ? u0 : u1, v1],
+          [-sw / 2, sh / 2, side < 0 ? u1 : u0, v1],
+        ];
+        const order = side < 0 ? [0, 2, 1, 0, 3, 2] : [0, 1, 2, 0, 2, 3];
+        for (const q of order) {
+          const [cx, cyy, u, vv] = corners[q];
+          boards.pos.push(px + cx, cy + cyy, zf);
+          boards.nrm.push(0, 0, side);
+          boards.uv.push(u, vv);
+        }
+      }
+      // its two chains, up to the beam
+      const links: BufferGeometry[] = [];
+      for (const s of [-0.42, 0.42]) {
+        const top = py;
+        const bottom = cy + sh / 2 - 0.02;
+        const g = new CylinderGeometry(0.009, 0.009, top - bottom, 5);
+        g.translate(px + s, (top + bottom) / 2, pz);
+        links.push(g);
+      }
+      chains = mergeGeometries(links, false);
+    }
+
     const mk = (a: { pos: number[]; nrm: number[]; uv: number[] }): BufferGeometry => {
       const g = new BufferGeometry();
       g.setAttribute('position', new BufferAttribute(new Float32Array(a.pos), 3));
@@ -855,6 +921,7 @@ export class VillageSigns {
     // painted boards take the light, but glow a little of their own so one facing away from the
     // sun still reads (in shade the plain lit board went dark brown on the headset)
     this.group.add(new Mesh(mk(boards), new MeshLambertMaterial({ map: tex, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 0.45, transparent: true, alphaTest: 0.1, side: DoubleSide })));
+    if (chains) this.group.add(new Mesh(chains, new MeshLambertMaterial({ color: 0x2a2826 })));
     const neonMesh = new Mesh(mk(neon), new MeshBasicMaterial({ map: tex, transparent: true, alphaTest: 0.1, side: DoubleSide, toneMapped: false, fog: true }));
     this.group.add(neonMesh);
 
