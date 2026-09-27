@@ -6,7 +6,7 @@
  *                proves it). Go and look: over the ridges, down the hollows. The drums carry
  *                further than the firelight (camps/sound.ts). Walk into a camp and its dancers are
  *                pleased to see you: they throw their hands in the air, and gift you everything
- *                in their chest ("You found Ember Valley, 2 of 8").
+ *                in their chest (no pop-up: the chest's readout keeps the count, "2 of 8 camps found").
  *  THE BEACH     Find all eight and a ninth group comes down to the main beach, west of the timber
  *                yard, and lights a fire there. Their chest fills with a couple of nice fish and a
  *                stack of logs every day.
@@ -29,7 +29,7 @@
 
 import { createSystem, InputComponent } from '@iwsdk/core';
 import { CylinderGeometry, Group, Matrix4, Mesh, MeshLambertMaterial, Vector3, type MeshStandardMaterial, type Object3D, type Sprite, type SpriteMaterial } from 'three';
-import { catchSting, logThunk, uiClick, uiDeny } from '../audio/sfx.ts';
+import { logThunk, uiClick, uiDeny } from '../audio/sfx.ts';
 import { MIX, shot } from '../audio/samples.ts';
 import { backpackView, label, TIER_CSS, TIER_GLOW, TIER_HEX } from '../backpack/BackpackSystem.ts';
 import { bounds, cellsOf, findSpot, GRID_SIZES, TIERS, type Piece } from '../backpack/logic.ts';
@@ -193,7 +193,7 @@ export class CampSystem extends createSystem({}) {
     this.beachFires = buildBonfires([this.beach.fire]);
     beach = buildCrowd([{ fire: this.beach.fire, dancers: BEACH_CAMP.dancers, gap: BEACH_CAMP.chestAt }], ground);
     this.beachGroup.add(...this.beachFires.meshes, ...beach.meshes);
-    this.checkBeach(false);
+    this.checkBeach();
 
     this.toast = new Toast();
     this.toast.panel.mesh.visible = false;
@@ -249,17 +249,12 @@ export class CampSystem extends createSystem({}) {
     return CAMPS.filter((s) => this.state.camps[s.id]?.found).length;
   }
 
-  /** Once all eight are found, the ninth sets up on the beach (`announce`: tell them so). */
-  private checkBeach(announce: boolean): void {
+  /** Once all eight are found, the ninth sets up on the beach (the chests' readouts say so). */
+  private checkBeach(): void {
     if (this.beachUp || !campDeps.state || this.foundCount() < CAMPS.length) return;
     this.beachUp = true;
     this.beachGroup.visible = true;
     this.colliders(this.beach);
-    if (announce)
-      window.setTimeout(() => {
-        this.toast.show("That's every camp! The dancers are coming down to the main beach, west of the timber yard, to light a fire for you there.", 7, INK.amber);
-        catchSting(true);
-      }, 6500);
   }
 
   /** the camps you can go to: the hidden eight, and the beach party once it's there */
@@ -302,7 +297,7 @@ export class CampSystem extends createSystem({}) {
     const dt = Math.min(delta, 0.05);
     if (!campDeps.state || introActive()) return;
     // (the cloud save can come in after we start: it may hold the eighth camp)
-    this.checkBeach(false);
+    this.checkBeach();
     const { camp, dist } = this.nearest();
     this.root.visible = dist < DRAW_R;
     // the beach party's drums stay on the beach, under the village's music
@@ -335,13 +330,8 @@ export class CampSystem extends createSystem({}) {
       if (!e.found) {
         e.found = true;
         this.state.save();
-        if (camp.site.beach) this.toast.show(`${camp.site.name}! The dancers are so pleased to see you. Every day their chest has a couple of nice fish and a stack of logs in it for you.`, 7, INK.amber);
-        else {
-          const n = this.foundCount();
-          this.toast.show(`You found ${camp.site.name}, ${n} of ${CAMPS.length}! The dancers are pleased to see you: everything in their chest is a gift for you.`, 6, INK.amber);
-          this.checkBeach(true);
-        }
-        catchSting(true);
+        // no pop-up: the dancers cheering is the welcome, and the chest's readout keeps the count
+        this.checkBeach();
       }
     }
 
@@ -713,7 +703,8 @@ export class CampSystem extends createSystem({}) {
     const total = C * R;
     const worth = e.fish.reduce((a, f) => a + f.value, 0);
     const h = this.hover;
-    const key = `${c.site.id}|${used}|${worth}|${e.logs}|${h ? e.fish.indexOf(h) : '-'}|${backpackView.holding}`;
+    const found = this.foundCount();
+    const key = `${c.site.id}|${used}|${worth}|${e.logs}|${h ? e.fish.indexOf(h) : '-'}|${backpackView.holding}|${found}`;
     if (key === this.infoKey) return;
     this.infoKey = key;
     const g = this.info.ctx;
@@ -728,10 +719,11 @@ export class CampSystem extends createSystem({}) {
     g.textAlign = 'left';
     g.font = font(700, 30);
     g.fillStyle = INK.hot;
-    g.fillText(c.site.name.toUpperCase(), 22, 42, 330);
+    g.fillText(c.site.name.toUpperCase(), 22, 42, 300);
     g.font = font(600, 22);
     g.fillStyle = INK.dim;
-    g.fillText(`${used} / ${total}`, 370, 42);
+    // a hidden camp's chest keeps the count of the camps you've found; the beach party's, its fill
+    g.fillText(c.site.beach ? `${used} / ${total}` : `${found} of ${CAMPS.length} camps found`, 330, 42, 170);
     g.textAlign = 'right';
     g.fillStyle = INK.amber;
     g.fillText(`worth $${worth}`, 618, 42);
@@ -765,6 +757,12 @@ export class CampSystem extends createSystem({}) {
       g.fillStyle = INK.dim;
       g.fillText('Reach in: click a fish to pack it in your backpack,', 22, 118);
       g.fillText('grip it to take it in hand, or point at the logs.', 22, 150);
+    }
+    // all eight found: where the ninth is
+    if (!h && !c.site.beach && found >= CAMPS.length) {
+      g.font = font(600, 19);
+      g.fillStyle = INK.amber;
+      g.fillText('All eight found! A fire is lit for you on the main beach, west of the timber yard.', 22, 182, 596);
     }
     this.info.commit();
   }

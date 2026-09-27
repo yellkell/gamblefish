@@ -280,11 +280,14 @@ and the vendors.
   sea chest, built so its lid opens: hollow inside, lined in red velvet, its logs lying in the
   bottom). None of them is on the chart and none can be seen from the
   start: they're over the ridges, down the hollows and round the far coasts, a long walk out.
-  Listen for the drums, which carry further than the firelight. `npm run check:camps` proves every
+  Listen for the drums, which carry further than the firelight: a little West African ensemble
+  in 12/8 (bell, shaker, two bass drums and a djembe with a fill every fourth bar), each camp at
+  its own tempo. `npm run check:camps` proves every
   one is hidden from the boardwalk, the pier and the beach, is level and standable, and can be
   reached on foot.
   - **Pleased to see you:** walk into a camp and its dancers throw their hands in the air, and gift
-    you everything in their chest ("2 of 8"). A hidden camp's gift is given once.
+    you everything in their chest (no pop-up: the chest's readout keeps the count, "2 of 8 camps
+    found"). A hidden camp's gift is given once.
   - **The chest:** click OPEN THEIR GIFT over it (or grip its lid). The lid swings up and the
     **chest pack** rises out of it: a tray like your backpack's, with the dancers' fish lying in its
     slots and their logs beside it. Reach in and **click** a fish to pack it straight into your
@@ -292,7 +295,7 @@ and the vendors.
     Point at the logs to add them to your stack, or TAKE ALL. There's always a prize fish a tier up
     (the harder camps can hold a Gold). Walk away and the lid comes down.
   - **The beach party:** find all eight and a ninth group comes down to the main beach, west of the
-    timber yard, and lights a fire there. Their chest fills every day with a couple of nice fish
+    timber yard, and lights a fire there (the hidden camps' chests say so once you have). Their chest fills every day with a couple of nice fish
     (Silver or better) and a stack of logs, fresh at midnight. Which camps you've found, and what's left in each chest,
     are saved.
 - **ALWAYS DAY:** a switch under MUSIC in the backpack holds the island in the early
