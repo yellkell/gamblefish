@@ -11,12 +11,13 @@
  *
  * Like the home shops (village/homeGoods.ts): a counter with the goods on it and a board behind.
  * Point at BUY: it's paid from the wallet (Tidewater's GameState.buy), or the board says how
- * much more you need. The board says what each level opens up among the trophy fish.
+ * much more you need. The board says what each level does for you, in numbers against what you
+ * have (fishing/gear.ts gearEffect), and which trophy fish need it.
  */
 
 import { Group, MeshBasicMaterial, SphereGeometry, TorusGeometry, Vector3, type Object3D } from 'three';
 import { uiDeny, winFanfare } from '../audio/sfx.ts';
-import { GEAR_BLURB, GEAR_SHOPS } from '../fishing/gear.ts';
+import { gearEffect, GEAR_SHOPS } from '../fishing/gear.ts';
 import { FISH, UPGRADES, type GameState } from '../fishing/tidewater.ts';
 import { TROPHY } from '../fishing/trophyFish.ts';
 import { font } from '../ui/fonts.ts';
@@ -278,7 +279,7 @@ export class GearShopCounter {
     if (!this.state.buy(track)) return;
     winFanfare(1);
     const fish = opens(track, level);
-    this.note = fish.length ? `Sold! ${fish.join(' and ')} ${fish.length > 1 ? 'are' : 'is'} closer now.` : `Sold! The ${next.label.toLowerCase()} is yours.`;
+    this.note = `Sold! ${gearEffect(UPGRADES[track].levels, track, level, level)} now.` + (fish.length ? ` Needed for ${fish.join(' and ')}.` : '');
     this.noteColour = INK.good;
     this.paint();
   }
@@ -332,8 +333,9 @@ export class GearShopCounter {
       c.font = font(500, 24);
       c.fillStyle = INK.dim;
       const fish = opens(track, level);
-      const blurb = [GEAR_BLURB[track]?.[level], fish.length ? `opens: ${fish.join(', ')}` : ''].filter(Boolean).join('  ·  ');
-      c.fillText(maxed ? 'the best there is' : blurb, tx, y + (single ? 80 : 94), 700 - tx);
+      // what it does for you, in numbers, and which trophy fish need it
+      const does = [gearEffect(UPGRADES[track].levels, track, level, have), fish.length ? `needed for ${fish.join(', ')}` : ''].filter(Boolean).join('  ·  ');
+      c.fillText(maxed ? 'Fully upgraded' : does, tx, y + (single ? 80 : 94), 750 - tx);
       c.textAlign = 'right';
       c.font = font(700, 40);
       c.fillStyle = owned || maxed ? INK.dim : INK.amber;

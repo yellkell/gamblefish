@@ -152,7 +152,8 @@ and the vendors.
   - The **Bait Shop** sells bait, up to live bonito. Better bait brings bites sooner.
   - The **Fortune Teller** sells luck charms, up to the sea king's doubloon. They
     make trophy fish bite more often.
-  - Each board says which trophy fish a level opens up.
+  - Each board says what a level does for you in plain numbers against what you have (cast 13 m
+    further, bites 28% sooner, trophy fish 2.4× as often), and which trophy fish need it.
   - Every shop board shows a picture of each thing it sells: the item's own 3D model,
     photographed once at load (`src/ui/thumbnail.ts`).
 - **Trophy fish** (`src/fishing/trophyFish.ts`): roosterfish, opah, sailfish,
