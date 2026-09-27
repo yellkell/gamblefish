@@ -1,12 +1,18 @@
 /**
- * Signs on every building (village/roles.ts), in the island's own hand:
+ * Signs on the village's businesses (village/roles.ts), in the island's own hand. Each says
+ * what the place is and what's inside, with a picture of its trade, in a style that suits it:
  *
- *   shops    a hand-painted board over the door: planks, the name in cream with a dark outline,
- *            a line underneath saying what they sell
- *   casinos  "island shack casino" — the same timber, but the lettering is neon with a halo and a
- *            bulb border, and a string of marquee bulbs along the front eaves chases round
- *   home     a driftwood plank
- *   love     a painted name sign with a heart
+ *   shops    planks painted in the trade's colour, the name in cream, the emblem at the left: a
+ *            rod for the tackle shop, a baited hook, a stack of coins, a saw and hammer, the
+ *            pawnbroker's three balls, a mounted fish
+ *   market   the fish market's board is cut in the shape of a fish
+ *   fine     the jeweller's, the boutique's and the florist's: lacquer, gilt border, gilt letters
+ *   mystic   the fortune teller's: midnight purple, stars, a moon, a crystal ball
+ *   casinos  "island shack casino": dark timber, neon letters with a halo, a neon emblem either
+ *            side (a wheel, cherries, a spade), a bulb border, and marquee bulbs along the front
+ *            eaves chasing round
+ *
+ * Your shack, Coral's villa and the boatyard have no sign: everyone knows whose they are.
  *
  * All the signs share one painted atlas: two draw calls for every sign in the village (lit
  * boards, and self-lit neon), one for the bulbs.
@@ -93,74 +99,606 @@ function plankBoard(c: CanvasRenderingContext2D, x: number, y: number, w: number
   c.strokeRect(x + 3, y + 3, w - 6, h - 6);
 }
 
-function paintSign(c: CanvasRenderingContext2D, ox: number, oy: number, r: BuildingRole, seed: number): void {
+/* ── the emblems: a picture of the trade, painted beside the name ────────── */
+
+type Emblem = 'rod' | 'hook' | 'ring' | 'flower' | 'mirror' | 'coin' | 'saw' | 'balls' | 'mount' | 'ball' | 'wheel' | 'cherries' | 'spade';
+
+/** Each emblem drawn in a box of side `s` centred on (x, y). */
+const EMBLEMS: Record<Emblem, (c: CanvasRenderingContext2D, x: number, y: number, s: number, ink: string, hi: string) => void> = {
+  // a rod bending under a fish's weight, the reel at its butt, the line down to a hook
+  rod: (c, x, y, s, ink, hi) => {
+    c.lineCap = 'round';
+    c.strokeStyle = ink;
+    c.lineWidth = s * 0.06;
+    c.beginPath();
+    c.moveTo(x - s * 0.4, y + s * 0.42);
+    c.quadraticCurveTo(x - s * 0.05, y - s * 0.1, x + s * 0.38, y - s * 0.36);
+    c.stroke();
+    c.fillStyle = hi;
+    c.beginPath();
+    c.arc(x - s * 0.26, y + s * 0.26, s * 0.1, 0, Math.PI * 2);
+    c.fill();
+    c.lineWidth = s * 0.02;
+    c.beginPath();
+    c.moveTo(x + s * 0.38, y - s * 0.36);
+    c.lineTo(x + s * 0.34, y + s * 0.12);
+    c.stroke();
+    c.lineWidth = s * 0.04;
+    c.beginPath();
+    c.arc(x + s * 0.28, y + s * 0.18, s * 0.07, 0, Math.PI);
+    c.stroke();
+  },
+  // a J hook with its eye and barb, and a little baitfish hooked through the lip
+  hook: (c, x, y, s, ink, hi) => {
+    c.lineCap = 'round';
+    c.strokeStyle = ink;
+    c.lineWidth = s * 0.02;
+    c.beginPath();
+    c.moveTo(x + s * 0.12, y - s * 0.5);
+    c.lineTo(x + s * 0.12, y - s * 0.4);
+    c.stroke();
+    c.lineWidth = s * 0.07;
+    c.beginPath();
+    c.arc(x + s * 0.12, y - s * 0.34, s * 0.06, 0, Math.PI * 2);
+    c.moveTo(x + s * 0.12, y - s * 0.28);
+    c.lineTo(x + s * 0.12, y + s * 0.1);
+    c.arc(x - s * 0.06, y + s * 0.1, s * 0.18, 0, Math.PI);
+    c.lineTo(x - s * 0.24, y - s * 0.06);
+    c.lineTo(x - s * 0.14, y + s * 0.02);
+    c.stroke();
+    // the pilchard, nose on the point, hanging down the shank
+    fishShape(c, x - s * 0.26, y + s * 0.02, s * 0.46, Math.PI / 2 + 0.25, hi);
+    c.fillStyle = ink;
+    c.beginPath();
+    c.arc(x - s * 0.24, y + s * 0.2, s * 0.025, 0, Math.PI * 2);
+    c.fill();
+  },
+  // a gold band with a cut stone on it
+  ring: (c, x, y, s, ink, hi) => {
+    c.strokeStyle = ink;
+    c.lineWidth = s * 0.09;
+    c.beginPath();
+    c.ellipse(x, y + s * 0.12, s * 0.28, s * 0.25, 0, 0, Math.PI * 2);
+    c.stroke();
+    c.fillStyle = hi;
+    c.beginPath();
+    c.moveTo(x - s * 0.18, y - s * 0.2);
+    c.lineTo(x - s * 0.1, y - s * 0.34);
+    c.lineTo(x + s * 0.1, y - s * 0.34);
+    c.lineTo(x + s * 0.18, y - s * 0.2);
+    c.lineTo(x, y - s * 0.02);
+    c.closePath();
+    c.fill();
+    c.strokeStyle = 'rgba(255,255,255,0.8)';
+    c.lineWidth = s * 0.015;
+    c.beginPath();
+    c.moveTo(x - s * 0.18, y - s * 0.2);
+    c.lineTo(x + s * 0.18, y - s * 0.2);
+    c.moveTo(x - s * 0.06, y - s * 0.34);
+    c.lineTo(x, y - s * 0.02);
+    c.lineTo(x + s * 0.06, y - s * 0.34);
+    c.stroke();
+  },
+  // a hibiscus over two leaves, in a terracotta pot
+  flower: (c, x, y, s, ink, hi) => {
+    c.fillStyle = '#b8643a';
+    c.beginPath();
+    c.moveTo(x - s * 0.22, y + s * 0.12);
+    c.lineTo(x + s * 0.22, y + s * 0.12);
+    c.lineTo(x + s * 0.16, y + s * 0.44);
+    c.lineTo(x - s * 0.16, y + s * 0.44);
+    c.closePath();
+    c.fill();
+    c.fillStyle = '#3f7a34';
+    for (const sd of [-1, 1]) {
+      c.beginPath();
+      c.ellipse(x + sd * s * 0.17, y + s * 0.0, s * 0.16, s * 0.06, sd * 0.6, 0, Math.PI * 2);
+      c.fill();
+    }
+    c.strokeStyle = '#3f7a34';
+    c.lineWidth = s * 0.04;
+    c.beginPath();
+    c.moveTo(x, y + s * 0.12);
+    c.lineTo(x, y - s * 0.12);
+    c.stroke();
+    c.fillStyle = hi;
+    for (let i = 0; i < 5; i++) {
+      const a = (i / 5) * Math.PI * 2 - Math.PI / 2;
+      c.beginPath();
+      c.ellipse(x + Math.cos(a) * s * 0.13, y - s * 0.24 + Math.sin(a) * s * 0.13, s * 0.12, s * 0.08, a, 0, Math.PI * 2);
+      c.fill();
+    }
+    c.fillStyle = ink;
+    c.beginPath();
+    c.arc(x, y - s * 0.24, s * 0.05, 0, Math.PI * 2);
+    c.fill();
+  },
+  // a cheval mirror: an oval glass in a gilt frame, swung between two posts
+  mirror: (c, x, y, s, ink, hi) => {
+    c.strokeStyle = ink;
+    c.lineWidth = s * 0.05;
+    c.beginPath();
+    c.moveTo(x - s * 0.28, y - s * 0.1);
+    c.lineTo(x - s * 0.28, y + s * 0.44);
+    c.moveTo(x + s * 0.28, y - s * 0.1);
+    c.lineTo(x + s * 0.28, y + s * 0.44);
+    c.moveTo(x - s * 0.36, y + s * 0.44);
+    c.lineTo(x - s * 0.2, y + s * 0.44);
+    c.moveTo(x + s * 0.2, y + s * 0.44);
+    c.lineTo(x + s * 0.36, y + s * 0.44);
+    c.stroke();
+    c.fillStyle = hi;
+    c.beginPath();
+    c.ellipse(x, y - s * 0.02, s * 0.2, s * 0.36, 0, 0, Math.PI * 2);
+    c.fill();
+    c.lineWidth = s * 0.06;
+    c.stroke();
+    c.strokeStyle = 'rgba(255,255,255,0.7)';
+    c.lineWidth = s * 0.03;
+    c.beginPath();
+    c.moveTo(x - s * 0.08, y - s * 0.22);
+    c.lineTo(x + s * 0.06, y - s * 0.02);
+    c.stroke();
+  },
+  // a stack of coins and one standing on its edge, stamped with a shell
+  coin: (c, x, y, s, ink, hi) => {
+    for (let i = 0; i < 4; i++) {
+      const cy = y + s * 0.36 - i * s * 0.08;
+      c.fillStyle = ink;
+      c.beginPath();
+      c.ellipse(x - s * 0.14, cy + s * 0.03, s * 0.2, s * 0.07, 0, 0, Math.PI * 2);
+      c.fill();
+      c.fillStyle = hi;
+      c.beginPath();
+      c.ellipse(x - s * 0.14, cy, s * 0.2, s * 0.07, 0, 0, Math.PI * 2);
+      c.fill();
+    }
+    c.fillStyle = hi;
+    c.strokeStyle = ink;
+    c.lineWidth = s * 0.04;
+    c.beginPath();
+    c.arc(x + s * 0.16, y - s * 0.08, s * 0.24, 0, Math.PI * 2);
+    c.fill();
+    c.stroke();
+    c.beginPath();
+    for (let i = 0; i < 5; i++) {
+      const a = Math.PI + (i / 4) * Math.PI;
+      c.moveTo(x + s * 0.16, y + s * 0.02);
+      c.lineTo(x + s * 0.16 + Math.cos(a) * s * 0.14, y + s * 0.02 + Math.sin(a) * s * 0.16);
+    }
+    c.stroke();
+  },
+  // a hand saw, teeth down, with its open handle, and a claw hammer across it
+  saw: (c, x, y, s, ink, hi) => {
+    c.save();
+    c.translate(x, y);
+    c.rotate(-0.45);
+    // the blade: broad at the handle, narrowing to the toe
+    c.fillStyle = hi;
+    c.beginPath();
+    c.moveTo(-s * 0.46, -s * 0.02);
+    c.lineTo(s * 0.14, -s * 0.16);
+    c.lineTo(s * 0.14, s * 0.1);
+    c.lineTo(-s * 0.46, s * 0.06);
+    c.closePath();
+    c.fill();
+    c.fillStyle = ink;
+    for (let i = 0; i < 11; i++) {
+      const tx = -s * 0.46 + i * s * 0.055;
+      c.beginPath();
+      c.moveTo(tx, s * 0.06 + i * 0.0036 * s);
+      c.lineTo(tx + s * 0.027, s * 0.12);
+      c.lineTo(tx + s * 0.055, s * 0.06 + (i + 1) * 0.0036 * s);
+      c.fill();
+    }
+    // the handle: a wooden grip with a hole through it
+    c.fillStyle = '#7a4a24';
+    c.beginPath();
+    c.moveTo(s * 0.12, -s * 0.2);
+    c.quadraticCurveTo(s * 0.42, -s * 0.24, s * 0.4, s * 0.02);
+    c.quadraticCurveTo(s * 0.38, s * 0.16, s * 0.12, s * 0.14);
+    c.closePath();
+    c.fill();
+    c.fillStyle = 'rgba(0,0,0,0.55)';
+    c.beginPath();
+    c.ellipse(s * 0.26, -s * 0.03, s * 0.07, s * 0.045, 0, 0, Math.PI * 2);
+    c.fill();
+    c.restore();
+    c.save();
+    c.translate(x + s * 0.06, y + s * 0.02);
+    c.rotate(0.75);
+    c.fillStyle = '#8a5a2a';
+    c.fillRect(-s * 0.035, -s * 0.16, s * 0.07, s * 0.58);
+    c.fillStyle = ink;
+    c.fillRect(-s * 0.2, -s * 0.28, s * 0.26, s * 0.12);
+    // the claw
+    c.beginPath();
+    c.moveTo(s * 0.06, -s * 0.28);
+    c.quadraticCurveTo(s * 0.2, -s * 0.3, s * 0.24, -s * 0.2);
+    c.lineTo(s * 0.18, -s * 0.18);
+    c.quadraticCurveTo(s * 0.14, -s * 0.22, s * 0.06, -s * 0.16);
+    c.closePath();
+    c.fill();
+    c.restore();
+  },
+  // the pawnbroker's three golden balls, hanging from a bracket
+  balls: (c, x, y, s, ink, hi) => {
+    c.strokeStyle = ink;
+    c.lineWidth = s * 0.05;
+    c.beginPath();
+    c.moveTo(x - s * 0.36, y - s * 0.4);
+    c.lineTo(x + s * 0.36, y - s * 0.4);
+    c.moveTo(x, y - s * 0.4);
+    c.lineTo(x, y - s * 0.24);
+    c.moveTo(x - s * 0.24, y - s * 0.24);
+    c.lineTo(x + s * 0.24, y - s * 0.24);
+    c.moveTo(x - s * 0.2, y - s * 0.24);
+    c.lineTo(x - s * 0.2, y - s * 0.08);
+    c.moveTo(x + s * 0.2, y - s * 0.24);
+    c.lineTo(x + s * 0.2, y - s * 0.08);
+    c.moveTo(x, y - s * 0.24);
+    c.lineTo(x, y + s * 0.1);
+    c.stroke();
+    for (const [bx, by] of [
+      [-0.2, 0.04],
+      [0.2, 0.04],
+      [0, 0.26],
+    ]) {
+      const g = c.createRadialGradient(x + bx * s - s * 0.04, y + by * s - s * 0.05, s * 0.02, x + bx * s, y + by * s, s * 0.14);
+      g.addColorStop(0, '#fff6c8');
+      g.addColorStop(0.5, hi);
+      g.addColorStop(1, '#8a6414');
+      c.fillStyle = g;
+      c.beginPath();
+      c.arc(x + bx * s, y + by * s, s * 0.14, 0, Math.PI * 2);
+      c.fill();
+    }
+  },
+  // a leaping fish on a shield-shaped plaque
+  mount: (c, x, y, s, ink, hi) => {
+    c.fillStyle = ink;
+    c.beginPath();
+    c.moveTo(x - s * 0.36, y - s * 0.36);
+    c.lineTo(x + s * 0.36, y - s * 0.36);
+    c.lineTo(x + s * 0.36, y + s * 0.08);
+    c.quadraticCurveTo(x + s * 0.3, y + s * 0.34, x, y + s * 0.44);
+    c.quadraticCurveTo(x - s * 0.3, y + s * 0.34, x - s * 0.36, y + s * 0.08);
+    c.closePath();
+    c.fill();
+    fishShape(c, x, y, s * 0.5, -0.5, hi);
+  },
+  // a crystal ball on its stand, a star in it
+  ball: (c, x, y, s, ink, hi) => {
+    c.fillStyle = ink;
+    c.beginPath();
+    c.moveTo(x - s * 0.26, y + s * 0.44);
+    c.lineTo(x + s * 0.26, y + s * 0.44);
+    c.lineTo(x + s * 0.14, y + s * 0.24);
+    c.lineTo(x - s * 0.14, y + s * 0.24);
+    c.closePath();
+    c.fill();
+    const g = c.createRadialGradient(x - s * 0.1, y - s * 0.12, s * 0.02, x, y - s * 0.02, s * 0.3);
+    g.addColorStop(0, '#ffffff');
+    g.addColorStop(0.35, hi);
+    g.addColorStop(1, '#3a1a6a');
+    c.fillStyle = g;
+    c.beginPath();
+    c.arc(x, y - s * 0.02, s * 0.3, 0, Math.PI * 2);
+    c.fill();
+    star(c, x + s * 0.06, y + s * 0.02, s * 0.08, '#fff6c8');
+  },
+  // neon: a roulette wheel
+  wheel: (c, x, y, s, ink) => {
+    c.strokeStyle = ink;
+    c.lineWidth = s * 0.07;
+    c.beginPath();
+    c.arc(x, y, s * 0.38, 0, Math.PI * 2);
+    c.stroke();
+    c.lineWidth = s * 0.04;
+    c.beginPath();
+    c.arc(x, y, s * 0.2, 0, Math.PI * 2);
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2;
+      c.moveTo(x + Math.cos(a) * s * 0.2, y + Math.sin(a) * s * 0.2);
+      c.lineTo(x + Math.cos(a) * s * 0.38, y + Math.sin(a) * s * 0.38);
+    }
+    c.stroke();
+  },
+  // neon: a pair of cherries
+  cherries: (c, x, y, s, ink, hi) => {
+    c.strokeStyle = hi;
+    c.lineWidth = s * 0.05;
+    c.beginPath();
+    c.moveTo(x - s * 0.18, y + s * 0.12);
+    c.quadraticCurveTo(x - s * 0.1, y - s * 0.2, x + s * 0.12, y - s * 0.38);
+    c.moveTo(x + s * 0.2, y + s * 0.16);
+    c.quadraticCurveTo(x + s * 0.18, y - s * 0.12, x + s * 0.12, y - s * 0.38);
+    c.stroke();
+    c.strokeStyle = ink;
+    c.lineWidth = s * 0.07;
+    for (const [cx, cy] of [
+      [-0.18, 0.24],
+      [0.2, 0.28],
+    ]) {
+      c.beginPath();
+      c.arc(x + cx * s, y + cy * s, s * 0.15, 0, Math.PI * 2);
+      c.stroke();
+    }
+  },
+  // neon: a spade
+  spade: (c, x, y, s, ink) => {
+    c.strokeStyle = ink;
+    c.lineWidth = s * 0.07;
+    c.lineJoin = 'round';
+    c.beginPath();
+    c.moveTo(x, y - s * 0.38);
+    c.bezierCurveTo(x + s * 0.1, y - s * 0.2, x + s * 0.4, y - s * 0.06, x + s * 0.3, y + s * 0.14);
+    c.bezierCurveTo(x + s * 0.22, y + s * 0.28, x + s * 0.06, y + s * 0.22, x, y + s * 0.1);
+    c.bezierCurveTo(x - s * 0.06, y + s * 0.22, x - s * 0.22, y + s * 0.28, x - s * 0.3, y + s * 0.14);
+    c.bezierCurveTo(x - s * 0.4, y - s * 0.06, x - s * 0.1, y - s * 0.2, x, y - s * 0.38);
+    c.moveTo(x, y + s * 0.1);
+    c.lineTo(x - s * 0.1, y + s * 0.38);
+    c.lineTo(x + s * 0.1, y + s * 0.38);
+    c.closePath();
+    c.stroke();
+  },
+};
+
+/** a fish in profile, `len` long, nose toward +x, tipped by `tilt` */
+function fishShape(c: CanvasRenderingContext2D, x: number, y: number, len: number, tilt: number, fill: string): void {
+  c.save();
+  c.translate(x, y);
+  c.rotate(tilt);
+  c.fillStyle = fill;
+  c.beginPath();
+  c.moveTo(len * 0.5, 0);
+  c.bezierCurveTo(len * 0.3, -len * 0.3, -len * 0.2, -len * 0.28, -len * 0.3, 0);
+  c.bezierCurveTo(-len * 0.2, len * 0.28, len * 0.3, len * 0.3, len * 0.5, 0);
+  c.fill();
+  c.beginPath();
+  c.moveTo(-len * 0.28, 0);
+  c.lineTo(-len * 0.52, -len * 0.2);
+  c.lineTo(-len * 0.46, 0);
+  c.lineTo(-len * 0.52, len * 0.2);
+  c.closePath();
+  c.fill();
+  c.restore();
+}
+
+function star(c: CanvasRenderingContext2D, x: number, y: number, r: number, fill: string): void {
+  c.fillStyle = fill;
+  c.beginPath();
+  for (let i = 0; i < 10; i++) {
+    const a = (i / 10) * Math.PI * 2 - Math.PI / 2;
+    const rr = i % 2 ? r * 0.42 : r;
+    c.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr);
+  }
+  c.closePath();
+  c.fill();
+}
+
+/* ── the boards ─────────────────────────────────────────────────────────── */
+
+/**
+ * How each business shows itself:
+ *   painted  planks painted in the trade's colour, the name in cream, the emblem at the left
+ *   fish     the fish market's board cut in the shape of a fish
+ *   fine     the jeweller's, the boutique's and the florist's: a lacquered board, gilt border,
+ *            gilt lettering (the florist's cream, with the lettering in green)
+ *   mystic   the fortune teller's: midnight purple, stars and a moon, gilt lettering
+ *   neon     the casinos: dark timber, a bulb border, neon letters with a neon emblem either side
+ */
+type Style = 'painted' | 'fish' | 'fine' | 'mystic' | 'neon';
+interface Look {
+  style: Style;
+  emblem?: Emblem;
+  /** the board's paint, the lettering, the emblem's ink and its highlight */
+  board: string;
+  text: string;
+  ink: string;
+  hi: string;
+}
+
+const LOOKS: Record<string, Look> = {
+  S3: { style: 'painted', emblem: 'rod', board: '#2e5872', text: '#f6ecd4', ink: '#f6ecd4', hi: '#e8b040' },
+  S2: { style: 'painted', emblem: 'hook', board: '#35603c', text: '#f6ecd4', ink: '#e8e4d8', hi: '#e0826a' },
+  stall: { style: 'fish', board: '#2f6fa8', text: '#f6ecd4', ink: '#f6ecd4', hi: '#f6ecd4' },
+  A: { style: 'fine', emblem: 'ring', board: '#2a1834', text: '#f0cf7a', ink: '#e8c060', hi: '#bfe8ff' },
+  D: { style: 'fine', emblem: 'flower', board: '#f2e8d4', text: '#2f6a34', ink: '#f0d040', hi: '#e8506a' },
+  E: { style: 'fine', emblem: 'mirror', board: '#16383a', text: '#f0cf7a', ink: '#e8c060', hi: '#bcd8e0' },
+  H: { style: 'painted', emblem: 'coin', board: '#4e3e24', text: '#f6e2a4', ink: '#6a4a14', hi: '#f0c850' },
+  F: { style: 'painted', emblem: 'saw', board: '#a07a4a', text: '#fff4dc', ink: '#3a2a1a', hi: '#d8dce0' },
+  J: { style: 'painted', emblem: 'balls', board: '#2e3040', text: '#f6ecd4', ink: '#c8b890', hi: '#e8b830' },
+  K: { style: 'painted', emblem: 'mount', board: '#5a3a24', text: '#f6ecd4', ink: '#8a6040', hi: '#c8d4dc' },
+  N: { style: 'mystic', emblem: 'ball', board: '#24163e', text: '#f0cf7a', ink: '#c8a050', hi: '#a88af0' },
+  C: { style: 'neon', emblem: 'wheel', board: '#2a2019', text: '#ff3fb4', ink: '#ff3fb4', hi: '#ffe08a' },
+  B: { style: 'neon', emblem: 'cherries', board: '#2a2019', text: '#3fd6ff', ink: '#ff4a4a', hi: '#7dff5a' },
+  G: { style: 'neon', emblem: 'spade', board: '#2a2019', text: '#7dff5a', ink: '#7dff5a', hi: '#7dff5a' },
+};
+
+/** a board for a role without a look of its own: plain painted planks in its colour */
+const lookOf = (name: string, r: BuildingRole): Look => LOOKS[name] ?? { style: r.role === 'casino' ? 'neon' : 'painted', board: r.colour, text: '#f6ecd4', ink: '#f6ecd4', hi: '#f6ecd4' };
+
+function roundRectPath(c: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number): void {
+  c.beginPath();
+  c.moveTo(x + r, y);
+  c.arcTo(x + w, y, x + w, y + h, r);
+  c.arcTo(x + w, y + h, x, y + h, r);
+  c.arcTo(x, y + h, x, y, r);
+  c.arcTo(x, y, x + w, y, r);
+  c.closePath();
+}
+
+/** the name and the line under it, centred in [x0, x1], outlined so they read against any board */
+function lettering(c: CanvasRenderingContext2D, r: BuildingRole, look: Look, x0: number, x1: number, h: number, outline: string | null, size = 64): void {
+  const cx = (x0 + x1) / 2;
+  const w = x1 - x0;
+  c.textAlign = 'center';
+  c.textBaseline = 'middle';
+  c.font = font(700, r.title.length > 11 ? size - 8 : size);
+  const ty = r.sub ? h * 0.4 : h * 0.52;
+  if (outline) {
+    c.lineWidth = 9;
+    c.strokeStyle = outline;
+    c.lineJoin = 'round';
+    c.strokeText(r.title, cx, ty, w);
+  }
+  c.fillStyle = look.text;
+  c.fillText(r.title, cx, ty, w);
+  if (r.sub) {
+    c.font = font(600, 28);
+    if (outline) {
+      c.lineWidth = 6;
+      c.strokeText(r.sub, cx, h * 0.77, w - 10);
+    }
+    c.fillText(r.sub, cx, h * 0.77, w - 10);
+  }
+}
+
+function paintSign(c: CanvasRenderingContext2D, ox: number, oy: number, name: string, r: BuildingRole, seed: number): void {
   const w = SW;
   const h = SH;
+  const look = lookOf(name, r);
   c.save();
   c.translate(ox, oy);
   c.clearRect(0, 0, w, h);
-  const neon = r.role === 'casino';
-  if (neon) {
-    // dark painted board, bulb border, neon letters with a halo
-    c.fillStyle = '#1a1512';
-    c.fillRect(0, 0, w, h);
-    plankBoard(c, 0, 0, w, h, '#2a2019', seed);
-    for (let i = 0; i < 26; i++) {
-      const t = i / 26;
-      const bx = 10 + t * (w - 20);
-      for (const by of [10, h - 10]) {
-        c.fillStyle = '#fff1c4';
-        c.beginPath();
-        c.arc(bx, by, 4, 0, Math.PI * 2);
-        c.fill();
+  const emblem = look.emblem ? EMBLEMS[look.emblem] : null;
+  switch (look.style) {
+    case 'neon': {
+      // dark timber, a bulb border, neon letters with a halo, a neon emblem either side
+      c.fillStyle = '#1a1512';
+      c.fillRect(0, 0, w, h);
+      plankBoard(c, 0, 0, w, h, look.board, seed);
+      for (let i = 0; i < 26; i++) {
+        const bx = 10 + (i / 25) * (w - 20);
+        for (const by of [10, h - 10]) {
+          c.fillStyle = '#fff1c4';
+          c.beginPath();
+          c.arc(bx, by, 4, 0, Math.PI * 2);
+          c.fill();
+        }
       }
+      c.shadowBlur = 16;
+      if (emblem)
+        for (const ex of [62, w - 62]) {
+          c.shadowColor = look.ink;
+          emblem(c, ex, h / 2, 92, look.ink, look.hi);
+        }
+      c.textAlign = 'center';
+      c.textBaseline = 'middle';
+      c.font = font(700, r.title.length > 12 ? 50 : 58);
+      c.shadowColor = look.text;
+      c.shadowBlur = 22;
+      c.fillStyle = look.text;
+      c.fillText(r.title, w / 2, h * 0.42, w - 250);
+      c.shadowBlur = 8;
+      c.fillStyle = '#ffffff';
+      c.globalAlpha = 0.55;
+      c.fillText(r.title, w / 2, h * 0.42, w - 250);
+      c.globalAlpha = 1;
+      if (r.sub) {
+        c.font = font(700, 30);
+        c.shadowBlur = 14;
+        c.shadowColor = '#fff1c4';
+        c.fillStyle = '#fff1c4';
+        c.fillText(r.sub, w / 2, h * 0.78, w - 260);
+      }
+      c.shadowBlur = 0;
+      break;
     }
-    c.textAlign = 'center';
-    c.textBaseline = 'middle';
-    c.font = font(700, r.title.length > 13 ? 58 : 68);
-    c.shadowColor = r.colour;
-    c.shadowBlur = 22;
-    c.fillStyle = r.colour;
-    c.fillText(r.title, w / 2, h * 0.42, w - 40);
-    c.shadowBlur = 8;
-    c.fillStyle = '#ffffff';
-    c.globalAlpha = 0.55;
-    c.fillText(r.title, w / 2, h * 0.42, w - 40);
-    c.globalAlpha = 1;
-    if (r.sub) {
-      c.font = font(700, 28);
-      c.shadowBlur = 14;
-      c.fillStyle = '#fff1c4';
-      c.fillText(r.sub, w / 2, h * 0.78, w - 60);
+    case 'fish': {
+      // the board cut as a fish, nose to the right: planks inside its outline, an eye and a gill
+      c.save();
+      c.beginPath();
+      c.moveTo(w - 8, h * 0.5);
+      c.bezierCurveTo(w - 70, 2, 130, 0, 78, h * 0.5);
+      c.bezierCurveTo(130, h, w - 70, h - 2, w - 8, h * 0.5);
+      c.moveTo(92, h * 0.5);
+      c.lineTo(8, 10);
+      c.lineTo(34, h * 0.5);
+      c.lineTo(8, h - 10);
+      c.closePath();
+      c.clip();
+      c.fillStyle = '#10202e';
+      c.fillRect(0, 0, w, h);
+      plankBoard(c, 0, 0, w, h, look.board, seed);
+      c.restore();
+      c.strokeStyle = '#f6ecd4';
+      c.lineWidth = 3;
+      c.beginPath();
+      c.arc(w - 58, h * 0.4, 9, 0, Math.PI * 2);
+      c.stroke();
+      c.fillStyle = '#10202e';
+      c.beginPath();
+      c.arc(w - 58, h * 0.4, 5, 0, Math.PI * 2);
+      c.fill();
+      c.beginPath();
+      c.moveTo(w - 84, h * 0.22);
+      c.quadraticCurveTo(w - 72, h * 0.5, w - 84, h * 0.78);
+      c.stroke();
+      lettering(c, r, look, 100, w - 128, h, 'rgba(10,24,40,0.85)', 58);
+      break;
     }
-    c.shadowBlur = 0;
-  } else {
-    const board = r.role === 'home' ? '#9a8a70' : r.role === 'outbuilding' ? '#7a6a58' : '#b89a72';
-    // the batten behind the planks, so the seams read dark, not see-through
-    c.fillStyle = '#2a1e14';
-    c.fillRect(0, 0, w, h);
-    plankBoard(c, 0, 0, w, h, board, seed);
-    c.textAlign = 'center';
-    c.textBaseline = 'middle';
-    c.font = font(700, r.role === 'outbuilding' ? 64 : 72);
-    c.lineWidth = 10;
-    c.strokeStyle = 'rgba(30,20,12,0.85)';
-    const ty = r.sub ? h * 0.42 : h * 0.52;
-    const title = r.role === 'love' ? `♥ ${r.title} ♥` : r.title;
-    c.strokeText(title, w / 2, ty, w - 40);
-    c.fillStyle = r.role === 'love' ? '#ffd8de' : '#f6ecd4';
-    c.fillText(title, w / 2, ty, w - 40);
-    // a painted colour band under the name (the shop's colour)
-    c.fillStyle = r.colour;
-    c.globalAlpha = 0.85;
-    c.fillRect(40, h * 0.66, w - 80, 6);
-    c.globalAlpha = 1;
-    if (r.sub) {
-      c.font = font(700, 32);
+    case 'fine': {
+      // lacquer, a double gilt border, the emblem in a gilt roundel at the left
+      roundRectPath(c, 4, 4, w - 8, h - 8, 26);
+      c.fillStyle = look.board;
+      c.fill();
+      const g = c.createLinearGradient(0, 0, 0, h);
+      g.addColorStop(0, 'rgba(255,255,255,0.12)');
+      g.addColorStop(0.5, 'rgba(255,255,255,0)');
+      g.addColorStop(1, 'rgba(0,0,0,0.12)');
+      c.fillStyle = g;
+      c.fill();
+      c.strokeStyle = '#d8b050';
       c.lineWidth = 6;
-      c.strokeText(r.sub, w / 2, h * 0.82, w - 60);
-      c.fillStyle = '#f6ecd4';
-      c.fillText(r.sub, w / 2, h * 0.82, w - 60);
+      c.stroke();
+      roundRectPath(c, 16, 16, w - 32, h - 32, 18);
+      c.lineWidth = 2;
+      c.stroke();
+      c.beginPath();
+      c.arc(86, h / 2, 56, 0, Math.PI * 2);
+      c.lineWidth = 3;
+      c.stroke();
+      if (emblem) emblem(c, 86, h / 2, 96, look.ink, look.hi);
+      lettering(c, r, look, 150, w - 30, h, null, 60);
+      break;
+    }
+    case 'mystic': {
+      roundRectPath(c, 4, 4, w - 8, h - 8, 26);
+      const g = c.createLinearGradient(0, 0, w, h);
+      g.addColorStop(0, '#3a1e5e');
+      g.addColorStop(1, look.board);
+      c.fillStyle = g;
+      c.fill();
+      c.strokeStyle = '#c8a050';
+      c.lineWidth = 5;
+      c.stroke();
+      // a sprinkle of stars and a crescent moon
+      for (let i = 0; i < 26; i++) {
+        const sx = 150 + ((Math.sin(i * 91.7 + seed) * 43758.5) % 1 + 1) % 1 * (w - 180);
+        const sy = 14 + ((Math.sin(i * 17.3 + seed * 3) * 12345.6) % 1 + 1) % 1 * (h - 28);
+        star(c, sx, sy, 2 + (i % 3), 'rgba(255, 240, 200, 0.55)');
+      }
+      c.fillStyle = '#f0dca0';
+      c.beginPath();
+      c.arc(w - 40, 36, 16, 0, Math.PI * 2);
+      c.fill();
+      c.fillStyle = look.board;
+      c.beginPath();
+      c.arc(w - 33, 31, 14, 0, Math.PI * 2);
+      c.fill();
+      if (emblem) emblem(c, 82, h / 2, 110, look.ink, look.hi);
+      lettering(c, r, look, 150, w - 40, h, 'rgba(20,8,40,0.7)', 58);
+      break;
+    }
+    default: {
+      // planks painted in the trade's colour, the emblem at the left
+      c.fillStyle = '#2a1e14';
+      c.fillRect(0, 0, w, h);
+      plankBoard(c, 0, 0, w, h, look.board, seed);
+      if (emblem) emblem(c, 84, h / 2, 118, look.ink, look.hi);
+      lettering(c, r, look, emblem ? 150 : 30, w - 26, h, 'rgba(24,16,10,0.8)', 64);
     }
   }
   c.restore();
@@ -187,10 +725,11 @@ export class VillageSigns {
     const placed: Placed[] = [];
     buildings.forEach((b) => {
       const role = ROLES[b.name];
-      if (role) placed.push({ frame: b, role, tile: placed.length });
+      // (home, and Coral's, and the boatyard everyone knows, go without)
+      if (role && role.sign !== false) placed.push({ frame: b, role, tile: placed.length });
     });
     const paint = (): void => {
-      placed.forEach((p, i) => paintSign(ctx, (p.tile % COLS) * SW, Math.floor(p.tile / COLS) * SH, p.role, i + 1));
+      placed.forEach((p, i) => paintSign(ctx, (p.tile % COLS) * SW, Math.floor(p.tile / COLS) * SH, p.frame.name, p.role, i + 1));
     };
     paint();
     const tex = new CanvasTexture(cv);

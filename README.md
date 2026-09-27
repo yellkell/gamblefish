@@ -117,11 +117,11 @@ and the vendors.
   each biting only in its window: bonefish at dawn, queen triggerfish at midday,
   permit at sunset, lookdown at night under the pier lamps, and glasseye snapper after
   midnight. `npm run check:fish` checks the windows.
-- **Your shack:** the hut on the beach (HOME) is yours. The Builder, Florist,
+- **Your shack:** the hut on the beach (HOME) is yours. The Carpenter, Florist,
   Taxidermist and Pawn Shop each sell things for it from a counter and a price
   board (`src/village/homeGoods.ts`). What you buy is delivered to its spot in the
   shack and kept in your save.
-  - The Builder: a driftwood bed with a patchwork quilt, a table and two ladder-back
+  - The Carpenter: a driftwood bed with a patchwork quilt, a table and two ladder-back
     chairs, a kilim rug, a bookshelf, and a sea chest for the foot of the bed.
   - The Florist: a kentia palm, a hibiscus in bloom, a Boston fern in a macramé
     hanger, a moth orchid on a bamboo stand, and a monstera in a woven basket.
@@ -165,6 +165,12 @@ and the vendors.
   pier head, so the longer rods matter). The marlin needs everything at the top and a
   charm. Each has its own body, built from a Tidewater anatomy with a bill, a sail or a
   comb added. `npm run check:fish` checks that none bites without its gear.
+- **Signs** (`src/village/signs.ts`): every business has a board in a style that suits it, with a
+  picture of its trade and a line saying what's inside: painted planks with a rod, a baited hook,
+  coins, a saw and hammer, the pawnbroker's three balls or a mounted fish; a fish-shaped board on
+  the fish market; lacquer and gilt for the jeweller, the boutique and the florist; stars and a
+  crystal ball for the fortune teller; neon with a wheel, cherries or a spade on the casinos. Your
+  shack, Coral's villa and the boatyard have none.
 - **The village:** the Rum Shack (I) and the empty Captain's Table (M) are gone, and
   each spot is now a small garden. The beds' heliconias and birds of paradise are made the way the
   Florist's plants are (`src/world/beds.ts`): leaves on their own stalks, and flower spikes of red

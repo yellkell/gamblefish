@@ -1,5 +1,5 @@
 /**
- * THE BUILDER's furniture (F), for your shack: a driftwood bed made up with a patchwork quilt,
+ * THE CARPENTER's furniture (F), for your shack: a driftwood bed made up with a patchwork quilt,
  * a turned table with two ladder-back chairs, a kilim rug, a bookshelf full of books, and a
  * sea chest for the foot of the bed.
  *

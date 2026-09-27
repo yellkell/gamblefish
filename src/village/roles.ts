@@ -18,6 +18,8 @@ export interface BuildingRole {
   colour: string;
   /** what's inside (for the interiors to come) */
   does: string;
+  /** no sign outside (a home, or a place everyone knows) */
+  sign?: false;
 }
 
 /**
@@ -37,20 +39,20 @@ export const ROLES: Record<string, BuildingRole> = {
 
   // ── the shops ──
   stall: { role: 'shop', title: 'FISH MARKET', sub: 'we buy your catch', colour: '#2f6fa8', does: 'sell fish' },
-  S3: { role: 'shop', title: 'TACKLE SHOP', sub: 'rods · reels · line', colour: '#c23b2e', does: 'rod, reel and line upgrades (fishing/gear.ts)' },
-  S2: { role: 'shop', title: 'BAIT SHOP', sub: 'live bait', colour: '#3f7f55', does: 'bait: what the big fish take (fishing/gear.ts)' },
-  boathouse: { role: 'shop', title: 'BOATYARD', sub: 'chandlery · fuel', colour: '#2f6fa8', does: 'boat, fuel, fish finder, bigger backpack' },
-  A: { role: 'shop', title: 'JEWELLER', sub: 'gifts that sparkle', colour: '#8a5ac2', does: "sparkle for Coral's villa (village/homeGoods.ts)" },
-  D: { role: 'shop', title: 'FLORIST', sub: 'fresh every morning', colour: '#d8508a', does: 'flowers (gifts)' },
-  E: { role: 'shop', title: 'BOUTIQUE', sub: 'for the finer home', colour: '#2f8a8a', does: "furnishings for Coral's villa (village/homeGoods.ts)" },
-  H: { role: 'shop', title: 'ISLAND BANK', sub: 'coins & credit', colour: '#b08d4a', does: 'buy coins' },
-  F: { role: 'shop', title: 'BUILDER', sub: 'bigger & better homes', colour: '#6a7a3a', does: 'upgrade your house' },
-  J: { role: 'shop', title: 'PAWN SHOP', sub: 'cash for anything', colour: '#5a5a6a', does: 'sell items' },
-  K: { role: 'shop', title: 'TAXIDERMIST', sub: 'mount your trophies', colour: '#6b4a32', does: 'trophy mounts' },
-  N: { role: 'shop', title: 'FORTUNE TELLER', sub: 'luck charms', colour: '#5a3a8a', does: 'luck charms: the rare ones bite more (fishing/gear.ts)' },
+  S3: { role: 'shop', title: 'TACKLE SHOP', sub: 'rods · reels · line · hooks', colour: '#c23b2e', does: 'rod, reel and line upgrades (fishing/gear.ts)' },
+  S2: { role: 'shop', title: 'BAIT SHOP', sub: 'live bait for bigger fish', colour: '#3f7f55', does: 'bait: what the big fish take (fishing/gear.ts)' },
+  boathouse: { role: 'shop', title: 'BOATYARD', sub: 'chandlery · fuel', colour: '#2f6fa8', does: 'boat, fuel, fish finder, bigger backpack', sign: false },
+  A: { role: 'shop', title: 'JEWELLER', sub: 'rings · pearls · crystal', colour: '#8a5ac2', does: "sparkle for Coral's villa (village/homeGoods.ts)" },
+  D: { role: 'shop', title: 'FLORIST', sub: 'palms · orchids · ferns', colour: '#d8508a', does: 'house plants for your shack (village/homeGoods.ts)' },
+  E: { role: 'shop', title: 'BOUTIQUE', sub: 'fine furnishings', colour: '#2f8a8a', does: "furnishings for Coral's villa (village/homeGoods.ts)" },
+  H: { role: 'shop', title: 'ISLAND BANK', sub: 'coins sold here', colour: '#b08d4a', does: 'buy coins' },
+  F: { role: 'shop', title: 'CARPENTER', sub: 'beds · tables · shelves', colour: '#6a7a3a', does: 'furniture for your shack (village/homeGoods.ts)' },
+  J: { role: 'shop', title: 'PAWN SHOP', sub: 'curios & antiques', colour: '#5a5a6a', does: 'nautical curios for your shack (village/homeGoods.ts)' },
+  K: { role: 'shop', title: 'TAXIDERMIST', sub: 'your catch, mounted', colour: '#6b4a32', does: 'trophy mounts' },
+  N: { role: 'shop', title: 'FORTUNE TELLER', sub: 'luck charms · palms read', colour: '#5a3a8a', does: 'luck charms: the rare ones bite more (fishing/gear.ts)' },
 
   // ── your place, and theirs ──
-  S1: { role: 'home', title: 'HOME', sub: 'sweet shack', colour: '#8c7a62', does: 'your house' },
-  L: { role: 'love', title: LOVE_INTEREST.name.toUpperCase(), sub: 'Villa Mar', colour: '#e8506a', does: 'the love interest' },
+  S1: { role: 'home', title: 'HOME', sub: 'sweet shack', colour: '#8c7a62', does: 'your house', sign: false },
+  L: { role: 'love', title: LOVE_INTEREST.name.toUpperCase(), sub: 'Villa Mar', colour: '#e8506a', does: 'the love interest', sign: false },
   // (the four sheds, Tidewater's outhouses, are left out of the village: tools/bake-world.mjs)
 };
