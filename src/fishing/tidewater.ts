@@ -13,6 +13,7 @@ import * as GearJs from '../../vendor/tidewater/src/game/Gear.js';
 import { baitShift, registerGear } from './gear.ts';
 import { biting, registerTimedFish } from './timedFish.ts';
 import { registerTrophyFish, trophyOdds, type Rig } from './trophyFish.ts';
+import type { CampSave, ChestFish } from '../camps/stock.ts';
 import { registerSharkFish, sharkOdds, sharkUnlocked } from './shark.ts';
 
 export interface FishInfo {
@@ -153,6 +154,8 @@ export interface GameState {
   home: string[];
   /** the woodworks (woodworks/): logs in your backpack, the axe, how far each walk is built */
   woodworks: Woodworks;
+  /** the fire dancers' camps you've found, and what's left in each chest today (camps/stock.ts) */
+  camps: Record<string, CampSave>;
   readonly stats: GearStats;
   readonly holdKg: number;
   readonly holdValue: number;
@@ -204,28 +207,47 @@ function readWoodworks(d: unknown): Woodworks {
   return out;
 }
 
+/** Read the camps' saves back (anything malformed is dropped: that chest just fills afresh). */
+function readCamps(d: unknown): Record<string, CampSave> {
+  const out: Record<string, CampSave> = {};
+  const src = (d as { camps?: unknown }).camps;
+  if (!src || typeof src !== 'object') return out;
+  for (const [id, v] of Object.entries(src as Record<string, unknown>)) {
+    const e = v as Partial<CampSave> | null;
+    if (!e || typeof e !== 'object') continue;
+    const fish = Array.isArray(e.fish)
+      ? e.fish.filter((f: ChestFish): f is ChestFish => !!f && typeof f.species === 'string' && !!FISH[f.species] && Array.isArray(f.shape) && Number.isFinite(f.x) && Number.isFinite(f.y) && Number.isFinite(f.value))
+      : [];
+    out[id] = { day: Math.floor(Number(e.day) || 0), fish, logs: Math.max(0, Math.floor(Number(e.logs) || 0)), found: e.found === true };
+  }
+  return out;
+}
+
 export function createGameState(): GameState {
   const s = new (GameStateJs as unknown as new (storage: unknown) => GameState)(prefixedStorage());
   // our own field on Tidewater's save: the shack's things ride along in the same JSON (local and
   // cloud), and a save from before them just has none
   s.home = [];
   s.woodworks = freshWoodworks();
+  s.camps = {};
   const toJSON = s.toJSON.bind(s);
   const fromJSON = s.fromJSON.bind(s);
   const reset = s.reset.bind(s);
   // (baitGoop: this save's bait levels count goop bait: fishing/gear.ts baitShift)
-  s.toJSON = () => ({ ...(toJSON() as object), home: s.home, woodworks: s.woodworks, baitGoop: true });
+  s.toJSON = () => ({ ...(toJSON() as object), home: s.home, woodworks: s.woodworks, camps: s.camps, baitGoop: true });
   s.fromJSON = (d: unknown) => {
     if (!fromJSON(d)) return false;
     s.upgrades.bait = (s.upgrades.bait | 0) + baitShift(d as Parameters<typeof baitShift>[0]);
     const home = (d as { home?: unknown }).home;
     s.home = Array.isArray(home) ? home.filter((x): x is string => typeof x === 'string') : [];
     s.woodworks = readWoodworks(d);
+    s.camps = readCamps(d);
     return true;
   };
   s.reset = () => {
     s.home = []; // first: Tidewater's reset saves and emits
     s.woodworks = freshWoodworks();
+    s.camps = {};
     reset();
   };
   s.load();

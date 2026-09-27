@@ -69,10 +69,10 @@ import { introActive } from '../experience/introGate.ts';
 
 type Hand = 'left' | 'right';
 
-const TIER_HEX = [0x9aa4ac, 0xdfeaf4, 0xffb000, 0xff5fd2];
-const TIER_CSS = ['#9aa4ac', '#dfeaf4', '#ffb000', '#ff5fd2'];
+export const TIER_HEX = [0x9aa4ac, 0xdfeaf4, 0xffb000, 0xff5fd2];
+export const TIER_CSS = ['#9aa4ac', '#dfeaf4', '#ffb000', '#ff5fd2'];
 /** how the fish itself wears its tier (Phong emissive) */
-const TIER_GLOW = [0x000000, 0x1c2228, 0x3a2400, 0x2a0a22];
+export const TIER_GLOW = [0x000000, 0x1c2228, 0x3a2400, 0x2a0a22];
 
 /** What the backpack needs from the game; set by main before registration. */
 export const backpackDeps: {
@@ -138,17 +138,16 @@ const _q = new Quaternion();
 const _s = new Vector3();
 const _m = new Matrix4();
 const _loc = new Vector3();
-const UP = new Vector3(0, 1, 0);
 /** the fish in your palm: snout along where you point, lying on its side */
 const IN_PALM = new Quaternion().setFromEuler(new Euler(0, Math.PI, Math.PI / 2));
-const HEADS = [new Vector3(1, 0, 0), new Vector3(0, 0, 1), new Vector3(-1, 0, 0), new Vector3(0, 0, -1)];
 
 /** The tag over a drop target ("SELL · $95"). */
 function makeTag(text: string, colour: string): Sprite {
   return label(text, colour, 46, 512);
 }
 
-function label(text: string, colour: string, px = 44, w = 512): Sprite {
+/** A glowing word or two floating in the world (tags, gains). */
+export function label(text: string, colour: string, px = 44, w = 512): Sprite {
   const c = document.createElement('canvas');
   c.width = w;
   c.height = 128;
@@ -358,24 +357,9 @@ export class BackpackSystem extends createSystem({}) {
     return { mesh, u: uniforms, mat };
   }
 
-  /** Where a piece's fish lies in the tray: on its side, along its length, head per rotation. */
+  /** Where a piece's fish lies in the tray (backpack/tray.ts). */
   private slotMatrix(p: Pick<Piece, 'x' | 'y' | 'rot' | 'shape'>, out: Matrix4, lift = 0.012): Matrix4 {
-    const cells = cellsOf(p);
-    const minC = Math.min(...cells.map((k) => k[0]));
-    const maxC = Math.max(...cells.map((k) => k[0]));
-    const minR = Math.min(...cells.map((k) => k[1]));
-    const maxR = Math.max(...cells.map((k) => k[1]));
-    const centre = this.tray.cellCentre((minC + maxC) / 2, (minR + maxR) / 2, _w, lift);
-    const b0 = bounds(rotate(p.shape, 0));
-    const len = b0.w * CELL * 0.96;
-    // a two-row piece: the fish drawn a little deeper, so it fills its footprint
-    const deep = b0.h > 1 ? 1.4 : 1;
-    // rot 0: head toward +X (the tail cell is column 0); each quarter turn swings it toward +Z
-    const H = HEADS[p.rot];
-    const Y = new Vector3().crossVectors(H, UP);
-    // fish-local x (its side) faces up out of the tray, y (its back) across, z (its snout) along H
-    out.makeBasis(UP, Y, H).scale(_s.set(len, len * deep, len)).setPosition(centre.x, centre.y + len * 0.05, centre.z);
-    return out;
+    return this.tray.slotMatrix(p, out, lift);
   }
 
   private syncModels(): void {
