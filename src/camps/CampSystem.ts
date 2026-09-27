@@ -8,8 +8,8 @@
  *                pleased to see you: they throw their hands in the air, and gift you everything
  *                in their chest ("You found Ember Valley, 2 of 8").
  *  THE BEACH     Find all eight and a ninth group comes down to the main beach, west of the timber
- *                yard, and lights a fire there. Their chest fills with a couple of nice fish every
- *                day.
+ *                yard, and lights a fire there. Their chest fills with a couple of nice fish and a
+ *                stack of logs every day.
  *  THE CHEST     Click the sign over it (or grip its lid) and it swings open: THE CHEST PACK rises
  *                out of it, a tray like your backpack's with the dancers' fish lying in its slots
  *                and their logs stacked beside it.
@@ -320,6 +320,8 @@ export class CampSystem extends createSystem({}) {
       c.cheer += (want - c.cheer) * (1 - Math.exp(-dt * 2.5));
       c.crowd.cheer(c.party, c.cheer);
       c.chest.update(dt, time);
+      // what's lying in the bottom: its logs, while you can see in
+      if (c.chest.amount > 0) c.chest.setLogs(this.save(c).logs);
       // the lid coming down: a clap of wood
       const shut = c.chest.amount < 0.02;
       if (shut && !this.wasShut.has(c.chest)) logThunk();
@@ -333,7 +335,7 @@ export class CampSystem extends createSystem({}) {
       if (!e.found) {
         e.found = true;
         this.state.save();
-        if (camp.site.beach) this.toast.show(`${camp.site.name}! The dancers are so pleased to see you. Every day their chest has a couple of nice fish in it for you.`, 7, INK.amber);
+        if (camp.site.beach) this.toast.show(`${camp.site.name}! The dancers are so pleased to see you. Every day their chest has a couple of nice fish and a stack of logs in it for you.`, 7, INK.amber);
         else {
           const n = this.foundCount();
           this.toast.show(`You found ${camp.site.name}, ${n} of ${CAMPS.length}! The dancers are pleased to see you: everything in their chest is a gift for you.`, 6, INK.amber);
@@ -402,8 +404,6 @@ export class CampSystem extends createSystem({}) {
     this.infoKey = '';
     this.paintButtons();
     this.paintLogs();
-    // the beach party's chest holds fish, no logs
-    this.logs.mesh.visible = !c.site.beach;
     // triggers already down aren't clicks in here
     for (const h of ['left', 'right'] as const) {
       this.trig[h] = (this.input.xr.gamepads[h]?.getButtonValue(InputComponent.Trigger) ?? 0) > 0.3;
@@ -756,7 +756,7 @@ export class CampSystem extends createSystem({}) {
     } else if (!e.fish.length && !e.logs) {
       g.font = font(500, 24);
       g.fillStyle = INK.dim;
-      g.fillText(c.site.beach ? 'Empty. A couple more nice fish tomorrow.' : 'Empty. You have all they had to give.', 22, 110);
+      g.fillText(c.site.beach ? 'Empty. More fish and logs for you tomorrow.' : 'Empty. You have all they had to give.', 22, 110);
     } else {
       g.font = font(700, 22);
       g.fillStyle = INK.amber;
@@ -764,7 +764,7 @@ export class CampSystem extends createSystem({}) {
       g.font = font(500, 22);
       g.fillStyle = INK.dim;
       g.fillText('Reach in: click a fish to pack it in your backpack,', 22, 118);
-      g.fillText(c.site.beach ? 'or grip it to take it in your hand.' : 'grip it to take it in hand, or point at the logs.', 22, 150);
+      g.fillText('grip it to take it in hand, or point at the logs.', 22, 150);
     }
     this.info.commit();
   }

@@ -26,7 +26,7 @@ export interface CampSite {
   /** the best tier a fish in this chest can be (0 Common .. 3 Legendary) */
   bestTier: number;
   /** the beach party: out in the open, only once every hidden camp's been found; its chest
-   *  fills with a couple of nice fish every day */
+   *  fills with a couple of nice fish and a stack of logs every day */
   beach?: boolean;
 }
 
@@ -58,7 +58,7 @@ export const CAMPS: CampSite[] = [
 ];
 
 /** the ninth: on the main beach west of the timber yard, once all eight above are found */
-export const BEACH_CAMP: CampSite = { id: 'beach', name: 'The Beach Party', x: -16, z: -64, chestAt: 6.08, dancers: 10, sea: { deep: 1, reef: 0.6 }, logs: [0, 0], bestTier: 2, beach: true };
+export const BEACH_CAMP: CampSite = { id: 'beach', name: 'The Beach Party', x: -16, z: -64, chestAt: 6.08, dancers: 10, sea: { deep: 1, reef: 0.6 }, logs: [8, 14], bestTier: 2, beach: true };
 
 /** every camp, the beach party last */
 export const ALL_CAMPS: CampSite[] = [...CAMPS, BEACH_CAMP];

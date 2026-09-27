@@ -277,7 +277,8 @@ and the vendors.
 - **The fire dancers' camps** (`src/camps/`): FIRE FIGHT 2's beach-party dancers (the glowstick
   crowd round its bonfires, ff2's `src/arena/cove/`) have gone off into the wilds in **eight** little
   groups, each dancing round its own fire in a clearing with a chest beside it (the carpenter's
-  sea chest, built so its lid opens). None of them is on the chart and none can be seen from the
+  sea chest, built so its lid opens: hollow inside, lined in red velvet, its logs lying in the
+  bottom). None of them is on the chart and none can be seen from the
   start: they're over the ridges, down the hollows and round the far coasts, a long walk out.
   Listen for the drums, which carry further than the firelight. `npm run check:camps` proves every
   one is hidden from the boardwalk, the pier and the beach, is level and standable, and can be
@@ -291,8 +292,8 @@ and the vendors.
     Point at the logs to add them to your stack, or TAKE ALL. There's always a prize fish a tier up
     (the harder camps can hold a Gold). Walk away and the lid comes down.
   - **The beach party:** find all eight and a ninth group comes down to the main beach, west of the
-    timber yard, and lights a fire there. Their chest fills with a couple of nice fish every day
-    (Silver or better), fresh at midnight. Which camps you've found, and what's left in each chest,
+    timber yard, and lights a fire there. Their chest fills every day with a couple of nice fish
+    (Silver or better) and a stack of logs, fresh at midnight. Which camps you've found, and what's left in each chest,
     are saved.
 - **ALWAYS DAY:** a switch under MUSIC in the backpack holds the island in the early
   afternoon. The fish that only bite at night won't bite while it's on.

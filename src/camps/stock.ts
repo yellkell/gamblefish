@@ -11,7 +11,8 @@
  *
  * A hidden camp's chest is its dancers' gift to whoever finds them: filled once, the day you
  * find them, and never again. The beach party's (the ninth camp, once you've found all eight)
- * fills every day with a couple of nice fish (NICE), both a tier up or better, no logs. Either
+ * fills every day with a couple of nice fish (NICE), both a tier up or better, and a stack of
+ * logs. Either
  * way stockFor is seeded by the camp and the date: the same day fills a chest the same way.
  */
 

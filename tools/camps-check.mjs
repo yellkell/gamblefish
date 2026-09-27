@@ -19,7 +19,7 @@
  *      the sea or a slope too steep to land on.
  *   4. THE CHESTS. The same day fills a chest the same way; the next day, differently; every fish
  *      lies inside the chest's grid without overlapping, would fit the smallest backpack, and is
- *      worth its tier. The beach party's holds a couple of nice fish, each a tier up, and no logs.
+ *      worth its tier. The beach party's holds a couple of nice fish, each a tier up, and logs.
  */
 
 import { readFileSync } from 'node:fs';
