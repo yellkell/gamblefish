@@ -147,6 +147,11 @@ export class Surfaces {
    * `margin` m — or −Infinity if there's none. The grass keeps out from under the raised paths.
    */
   deckOver(x: number, z: number, margin = 0): number {
+    return this.deckAt(x, z, margin)?.top ?? -Infinity;
+  }
+
+  /** The highest deck over (x, z) (its footprint grown by `margin` m), or null. */
+  private deckAt(x: number, z: number, margin = 0): Deck | null {
     const C = 4;
     if (!this.deckGrid) {
       const g = new Map<number, Deck[]>();
@@ -163,15 +168,15 @@ export class Surfaces {
       }
       this.deckGrid = g;
     }
-    let top = -Infinity;
+    let best: Deck | null = null;
     for (const d of this.deckGrid.get(Math.floor(x / C) * 100003 + Math.floor(z / C)) ?? []) {
       const dx = x - d.cx;
       const dz = z - d.cz;
       const lx = dx * d.cos - dz * d.sin;
       const lz = dx * d.sin + dz * d.cos;
-      if (Math.abs(lx) <= d.hx + margin && Math.abs(lz) <= d.hz + margin && d.top > top) top = d.top;
+      if (Math.abs(lx) <= d.hx + margin && Math.abs(lz) <= d.hz + margin && (!best || d.top > best.top)) best = d;
     }
-    return top;
+    return best;
   }
 
   /** The natural surface at (x, z): the ground, or the sea over it. */
@@ -314,25 +319,37 @@ export class Surfaces {
    * fish at `b` isn't under a deck.
    */
   lineUnder(a: Vec3, b: Vec3, top: Vec3, under: Vec3, lift = 0.02): boolean {
-    const over = (x: number, z: number): number => this.deckOver(x, z);
-    const deck = over(b.x, b.z);
-    if (!(deck > b.y + 0.3)) return false;
+    const first = this.deckAt(b.x, b.z);
+    if (!first || !(first.top > b.y + 0.3)) return false;
+    const covers = (x: number, z: number): Deck | null => {
+      const d = this.deckAt(x, z);
+      return d && d.top > b.y + 0.3 ? d : null;
+    };
     let best = Infinity;
-    let edge = deck;
+    let edge: Deck = first;
     const tryDir = (dx: number, dz: number): void => {
-      let lastTop = deck;
+      let last: Deck = first;
       for (let d = 0.05; d <= 12; d += 0.05) {
-        const x = b.x + dx * d;
-        const z = b.z + dz * d;
-        const t = over(x, z);
-        if (t > b.y + 0.3) {
-          lastTop = t;
+        const hit = covers(b.x + dx * d, b.z + dz * d);
+        if (hit) {
+          last = hit;
           continue;
         }
-        const cost = d + Math.hypot(a.x - x, a.z - z);
+        // the edge itself, between the last step under the deck and this one out from it
+        let lo = d - 0.05;
+        let hi = d;
+        for (let k = 0; k < 8; k++) {
+          const m = (lo + hi) / 2;
+          if (covers(b.x + dx * m, b.z + dz * m)) lo = m;
+          else hi = m;
+        }
+        const out = hi + EDGE_CLEAR;
+        const x = b.x + dx * out;
+        const z = b.z + dz * out;
+        const cost = out + Math.hypot(a.x - x, a.z - z);
         if (cost < best) {
           best = cost;
-          edge = lastTop;
+          edge = last;
           top.x = under.x = x;
           top.z = under.z = z;
         }
@@ -343,9 +360,9 @@ export class Surfaces {
     if (toA > 1e-3) tryDir((a.x - b.x) / toA, (a.z - b.z) / toA);
     for (let i = 0; i < 16; i++) tryDir(Math.cos((i / 16) * Math.PI * 2), Math.sin((i / 16) * Math.PI * 2));
     if (best === Infinity) return false;
-    // over the planks' top, and under the beams they're laid on
-    top.y = edge + lift;
-    under.y = Math.max(b.y, edge - DECK_DEPTH);
+    // over the planks' top, and down the deck's face to under the beams they're laid on
+    top.y = edge.top + lift;
+    under.y = Math.max(b.y, edge.top - (DECK_DEPTH[edge.tag] ?? DECK_DEPTH.other) - EDGE_CLEAR);
     return true;
   }
 
@@ -395,8 +412,14 @@ export class Surfaces {
  */
 const LINE_TOP: Record<string, number> = { pierRail: -0.105, walkRail: 0.015 };
 
-/** how deep a deck is at its edge, planks and the beams under them (Tidewater's pier: 0.35 m) */
-const DECK_DEPTH = 0.35;
+/**
+ * How deep a deck is at its edge, from the top of its planks to the bottom of the beam flush with
+ * its side: Tidewater's pier (planks, stringers, the cap beam along its edge) and the walks you
+ * build (boards, joists, cap beams).
+ */
+const DECK_DEPTH: Record<string, number> = { pierDeck: 0.055 + 0.22 + 0.26, walkDeck: 0.05 + 0.25 + 0.18, other: 0.35 };
+/** how far off a deck's edge a line hangs */
+const EDGE_CLEAR = 0.03;
 
 /** Proper crossing of two XZ segments (ff2's `segmentsCross`). */
 function segmentsCross(

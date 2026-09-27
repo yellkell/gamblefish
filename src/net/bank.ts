@@ -165,7 +165,7 @@ export function loadPacks(): Promise<void> {
     } catch (err) {
       bank.status = 'off';
       const said = String((err as Error)?.message ?? '');
-      bank.note = /abort/i.test(said) ? 'the bank is waking up: try again in a moment' : /not open yet/.test(said) ? said.replace(/^the bank is not open yet — /, 'closed: ') : 'the bank is closed right now';
+      bank.note = /abort/i.test(said) ? 'the bank is waking up: try again in a moment' : /not open yet/.test(said) ? said.replace(/^the bank is not open yet(:| —) /, 'closed: ') : 'the bank is closed right now';
     } finally {
       loading = null;
       bump();

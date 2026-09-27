@@ -116,7 +116,7 @@ export const TROPHY: Record<string, TrophyFish> = {
     row: { name: 'Sailfish', sci: 'Istiophorus platypterus', lw: [0.0011, 3.1], habitat: { bay: 1, deep: 1 }, kg: [15, 45], price: 34, fight: 0.9, stamina: 16, rarity: 0.2 },
     needs: { rod: 3, line: 3, bait: 3 },
     minDepth: 10,
-    when: 'big-game rod, 60 lb braid, live squid — past the drop-off',
+    when: 'big-game rod, 60 lb braid, live squid, past the drop-off',
     body: {
       base: 'tuna',
       deep: 0.72,

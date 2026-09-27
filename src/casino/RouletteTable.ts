@@ -437,7 +437,7 @@ export class RouletteTable {
     this.history.unshift(this.result);
     this.history = this.history.slice(0, 12);
     const col = colourOf(this.result);
-    this.status = r.returned ? `${this.result} ${col.toUpperCase()} — you win $${r.won}` : `${this.result} ${col.toUpperCase()}`;
+    this.status = r.returned ? `${this.result} ${col.toUpperCase()}: you win $${r.won}` : `${this.result} ${col.toUpperCase()}`;
     this.showNumber(this.result, col);
     // the dolly on the winning number
     const p = this.spotLocal(`n${this.result}`);

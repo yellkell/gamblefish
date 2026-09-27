@@ -666,7 +666,7 @@ export class SkelterSystem extends createSystem({}) {
     c.fill();
     c.fillStyle = '#fff4e0';
     c.font = font(700, 58);
-    c.fillText("I'M CENTRED — LET'S GO", W / 2, go.y + 85, go.w - 40);
+    c.fillText("I'M CENTRED. LET'S GO", W / 2, go.y + 85, go.w - 40);
     roundRect(c, down.x, down.y, down.w, down.h, 26);
     c.fillStyle = p.hover === 'down' ? 'rgba(26, 22, 20, 0.2)' : 'rgba(26, 22, 20, 0.08)';
     c.fill();

@@ -494,7 +494,7 @@ export class FishingSystem extends createSystem({}) {
     this.rippleT = 1.2;
     const h = this.habitat();
     this.bite = { phase: 'wait', t: biteDelay(h, hourNow(), fishingDeps.state!.upgrades) };
-    if (!Number.isFinite(this.bite.t)) this.toast.show('Too shallow — nothing lives here', 2, INK.dim);
+    if (!Number.isFinite(this.bite.t)) this.toast.show('Too shallow: nothing lives here', 2, INK.dim);
   }
 
   private updateBite(dt: number): void {
@@ -729,7 +729,7 @@ export class FishingSystem extends createSystem({}) {
         this.buzz(off, 1, 300);
       } else if (e === 'broken') {
         const left = RUNS - f.broken;
-        this.toast.show(`Run broken! ${left} more ${left === 1 ? 'run' : 'runs'} and he’s yours — reel!`, 2.6, INK.good);
+        this.toast.show(`Run broken! ${left} more ${left === 1 ? 'run' : 'runs'} and he’s yours. Reel!`, 2.6, INK.good);
         catchSting(false);
       } else if (e === 'lost') {
         this.toast.show('It’s stripping line. Both hands on the rod when it runs!', 2.6, INK.amber);
@@ -779,7 +779,7 @@ export class FishingSystem extends createSystem({}) {
     window.setTimeout(() => winFanfare(40), 350);
     this.party.win({ at: at.clone().add(new Vector3(0, 1.2, 0)), tier: 3, amount: bounty, banner: 'GREAT WHITE!', bannerAt: at.clone().add(new Vector3(0, 2.9, 0)), quiet: true, scale: 3 });
     window.setTimeout(() => payOut(state, bounty), 900);
-    this.toast.show('Landed! The great white — the last fish in the book', 4, INK.amber);
+    this.toast.show('Landed! The great white, the last fish in the book', 4, INK.amber);
   }
 
   private updateShark(dt: number, time: number): void {
@@ -1122,8 +1122,9 @@ export class FishingSystem extends createSystem({}) {
       if (end !== b) pts.push(_edgeTop, _edgeUnder);
     }
     pts.push(b);
-    // the points shared out over the spans by their length (each span at least one); only the
-    // first, off the tip, droops (past where it rests, the fish holds it straight)
+    // the points shared out over the spans by their length (each span at least one); a line
+    // straight to the float or the fish droops, one that rests on something on its way the fish
+    // holds taut (drooping, it would come up to where it rests from under it, through the timber)
     const spans = pts.length - 1;
     let total = 0;
     for (let k = 1; k <= spans; k++) total += pts[k].distanceTo(pts[k - 1]);
@@ -1139,7 +1140,7 @@ export class FishingSystem extends createSystem({}) {
       const n = k === spans ? left : Math.max(1, Math.min(left - (spans - k), Math.round((LINE_N * len) / Math.max(total, 1e-6))));
       left -= n;
       _v.copy(p).lerp(q, 0.5);
-      if (k === 1) _v.y -= spans === 1 ? sag : Math.min(sag, 0.03 * len);
+      if (spans === 1) _v.y -= sag;
       for (let j = 1; j <= n; j++) {
         const t = j / n;
         const u = 1 - t;

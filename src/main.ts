@@ -367,7 +367,7 @@ World.create(container, {
   // the curtain goes up the moment the session starts, before the island's first frame in it
   world.renderer.xr.addEventListener('sessionstart', () => runBootIntro(world.camera as PerspectiveCamera, world.scene));
 
-  status.textContent = navigator.xr ? 'Ready.' : 'WebXR not available in this browser — desktop preview only.';
+  status.textContent = navigator.xr ? 'Ready.' : 'WebXR not available in this browser: desktop preview only.';
   enter.disabled = !navigator.xr;
   enter.addEventListener('click', () => {
     ensureAudio();
