@@ -1153,8 +1153,8 @@ export class BackpackSystem extends createSystem({}) {
       c.font = font(500, 22);
       c.fillStyle = INK.dim;
       c.fillText('Grip a fish to lift it out.', 22, 90);
-      c.fillText('Same kind, same tier, touching: they merge —', 22, 124);
-      c.fillText('worth more, and they take less room.', 22, 154);
+      c.fillText('Same kind, same tier, touching: they merge.', 22, 124);
+      c.fillText('Merged, they’re worth more and take less room.', 22, 154);
     }
     this.info.commit();
   }

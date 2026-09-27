@@ -56,7 +56,7 @@ const NOTES: Record<string, string> = {
   lookdown: 'Flat as a coin, and it stares down its nose at you. Night, under the pier lamps.',
   glasseye: 'Huge red eyes for the small hours. Hides by day.',
   roosterfish: 'Raises a comb of long dark spines when it hunts, like a rooster’s crest. Crashes live bait in the surf, and takes 30 lb braid to hold.',
-  opah: 'Round as the moon and rose-red, with scarlet fins, and warm-blooded — the only fish that is. Out past the drop-off, for live squid on a surf rod.',
+  opah: 'Round as the moon and rose-red, with scarlet fins, and warm-blooded, the only fish that is. Out past the drop-off, for live squid on a surf rod.',
   sailfish: 'The fastest fish in the sea. Raises its cobalt sail to herd baitfish, then slashes through them with its bill. Needs the big-game rod to reach it.',
   swordfish: 'Comes up from the deep only at night, hunting by the light of the squid. Its broad flat sword is a third of its length.',
   marlin: 'The king of the sea. Cobalt back, silver belly, a spear for a bill, and weights you can hardly believe. Everything at the top, and a little luck.',
@@ -241,7 +241,7 @@ export class FieldGuide {
     c.textAlign = 'center';
     c.font = font(600, 28);
     c.fillStyle = INK_FADED;
-    c.fillText(`— ${n + 1} —`, W / 2, H - 38);
+    c.fillText(`${n + 1}`, W / 2, H - 38);
     const last = this.spread >= this.pages.length / 2 - 1;
     const first = this.spread === 0;
     const can = side === 'left' ? !first : !last;

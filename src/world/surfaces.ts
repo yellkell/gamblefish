@@ -307,6 +307,49 @@ export class Surfaces {
   }
 
   /**
+   * A fish under a deck (the pier: they do go under when you're bringing them in): the line to it
+   * comes over the deck's edge, down its face and in under it. Finds the edge it wraps round (the
+   * nearest way out from under the deck, counting the line's way back up to the tip at `a`) and
+   * gives the line's two bends there: `top`, over the edge, and `under`, beneath it. False if the
+   * fish at `b` isn't under a deck.
+   */
+  lineUnder(a: Vec3, b: Vec3, top: Vec3, under: Vec3, lift = 0.02): boolean {
+    const over = (x: number, z: number): number => this.deckOver(x, z);
+    const deck = over(b.x, b.z);
+    if (!(deck > b.y + 0.3)) return false;
+    let best = Infinity;
+    let edge = deck;
+    const tryDir = (dx: number, dz: number): void => {
+      let lastTop = deck;
+      for (let d = 0.05; d <= 12; d += 0.05) {
+        const x = b.x + dx * d;
+        const z = b.z + dz * d;
+        const t = over(x, z);
+        if (t > b.y + 0.3) {
+          lastTop = t;
+          continue;
+        }
+        const cost = d + Math.hypot(a.x - x, a.z - z);
+        if (cost < best) {
+          best = cost;
+          edge = lastTop;
+          top.x = under.x = x;
+          top.z = under.z = z;
+        }
+        return;
+      }
+    };
+    const toA = Math.hypot(a.x - b.x, a.z - b.z);
+    if (toA > 1e-3) tryDir((a.x - b.x) / toA, (a.z - b.z) / toA);
+    for (let i = 0; i < 16; i++) tryDir(Math.cos((i / 16) * Math.PI * 2), Math.sin((i / 16) * Math.PI * 2));
+    if (best === Infinity) return false;
+    // over the planks' top, and under the beams they're laid on
+    top.y = edge + lift;
+    under.y = Math.max(b.y, edge - DECK_DEPTH);
+    return true;
+  }
+
+  /**
    * A fishing line from a rod tip at `a` to the fish (or float) at `b` lies over whatever stands
    * between them: the sand, a deck's edge, a rail. Of everything along the way that the straight
    * line would go through, the one it comes to rest on is the one it has to climb to most steeply
@@ -351,6 +394,9 @@ export class Surfaces {
  * it: the pier's rail colliders stand 10 cm over its top rail, the walks' 1.5 cm under theirs.
  */
 const LINE_TOP: Record<string, number> = { pierRail: -0.105, walkRail: 0.015 };
+
+/** how deep a deck is at its edge, planks and the beams under them (Tidewater's pier: 0.35 m) */
+const DECK_DEPTH = 0.35;
 
 /** Proper crossing of two XZ segments (ff2's `segmentsCross`). */
 function segmentsCross(

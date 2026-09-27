@@ -143,6 +143,9 @@ const _q = new Quaternion();
 /** where the line rests on its way down (updateLine) */
 const _rest0 = new Vector3();
 const _rest1 = new Vector3();
+/** and where it bends round a deck's edge, to a fish under it */
+const _edgeTop = new Vector3();
+const _edgeUnder = new Vector3();
 const LINE_N = 40;
 
 const smooth = (e0: number, e1: number, x: number): number => {
@@ -177,7 +180,8 @@ export class FishingSystem extends createSystem({}) {
   private hapticT = 0;
   private hintT = 0;
 
-  private landing: { species: string; kg: number; mesh: Mesh; u: FishUniforms; len: number; from: Vector3; lift: number } | null = null;
+  /** `out`: where it's drawn to first, out from under a deck (for `pre` s), before it's swung in */
+  private landing: { species: string; kg: number; mesh: Mesh; u: FishUniforms; len: number; from: Vector3; lift: number; out: Vector3 | null; pre: number } | null = null;
 
   // the other hand on the crank
   private cranking = false;
@@ -806,20 +810,29 @@ export class FishingSystem extends createSystem({}) {
     const len = cm / 100;
     mesh.scale.setScalar(len);
     this.scene.add(mesh);
+    // under the pier, it's drawn out past the deck's edge through the water before it comes up
+    const S = fishingDeps.surfaces;
+    let out: Vector3 | null = null;
+    if (S?.lineUnder(this.rod.tip, this.bob, _edgeTop, _edgeUnder)) {
+      _x.set(_edgeUnder.x - this.bob.x, 0, _edgeUnder.z - this.bob.z);
+      const d = _x.length();
+      out = new Vector3(_edgeUnder.x, this.bob.y, _edgeUnder.z);
+      if (d > 1e-3) out.addScaledVector(_x, (0.25 + len * 0.5) / d);
+    }
+    const start = out ?? this.bob;
     // how high it's swung to clear what's between it and you (the sand up the beach, the pier's
     // edge and rail), over the swing's own 0.8 m
     const hang = _v.copy(this.rod.tip);
     hang.y -= FISHING.landLine;
     let lift = 0.8;
-    const S = fishingDeps.surfaces;
     for (let i = 1; S && i < 24; i++) {
       const s = i / 24;
       const e = s * s * (3 - 2 * s);
-      _x.lerpVectors(this.bob, hang, e);
+      _x.lerpVectors(start, hang, e);
       const need = S.topAt(_x.x, _x.z) + len + 0.12 - _x.y;
       if (need > 0) lift = Math.max(lift, need / Math.max(0.15, Math.sin(e * Math.PI)));
     }
-    this.landing = { species, kg, mesh, u: uniforms, len, from: this.bob.clone(), lift };
+    this.landing = { species, kg, mesh, u: uniforms, len, from: this.bob.clone(), lift, out, pre: out ? 0.45 : 0 };
     this.setState('landing');
     this.bobVel.set(0, 0, 0);
     const info = fishingDeps.state!.lastCatch;
@@ -829,20 +842,27 @@ export class FishingSystem extends createSystem({}) {
   private updateLanding(dt: number, time: number): void {
     const L = this.landing;
     if (!L || this.state !== 'landing') return;
-    // swung in for 0.6 s, then it hangs and swings off the tip on a short line
-    const k = Math.min(1, this.t / 0.6);
+    // (out from under the pier first,) swung in for 0.6 s, then it hangs and swings off the tip on
+    // a short line
+    const k = Math.min(1, Math.max(0, this.t - L.pre) / 0.6);
     const e = k * k * (3 - 2 * k);
     const hang = _v.copy(this.rod.tip);
     hang.y -= FISHING.landLine;
-    if (k < 1) {
-      this.bob.lerpVectors(L.from, hang, e);
+    if (L.out && this.t < L.pre) {
+      const p = this.t / L.pre;
+      this.bob.lerpVectors(L.from, L.out, p * (2 - p));
+      this.bobVel.set(0, 0, 0);
+    } else if (k < 1) {
+      this.bob.lerpVectors(L.out ?? L.from, hang, e);
       this.bob.y += Math.sin(e * Math.PI) * L.lift;
       this.bobVel.set(0, 0, 0);
     } else {
       this.dangle(this.bob, this.bobVel, this.rod.tip, FISHING.landLine, dt);
     }
-    // it hangs a body's length under the hook: never down in the sand or through a deck
-    const floor = Math.max(fishingDeps.terrain?.heightAt(this.bob.x, this.bob.z) ?? -Infinity, fishingDeps.surfaces?.deckOver(this.bob.x, this.bob.z) ?? -Infinity) + L.len + 0.03;
+    // it hangs a body's length under the hook: never down in the sand, or through a deck it's
+    // come up over (one it's still under, coming out from under the pier, it stays under)
+    const deck = fishingDeps.surfaces?.deckOver(this.bob.x, this.bob.z) ?? -Infinity;
+    const floor = Math.max(fishingDeps.terrain?.heightAt(this.bob.x, this.bob.z) ?? -Infinity, this.bob.y > deck - 0.5 ? deck : -Infinity) + L.len + 0.03;
     if (this.bob.y < floor) {
       this.bob.y = floor;
       if (this.bobVel.y < 0) this.bobVel.y = 0;
@@ -1054,9 +1074,6 @@ export class FishingSystem extends createSystem({}) {
         const side = _x.set(-_v.z, 0, _v.x).multiplyScalar(Math.sin(this.wander) * 0.9 * dt * (1 + f.surge));
         const dist = Math.max(1, f.distance);
         this.fishPos.set(tip.x + _v.x * dist, 0, tip.z + _v.z * dist).add(side);
-        // not in under a deck (the line would come up through it): out past its edge
-        const S = fishingDeps.surfaces;
-        for (let n = 0; S && n < 40 && S.deckOver(this.fishPos.x, this.fishPos.z, 0.35) > 0.5; n++) this.fishPos.addScaledVector(_v, 0.25);
         const k = 1 - Math.exp(-dt * 6);
         this.bob.x += (this.fishPos.x - this.bob.x) * k;
         this.bob.z += (this.fishPos.z - this.bob.z) * k;
@@ -1088,14 +1105,21 @@ export class FishingSystem extends createSystem({}) {
     const slack = this.state === 'idle' || this.state === 'windup' || this.state === 'landing' ? 0 : 1;
     const sag = (this.lineOut * (this.state === 'flying' ? 0.03 : 0.07) * (1 - taut) + 0.02) * slack;
     // It lies over whatever's between the tip and the fish (a rail, the deck's edge, the sand),
-    // rather than through it: where it rests, and where it rests on the tip's side of that.
+    // rather than through it: where it rests, and where it rests on the tip's side of that. A fish
+    // that's gone in under the pier has the line over the deck's edge, down its face and in under
+    // it, as a real line bends round the timber.
     const pts = this.linePts;
     pts.length = 0;
     pts.push(a);
     const S = fishingDeps.surfaces;
-    if (S && this.state !== 'flying' && S.lineRest(a, b, _rest1)) {
-      if (S.lineRest(a, _rest1, _rest0)) pts.push(_rest0);
-      pts.push(_rest1);
+    if (S && this.state !== 'flying') {
+      let end: Vector3 = b;
+      if (S.lineUnder(a, b, _edgeTop, _edgeUnder)) end = _edgeTop;
+      if (S.lineRest(a, end, _rest1)) {
+        if (S.lineRest(a, _rest1, _rest0)) pts.push(_rest0);
+        pts.push(_rest1);
+      }
+      if (end !== b) pts.push(_edgeTop, _edgeUnder);
     }
     pts.push(b);
     // the points shared out over the spans by their length (each span at least one); only the
