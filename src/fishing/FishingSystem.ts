@@ -52,7 +52,7 @@ import type { Ocean } from '../world/ocean.ts';
 import type { Surfaces } from '../world/surfaces.ts';
 import { CatchCard, Toast } from './hud.ts';
 import { CLAMP_Y, RodGauge } from './rodGauge.ts';
-import type { FishUniforms, Props } from './props.ts';
+import { swim, type FishUniforms, type Props } from './props.ts';
 import { LINE_PER_CRANK, Rod } from './rod.ts';
 import { SHARK_ID, SharkFight, sharkUnlocked, RUNS } from './shark.ts';
 import { GRIP_Y, SharkShow } from './sharkShow.ts';
@@ -182,16 +182,35 @@ export class FishingSystem extends createSystem({}) {
   private fight: CatchMinigame | null = null;
   private readonly fishPos = new Vector3();
   /** the fish on the line, from the strike until it's landed (or gone): hooked by the mouth at
-   * `bob`, its head along `yaw` */
-  private hooked: { mesh: Mesh; u: FishUniforms; len: number; yaw: number } | null = null;
+   * `bob`, its head along `yaw`; `run` eases 0..1 as it turns away to run, `slip` how long it's
+   * been taking line */
+  private hooked: { mesh: Mesh; u: FishUniforms; len: number; yaw: number; run: number; slip: number } | null = null;
   private wander = 0;
   private lastDist = 0;
   private splashed = false;
   private hapticT = 0;
   private hintT = 0;
 
-  /** `out`: where it's drawn to first, out from under a deck (for `pre` s), before it's swung in */
-  private landing: { species: string; kg: number; mesh: Mesh; u: FishUniforms; len: number; from: Vector3; rise: number; time: number; yaw: number; out: Vector3 | null; pre: number } | null = null;
+  /** `out`: where it's drawn to first, out from under a deck (for `pre` s), before it's swung in.
+   * `face` is where it's turned now; `fit`/`next`/`fitFor`/`twist` its fits of thrashing */
+  private landing: {
+    species: string;
+    kg: number;
+    mesh: Mesh;
+    u: FishUniforms;
+    len: number;
+    from: Vector3;
+    rise: number;
+    time: number;
+    yaw: number;
+    out: Vector3 | null;
+    pre: number;
+    face: number;
+    fit: number;
+    fitFor: number;
+    next: number;
+    twist: number;
+  } | null = null;
 
   // the other hand on the crank
   private cranking = false;
@@ -827,7 +846,7 @@ export class FishingSystem extends createSystem({}) {
     this.scene.add(mesh);
     _v.copy(this.rod.tip).sub(this.bob);
     // struck, it turns away from you
-    this.hooked = { mesh, u: uniforms, len, yaw: Math.atan2(-_v.x, -_v.z) };
+    this.hooked = { mesh, u: uniforms, len, yaw: Math.atan2(-_v.x, -_v.z), run: 1, slip: 0 };
   }
 
   private dropHooked(): void {
@@ -843,16 +862,20 @@ export class FishingSystem extends createSystem({}) {
     const H = this.hooked;
     const f = this.fight;
     if (!H || !f || this.state !== 'fighting') return;
-    const running = this.dragSpeed > 0.05 || f.surge > 0.5;
+    // it turns to run on a real run (a surge, or taking line for a moment), not every time you
+    // ease off the reel, and keeps running till the surge is spent: no flipping back and forth
+    H.slip = this.dragSpeed > 0.05 ? H.slip + dt : 0;
+    const running = f.surge > 0.5 || H.slip > 0.5 || (H.run > 0.5 && f.surge > 0.2);
+    H.run += ((running ? 1 : 0) - H.run) * (1 - Math.exp(-dt * 3));
     _v.copy(this.rod.tip).sub(this.bob);
     let want = Math.atan2(_v.x, _v.z);
     if (running) want += Math.PI + Math.sin(this.wander * 2) * 0.4;
     const d = Math.atan2(Math.sin(want - H.yaw), Math.cos(want - H.yaw));
-    H.yaw += d * (1 - Math.exp(-dt * (running ? 5 : 3)));
-    H.mesh.rotation.set(0, H.yaw, Math.sin(time * 11) * 0.3 * f.surge);
+    H.yaw += d * (1 - Math.exp(-dt * (running ? 3 : 2)));
+    // rolling onto its flank as it fights, and back
+    H.mesh.rotation.set(0, H.yaw, Math.sin(this.wander * 2.3) * 0.35 * f.surge);
     H.mesh.position.set(this.bob.x - Math.sin(H.yaw) * H.len * 0.5, this.bob.y, this.bob.z - Math.cos(H.yaw) * H.len * 0.5);
-    H.u.uSwim.value = 0.1 + 0.2 * f.surge + (running ? 0.08 : 0);
-    H.u.uFreq.value = 3 + 7 * f.surge + (running ? 2 : 0);
+    swim(H.u, 0.07 + 0.11 * f.surge + 0.04 * H.run, 2.4 + 3.2 * f.surge + 0.8 * H.run, dt);
     H.u.uTime.value = time;
   }
 
@@ -887,7 +910,7 @@ export class FishingSystem extends createSystem({}) {
       mesh.scale.setScalar(len);
       mesh.rotation.order = 'YXZ';
       this.scene.add(mesh);
-      H = { mesh, u: uniforms, len, yaw: 0 };
+      H = { mesh, u: uniforms, len, yaw: 0, run: 0, slip: 0 };
     }
     const { mesh, u: uniforms, len } = H;
     // under the pier, it's drawn out past the deck's edge through the water before it comes up
@@ -918,7 +941,24 @@ export class FishingSystem extends createSystem({}) {
     }
     const span = Math.hypot(hang.x - start.x, hang.z - start.z);
     const time = Math.min(1.8, Math.max(0.7, 0.55 + Math.abs(hang.y - start.y) * 0.15 + span * 0.1));
-    this.landing = { species, kg, mesh, u: uniforms, len, from: this.bob.clone(), rise: Math.min(rise, cap), time, yaw: H.yaw, out, pre: out ? 0.45 : 0 };
+    this.landing = {
+      species,
+      kg,
+      mesh,
+      u: uniforms,
+      len,
+      from: this.bob.clone(),
+      rise: Math.min(rise, cap),
+      time,
+      yaw: H.yaw,
+      out,
+      pre: out ? 0.45 : 0,
+      face: H.yaw,
+      fit: 0,
+      fitFor: 0,
+      next: 0.15,
+      twist: 0,
+    };
     this.setState('landing');
     this.bobVel.set(0, 0, 0);
     const info = fishingDeps.state!.lastCatch;
@@ -958,22 +998,46 @@ export class FishingSystem extends createSystem({}) {
       this.bob.y = floor;
       if (this.bobVel.y < 0) this.bobVel.y = 0;
     }
-    // then hangs head-up by the mouth, thrashing, slowly turning so both flanks show
+    // then hangs head-up by the mouth, thrashing in fits: a hard burst of tail beats that twists
+    // it round and swings it on the line, then it hangs, gills going, till the next. The fits come
+    // weaker and further apart as it tires.
+    const tired = Math.min(1, this.t / 9);
+    const vigour = 1 - 0.75 * tired;
+    L.next -= dt;
+    L.fitFor -= dt;
+    if (L.next <= 0) {
+      L.fitFor = (0.45 + Math.random() * 0.5) * (1 - 0.4 * tired);
+      L.next = L.fitFor + (0.6 + Math.random() * 1.1) * (1 + 2 * tired);
+      const side = Math.random() < 0.5 ? -1 : 1;
+      L.twist = side * (0.35 + Math.random() * 0.45) * vigour;
+      if (k >= 1) {
+        // it throws itself sideways (to you, it's across the line) and swings on it
+        this.camera.getWorldPosition(_w);
+        _x.copy(_w).sub(this.bob).setY(0).normalize();
+        this.bobVel.x += -_x.z * side * (0.35 + Math.random() * 0.35) * vigour;
+        this.bobVel.z += _x.x * side * (0.35 + Math.random() * 0.35) * vigour;
+      }
+      if (Math.random() < 0.4 + 0.6 * vigour) shot('fish_flop', MIX.fishFlop - 4 - 5 * tired, { rate: 0.9 + Math.random() * 0.2 });
+    }
+    const inFit = L.fitFor > 0;
+    if (!inFit) L.twist *= Math.exp(-dt * 1.5);
+    // quick into a fit, easing out of it
+    L.fit += ((inFit ? 1 : 0) - L.fit) * (1 - Math.exp(-dt * (inFit ? 12 : 4)));
+    // turning to show you its flank, slowly both ways, as the lift brings it up; always turning
+    // from where it is the short way round, never spinning about
     this.camera.getWorldPosition(_w);
-    const hangYaw = Math.atan2(_w.x - this.bob.x, _w.z - this.bob.z) + Math.PI / 2 + Math.sin(this.t * 0.7) * 0.6;
-    const turn = Math.atan2(Math.sin(hangYaw - L.yaw), Math.cos(hangYaw - L.yaw));
-    const yaw = L.yaw + turn * Math.min(1, k * 1.2);
+    const hangYaw = Math.atan2(_w.x - this.bob.x, _w.z - this.bob.z) + Math.PI / 2 + Math.sin(this.t * 0.7) * 0.6 + L.twist;
+    L.face += Math.atan2(Math.sin(hangYaw - L.face), Math.cos(hangYaw - L.face)) * (1 - Math.exp(-dt * 6 * Math.min(1, k * 1.2)));
+    const yaw = L.face;
     L.mesh.rotation.set(-pitch, yaw, 0);
     L.mesh.position.set(
       this.bob.x - Math.sin(yaw) * Math.cos(pitch) * L.len * 0.5,
       this.bob.y - Math.sin(pitch) * L.len * 0.5,
       this.bob.z - Math.cos(yaw) * Math.cos(pitch) * L.len * 0.5,
     );
-    const thrash = Math.max(0.03, 0.12 * Math.exp(-this.t * 0.35)) * (1 + 0.5 * Math.sin(time * 1.7));
-    L.u.uSwim.value = thrash;
-    L.u.uFreq.value = 2.2 + thrash * 10;
+    const fit = L.fit * vigour;
+    swim(L.u, 0.03 + 0.14 * fit, 1.3 + 3.4 * fit, dt);
     L.u.uTime.value = time;
-    if (Math.random() < dt * 0.5 * Math.exp(-this.t * 0.3)) shot('fish_flop', MIX.fishFlop - 4, { rate: 0.9 + Math.random() * 0.2 });
     // water streams off it, then drips, then stops
     const wet = 30 * Math.exp(-this.t * 0.55);
     if (fishingDeps.fx && Math.random() < wet * dt * 4) {
