@@ -29,6 +29,7 @@ import {
   TOWER_TOP,
   TRACK_WIDTH
 } from './constants.ts';
+import { plinthSideTexture, plinthTopTexture, skirtTexture } from './dress.ts';
 import { helterPath } from './path.ts';
 import {
   addOutline,
@@ -185,20 +186,32 @@ export function createTower(): TowerHandles {
     })
   );
   drum.position.y = TOWER_TOP / 2;
-  addOutline(drum, 0.7);
+  // (0.35 m of ink: at 0.7 it stood out past the slide's inner edge, 0.4 m off the wall, and
+  // showed as a black strip down the side of the last tier)
+  addOutline(drum, 0.35);
   group.add(drum);
 
-  // Boarded-up base band so the drum meets the plinth in something solid.
+  // Boarded-up base band so the drum meets the plinth in something solid, painted like a
+  // fairground front (skelter/dress.ts). Snug on the drum: flared out to 0.6 m at its foot it cut
+  // into the last of the slide, whose inner edge is 0.4 m off the wall; at its foot it just covers
+  // the drum's ink.
+  const skirtR = [TOWER_RADIUS + 0.1, TOWER_RADIUS + 0.37] as const;
   const skirt = new Mesh(
-    new CylinderGeometry(TOWER_RADIUS + 0.35, TOWER_RADIUS + 0.6, 6, 72, 1, true),
-    toon({ color: 0x8a3128, side: DoubleSide })
+    new CylinderGeometry(skirtR[0], skirtR[1], 6, 96, 1, true),
+    toon({ map: skirtTexture(Math.PI * (skirtR[0] + skirtR[1]), 6) })
   );
   skirt.position.y = 3;
   group.add(skirt);
 
+  // The plinth: sandstone flags on top with a red-and-cream kerb, dressed stone down its side.
+  const plinthR = [SLIDE_RADIUS + 5, SLIDE_RADIUS + 5.6] as const;
   const plinth = new Mesh(
-    new CylinderGeometry(SLIDE_RADIUS + 5, SLIDE_RADIUS + 5.6, 0.6, 96),
-    toon({ color: 0xb9ab95 })
+    new CylinderGeometry(plinthR[0], plinthR[1], 0.6, 128),
+    [
+      toon({ map: plinthSideTexture(Math.PI * (plinthR[0] + plinthR[1])) }),
+      toon({ map: plinthTopTexture(plinthR[0], TOWER_RADIUS) }),
+      toon({ color: 0x7e7466 })
+    ]
   );
   plinth.position.y = 0.3;
   group.add(plinth);
