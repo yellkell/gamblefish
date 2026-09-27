@@ -24,6 +24,7 @@ import {
   BufferGeometry,
   CanvasTexture,
   Color,
+  ConeGeometry,
   CylinderGeometry,
   Float32BufferAttribute,
   Group,
@@ -34,6 +35,7 @@ import {
   PlaneGeometry,
   Quaternion,
   SRGBColorSpace,
+  TorusGeometry,
   Euler,
   Vector3,
   type Camera,
@@ -47,6 +49,7 @@ import { font, onFontsReady } from '../ui/fonts.ts';
 import { INK, roundRect } from '../ui/panel.ts';
 import { InteractivePanel, register } from '../ui/pointer.ts';
 import type { BoxCollider } from '../world/data.ts';
+import { buildLamps } from '../world/lamps.ts';
 import { bucketAndRope } from './bucket.ts';
 import { CRATES, DECK, HEAD_STEPS, logsFor, stepsOf, WALK_W, WALKS, type WalkDef, type WalkId } from './gates.ts';
 
@@ -92,6 +95,13 @@ class Pieces {
     this.add(new CylinderGeometry(r * 0.92, r, y1 - y0, 9), _m.makeTranslation(x, (y0 + y1) / 2, z), colour, step);
   }
 
+  /** a square timber from (y0, z0) to (y1, z1) in the plane x, `t` thick */
+  brace(step: number, x: number, y0: number, z0: number, y1: number, z1: number, t: number, colour: Color): void {
+    const len = Math.hypot(y1 - y0, z1 - z0);
+    const m = new Matrix4().compose(new Vector3(x, (y0 + y1) / 2, (z0 + z1) / 2), new Quaternion().setFromEuler(new Euler(Math.atan2(z1 - z0, y1 - y0), 0, 0)), new Vector3(1, 1, 1));
+    this.add(new BoxGeometry(t, len, t), m, colour, step);
+  }
+
   merged(): BufferGeometry {
     return mergeGeometries(this.parts, false)!;
   }
@@ -126,7 +136,9 @@ interface Built {
   /** the crate's collider, once it's there */
   crateBox: BoxCollider;
   crateIn: boolean;
-  lanterns: Mesh[];
+  lanterns: Object3D[];
+  /** the glow round the lanterns after dark (world/lamps.ts) */
+  halo: Object3D;
   /** the bucket and the rope at the end, and whether they're in the way yet */
   corner: Group | null;
   cornerBox: BoxCollider;
@@ -148,6 +160,8 @@ export interface WalkDeps {
   renderer: WebGLRenderer | null;
   /** Tidewater's baked timber (world/village.ts `village_wood`): the pier's rails, to match */
   pierWood: Mesh | null;
+  /** 0 by day .. 1 after dark (world/sky.ts): the lanterns light up */
+  night: { value: number };
   /** a walk has just been finished */
   onFinished?: (w: WalkDef, at: Vector3) => void;
 }
@@ -282,7 +296,8 @@ export class Walks {
     // the platform at the end, laid in four: three rows of three piles, evenly across and along
     const rows = [L0 + 0.1, L0 + hd / 2, L0 + hd - 0.1];
     const platPiles = [-hw / 2 + 0.12, 0, hw / 2 - 0.12];
-    const lanterns: Mesh[] = [];
+    const lanterns: Object3D[] = [];
+    const halos: [number, number, number, string][] = [];
     const last = def.bays + HEAD_STEPS - 1;
     for (let k = 0; k < HEAD_STEPS; k++) {
       const s = def.bays + k;
@@ -312,17 +327,27 @@ export class Walks {
         // on a tall post at each corner
         header(s, z1 - 0.05, hw);
         for (const side of [-1, 1]) {
-          P.box(s, side * (hw / 2 - 0.05), DECK + 1.3, z1 - 0.06, 0.13, 2.6, 0.13, post);
-          P.box(s, side * (hw / 2 - 0.05), DECK + 2.62, z1 - 0.06, 0.3, 0.05, 0.3, post);
-          const lamp = new Mesh(new BoxGeometry(0.2, 0.28, 0.2), new MeshBasicMaterial({ color: 0xffd28a, toneMapped: false }));
-          const [wx, wz] = toWorld(side * (hw / 2 - 0.05), z1 - 0.06);
-          lamp.position.set(wx, DECK + 2.45, wz);
+          const lx = side * (hw / 2 - 0.05);
+          const lz = z1 - 0.06;
+          // the post, capped; an arm out over the open edge on a brace; the lantern hangs off it
+          P.box(s, lx, DECK + 1.3, lz, 0.13, 2.6, 0.13, post);
+          P.box(s, lx, DECK + 2.62, lz, 0.19, 0.04, 0.19, post);
+          P.box(s, lx, DECK + 2.48, lz + 0.26, 0.07, 0.07, 0.52, post);
+          P.brace(s, lx, DECK + 2.12, lz + 0.07, DECK + 2.45, lz + 0.3, 0.05, post);
+          const [wx, wz] = toWorld(lx, lz + 0.46);
+          const lamp = lantern(lanternGlass);
+          lamp.position.set(wx, DECK + 2.445, wz);
+          lamp.rotation.y = yaw;
           lamp.visible = false;
           this.group.add(lamp);
           lanterns.push(lamp);
+          halos.push([wx, DECK + 2.445 - LANTERN_GLASS_Y, wz, 'lantern']);
         }
       }
     }
+
+    const halo = buildLamps(halos, this.deps.night);
+    this.group.add(halo);
 
     const uniforms = { uBuilt: { value: 0 }, uDrop: { value: 1 } };
     const mat = new MeshLambertMaterial({ vertexColors: true });
@@ -414,6 +439,7 @@ export class Walks {
       crateBox,
       crateIn: false,
       lanterns,
+      halo,
       corner,
       cornerBox,
       cornerIn: false,
@@ -443,6 +469,8 @@ export class Walks {
   }
 
   update(dt: number, camera: Camera): void {
+    // the lanterns' glass: lit from dusk
+    lanternGlass.emissiveIntensity = this.deps.night.value * 1.8;
     const e = camera.matrixWorld.elements;
     const eye = _v.set(e[12], e[13] - 0.35, e[14]);
     for (const w of this.walks) {
@@ -487,7 +515,9 @@ export class Walks {
       const left = this.logsIn(w.def) - w.shown * w.def.cost;
       fill.position.y = 0.06 + Math.min(0.5, left * 0.05);
       fill.visible = left > 0;
-      for (const l of w.lanterns) l.visible = w.shown >= stepsOf(w.def);
+      const lit = w.shown >= stepsOf(w.def);
+      for (const l of w.lanterns) l.visible = lit;
+      w.halo.visible = lit && this.deps.night.value > 0.01;
     }
     this.sync();
   }
@@ -692,4 +722,45 @@ function gateRail(def: WalkDef, wood: Mesh | null): { mesh: Mesh; box: BoxCollid
   const mesh = new Mesh(mergeGeometries(parts, false)!, new MeshLambertMaterial({ vertexColors: true }));
   const box: BoxCollider = { tag: 'pierRail', walkable: false, solid: true, cx: g.alongX ? mid : g.line, cz: g.alongX ? g.line : mid, hx: g.alongX ? L / 2 : 0.08, hz: g.alongX ? 0.08 : L / 2, rotY: 0, top: DECK + 1.0, bottom: DECK };
   return { mesh, box };
+}
+
+/** the lanterns' glass: amber by day, lit after dark (Walks.update) */
+const lanternGlass = new MeshLambertMaterial({ color: 0x9a8a68, emissive: 0xffb45a, emissiveIntensity: 0 });
+const lanternIron = new MeshLambertMaterial({ color: 0x2c2a28 });
+/** how far below its hook the lantern's glass is centred */
+const LANTERN_GLASS_Y = 0.24;
+
+/**
+ * A ship's lantern hanging from its hook (the origin): a ring, a hood, four corner bars round
+ * the glass, a base and a drip below.
+ */
+function lantern(glass: MeshLambertMaterial): Group {
+  const g = new Group();
+  const iron = (geo: BufferGeometry, y: number, x = 0, z = 0): void => {
+    const m = new Mesh(geo, lanternIron);
+    m.position.set(x, y, z);
+    g.add(m);
+  };
+  // the ring on the hook, and the hood (a four-sided roof)
+  const ring = new Mesh(new TorusGeometry(0.03, 0.007, 5, 12), lanternIron);
+  ring.position.y = -0.03;
+  g.add(ring);
+  const hood = new ConeGeometry(0.12, 0.09, 4, 1);
+  hood.rotateY(Math.PI / 4);
+  iron(hood, -0.1);
+  iron(new BoxGeometry(0.17, 0.02, 0.17), -0.145);
+  // the glass and the bars at its corners
+  const pane = new Mesh(new BoxGeometry(0.13, 0.17, 0.13), glass);
+  pane.position.y = -LANTERN_GLASS_Y;
+  g.add(pane);
+  for (const [x, z] of [
+    [-1, -1],
+    [1, -1],
+    [1, 1],
+    [-1, 1],
+  ])
+    iron(new BoxGeometry(0.018, 0.19, 0.018), -LANTERN_GLASS_Y, x * 0.068, z * 0.068);
+  iron(new BoxGeometry(0.16, 0.025, 0.16), -0.335);
+  iron(new ConeGeometry(0.03, 0.05, 6).rotateX(Math.PI), -0.37);
+  return g;
 }
