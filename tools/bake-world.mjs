@@ -135,6 +135,14 @@ const gapped = (alongX, c, a0, a1) => {
   return out;
 };
 const railsLaid = { top: [], mid: [] };
+/** the walkway bent (a row of piles across the pier) nearest z: Pier.js's own spacing */
+const bentAt = (z) => {
+  const zb0 = PIER.zStart + 0.35;
+  const zbN = PIER.headZ0 + 0.25;
+  const nB = Math.round((zbN - zb0) / 3.0);
+  const step = (zbN - zb0) / nB;
+  return zb0 + Math.max(0, Math.min(nB, Math.round((z - zb0) / step))) * step;
+};
 /** a harbour-frame piece inside the pier's footprint */
 const onPier = (B, x, z) => B.stack.length === 0 && x > PIER.headX0 - 0.5 && x < PIER.headX1 + 0.5 && z > PIER.zStart - 0.5 && z < PIER.zEnd + 0.5;
 /**
@@ -328,6 +336,17 @@ const clipRail = (kind, alongX, a0, a1, c, half) => {
       const y0 = level ? RAIL.mid : lerpY(ab[0]);
       const y1 = level ? RAIL.mid : lerpY(ab[1]);
       return beam.call(this, key, [p0[0], y0, ab[0]], [p1[0], y1, ab[1]], w, h, o);
+    }
+    // The walkway's sway braces, a diagonal down the outside of each pile line on alternate bays,
+    // stop 25–45 cm short of the piles at both ends: planks floating in the air. The bake carries
+    // each end onto its pile (the bent's centre line) and snugs the brace in against the piles'
+    // faces, so it is spiked to them the way a real sway brace is.
+    if (key === 'wood' && w === 0.05 && p0[0] === p1[0] && onPier(this, p0[0], p0[2])) {
+      const side = Math.sign(p0[0] - PIER.x);
+      if (near(p0[0], PIER.x + side * (PIER.pileOff + PIER.pileR + 0.03), 1e-4) && Math.abs(p1[2] - p0[2]) > 1.5) {
+        const xo = PIER.x + side * (PIER.pileOff + PIER.pileR * 0.84 + 0.02);
+        return beam.call(this, key, [xo, p0[1], bentAt(p0[2])], [xo, p1[1], bentAt(p1[2])], w, h, o);
+      }
     }
     // Tidewater's slipway rails (one straight beam each)
     if (inBoathouse(this) && w === 0.14 && h === 0.12 && SLIP.rails.includes(p0[0]) && p0[0] === p1[0]) return;

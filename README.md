@@ -53,6 +53,8 @@ JavaScript, though, and that does carry over:
     over the posts, and the overlapping faces flickered.
     The four outhouses are left out, and gateways for the woodworks' walks are cut in the
     pier head's rails.
+    The walkway's sway braces run pile to pile. Tidewater stops each one 25–45 cm short of the
+    piles at both ends, which leaves the boards floating.
   - `world.json` — the layout and Tidewater's collision world.
 - The runtime (`src/world/`) rebuilds all of this in three.js for Quest:
   - LOD terrain chunks.
@@ -335,7 +337,7 @@ same questions as ff2's `TELEPORT_AREAS`, `floorYAt` and `crossesWall`:
 | `src/locomotion/` | ff2 teleport, its tuning, the octagon |
 | `src/world/` | baked data reader, heightfield, surfaces (pure), terrain, ocean, sky, village |
 | `src/audio/` | ff2's synth SFX bus and cash chime; Tidewater's sampled fishing and shore sounds; the music |
-| `src/fishing/` | the rod, cast, bites, fight, landing, catch card, tension gauge |
+| `src/fishing/` | the rod, cast, bites, fight, landing, catch card, the line meter clipped to the rod |
 | `src/woodworks/` | the axe, the woodlots and the timber yard; the reef and deep walks, their build crates and boards, and the bucket at the end |
 | `src/skelter/` | the helter skelter: its plot, the tower and slide, the ride (from HELTER SKELTER) |
 | `src/ui/` | ff2's Rajdhani type kit and coin symbol, canvas panels, the wrist wallet |

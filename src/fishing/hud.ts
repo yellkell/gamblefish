@@ -1,8 +1,7 @@
 /**
- * The fishing readouts, painted on canvases in the world (no screen in VR):
+ * The fishing readouts, painted on canvases in the world (no screen in VR). The line meter on
+ * the rod lives in rodGauge.ts.
  *
- *  - RodGauge: a small plate clipped to the rod above the reel, facing you — the line tension
- *    with Tidewater's green band, the line out, and a one-word state ("STRIKE!", "REEL").
  *  - Toast: a short message that drifts into view in front of you and fades ("Fish on!").
  *  - CatchCard: the landed fish's name, length, weight and price, with NEW SPECIES / RECORD.
  */
@@ -15,71 +14,6 @@ import { FISH } from './tidewater.ts';
 import { TIMED } from './timedFish.ts';
 import { TROPHY } from './trophyFish.ts';
 import { SHARK_ID } from './shark.ts';
-
-export interface GaugeState {
-  label: string;
-  labelColour?: string;
-  tension: number | null; // null: no fish on
-  band: [number, number];
-  lineOut: number;
-  holdKg: number;
-  holdMax: number;
-}
-
-export class RodGauge {
-  readonly panel = new Panel([256, 128], [0.08, 0.04]);
-  private last = '';
-
-  paint(s: GaugeState): void {
-    const key = `${s.label}|${s.tension === null ? '-' : s.tension.toFixed(2)}|${s.lineOut.toFixed(0)}|${s.holdKg.toFixed(1)}`;
-    if (key === this.last) return;
-    this.last = key;
-    const c = this.panel.ctx;
-    this.panel.clear();
-    roundRect(c, 2, 2, 252, 124, 14);
-    c.fillStyle = INK.glass;
-    c.fill();
-    c.lineWidth = 2;
-    c.strokeStyle = INK.rim;
-    c.stroke();
-    c.textBaseline = 'middle';
-
-    c.font = font(700, 34);
-    c.fillStyle = s.labelColour ?? INK.hot;
-    c.textAlign = 'left';
-    c.fillText(s.label, 14, 30, s.lineOut > 0.5 ? 168 : 228);
-    c.font = font(600, 22);
-    c.fillStyle = INK.dim;
-    c.textAlign = 'right';
-    c.fillText(s.lineOut > 0.5 ? `${s.lineOut.toFixed(0)} m` : '', 242, 30);
-
-    // tension bar with the green band
-    const x = 14;
-    const y = 58;
-    const w = 228;
-    const h = 26;
-    roundRect(c, x, y, w, h, 6);
-    c.fillStyle = 'rgba(255,255,255,0.08)';
-    c.fill();
-    const scale = (t: number): number => x + (w * Math.min(1.15, Math.max(0, t))) / 1.15;
-    c.fillStyle = 'rgba(63, 214, 106, 0.28)';
-    c.fillRect(scale(s.band[0]), y, scale(s.band[1]) - scale(s.band[0]), h);
-    c.fillStyle = 'rgba(232, 53, 42, 0.35)';
-    c.fillRect(scale(1), y, x + w - scale(1), h);
-    if (s.tension !== null) {
-      const t = s.tension;
-      c.fillStyle = t > 1 ? INK.danger : t > s.band[1] ? INK.warn : t >= s.band[0] ? INK.good : INK.sea;
-      roundRect(c, x + 2, y + 4, Math.max(4, scale(t) - x - 4), h - 8, 4);
-      c.fill();
-    }
-
-    c.font = font(500, 20);
-    c.fillStyle = INK.dim;
-    c.textAlign = 'left';
-    c.fillText(`backpack ${s.holdKg} / ${s.holdMax} cells  ·  A to open`, 14, 106, 228);
-    this.panel.commit();
-  }
-}
 
 /** A message that settles in front of you, lazily following your gaze, then fades. */
 export class Toast {
