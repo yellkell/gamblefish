@@ -12,7 +12,11 @@
 
 /** Slide heights: the top of each tier, then the ground landing. */
 export const TIER_HEIGHTS = [300, 200, 100];
-export const GROUND_LANDING_Y = 0.6; // the exit bay sits on a low plinth
+/** the top of the low plinth the tower stands on */
+export const PLINTH_TOP = 0.6;
+/** The exit bay: the slide's last stretch lies on the plinth, a board's thickness over it. (Laid
+ * in the plinth's top face, the two z-fought: the track flickered where it met the floor.) */
+export const GROUND_LANDING_Y = PLINTH_TOP + 0.05;
 export const TOTAL_TIERS = TIER_HEIGHTS.length;
 
 /** Total vertical descent, balcony to exit (the end board's stat). */
@@ -42,7 +46,6 @@ export const TOWER_TOP = TIER_HEIGHTS[0] + 16; // wall continues above the balco
 export const ROOF_HEIGHT = 34;
 /** the plinth under it all */
 export const PLINTH_RADIUS = SLIDE_RADIUS + 5.6;
-export const PLINTH_TOP = 0.6;
 
 /**
  * Gates ("barriers"): lane offsets across the 3-lane slide. Lanes are spread to ±0.5 m so the

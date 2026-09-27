@@ -32,6 +32,7 @@ import {
   INNER_LIP,
   OUTER_LIP,
   PAINT,
+  PLINTH_TOP,
   SLIDE_PITCH,
   TRACK_WIDTH
 } from './constants.ts';
@@ -383,7 +384,7 @@ function makePennantGeometry(): BufferGeometry {
 function createFinishArch(end: PathSample): Group {
   const arch = new Group();
   const ahead = end.position.clone().addScaledVector(end.forward, 5.2);
-  ahead.y = end.position.y;
+  ahead.y = PLINTH_TOP; // its posts stand on the plinth, beside the bed's end
   arch.position.copy(ahead);
   arch.rotation.y = end.yaw;
 

@@ -629,9 +629,13 @@ export class Vegetation {
     }
   }
 
-  update(time: number, camera: Camera): void {
+  /** `at`: pick the plants round there instead of round the eye (the helter skelter holds them
+   * round its tower while you ride: at slide speed they were re-picked several times a second) */
+  update(time: number, camera: Camera, at?: { x: number; z: number } | null): void {
     for (const m of this.swayMats) m.uniforms.uTime.value = time;
-    _p.setFromMatrixPosition(camera.matrixWorld); // read-only (see world/ocean.ts update)
+    if (at) _p.set(at.x, 0, at.z);
+    else _p.setFromMatrixPosition(camera.matrixWorld); // read-only (see world/ocean.ts update)
+    _p.y = 0; // the picks go by the map: climbing or dropping doesn't change them
     if (_p.distanceToSquared(this.last) < 9) return; // re-pick only after you've moved 3 m
     this.last.copy(_p);
     const x = _p.x;

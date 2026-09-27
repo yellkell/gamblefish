@@ -348,6 +348,11 @@ const clipRail = (kind, alongX, a0, a1, c, half) => {
         return beam.call(this, key, [xo, p0[1], bentAt(p0[2])], [xo, p1[1], bentAt(p1[2])], w, h, o);
       }
     }
+    // A metal roof's fascia boards (buildHouse fascia(): 3.2 × 20 cm, the only beam that size)
+    // are laid flush with the roof sheet's edge: a rake board's outer face is the sheet's cut
+    // side, the same face, so the two z-fight and the roofs flickered along their sides. Each
+    // board is 2 cm thicker about its centre line, so it stands a centimetre proud of the sheet.
+    if (key === 'wood' && w === 0.032 && h === 0.2) return beam.call(this, key, p0, p1, w + 0.02, h, o);
     // Tidewater's slipway rails (one straight beam each)
     if (inBoathouse(this) && w === 0.14 && h === 0.12 && SLIP.rails.includes(p0[0]) && p0[0] === p1[0]) return;
     const p = blockingPost(this);

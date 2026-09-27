@@ -290,10 +290,11 @@ export function createTower(): TowerHandles {
   const balconyOuter = SLIDE_RADIUS + TRACK_WIDTH / 2 + 1.1;
   const balconyA0 = helixStartAngle - 4.1;
   const balconyA1 = helixStartAngle + 0.02;
-  // Boarded like the slide bed: the same timber, laid across the walkway.
+  // Boarded like the slide bed: the same timber, laid across the walkway. (The boards stop where
+  // the red edge starts: laid under it, the two fought from a distance.)
   const deckMat = toon({ map: getWoodTexture(), side: DoubleSide });
   const balcony = new Mesh(
-    annulusSector(balconyInner, balconyOuter, balconyA0, balconyA1, 72, WOOD_TILE),
+    annulusSector(balconyInner, balconyOuter - 0.35, balconyA0, balconyA1, 72, WOOD_TILE),
     deckMat
   );
   balcony.position.y = TIER_HEIGHTS[0] - 0.04;
@@ -363,7 +364,7 @@ export function createTower(): TowerHandles {
     const a0 = seg.angle0 - 3.2 / SLIDE_RADIUS; // includes the arrival strip behind it
     const a1 = seg.angle0 + seg.length / SLIDE_RADIUS + 0.02;
     const outer = SLIDE_RADIUS + TRACK_WIDTH / 2 + 0.9;
-    const bay = new Mesh(annulusSector(TOWER_RADIUS - 0.3, outer, a0, a1, 24, WOOD_TILE), deckMat);
+    const bay = new Mesh(annulusSector(TOWER_RADIUS - 0.3, outer - 0.3, a0, a1, 24, WOOD_TILE), deckMat);
     bay.position.y = seg.y0 - 0.06;
     group.add(bay);
     const trim = new Mesh(annulusSector(outer - 0.3, outer, a0, a1, 24), bayTrim);

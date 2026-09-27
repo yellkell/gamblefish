@@ -105,10 +105,11 @@ function baitDecor(k: Kit, room: Interior, top: number, cz: number): Group {
   tank.position.set(room.w / 2 - 0.45, 0, 0.35);
   tank.rotation.y = -Math.PI / 2;
   g.add(tank);
-  // buckets and a cooler by the counter
+  // buckets and a cooler by the counter (each bucket out over its rolled rim and down inside to
+  // its floor, clear of the room's floor: a wall with no inside is see-through from above)
   const c = new Batch();
   for (const [x, col] of [[-1.25, '#3f7f55'], [-0.95, '#c23b2e']] as const) {
-    c.at(M.gloss(k.renderer, col), turned([[0, 0], [0.12, 0], [0.14, 0.3], [0.145, 0.305], [0.135, 0.3]], 20), x, 0, cz + 0.55);
+    c.at(M.gloss(k.renderer, col), turned([[0, 0], [0.12, 0], [0.14, 0.3], [0.146, 0.303], [0.145, 0.31], [0.136, 0.306], [0.134, 0.3], [0.115, 0.03], [0, 0.03]], 20), x, 0, cz + 0.55);
     c.at(M.metal(k.renderer, '#c8ccd0', 0.3), new TorusGeometry(0.14, 0.004, 4, 16, Math.PI), x, 0.3, cz + 0.55, 0, 0.4, 0);
   }
   c.at(M.gloss(k.renderer, '#f4f4f0'), rounded(0.52, 0.3, 0.34, 0.03), 1.0, 0.15, cz + 0.6);

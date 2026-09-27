@@ -56,8 +56,10 @@ const RISE = 30;
 const KNOCK_S = 0.3;
 /** the key in the save's woodworks.built */
 const KEY = 'skelter';
-/** seconds between refreshes of the fast-changing HUD readouts */
-const HUD_REFRESH = 0.1;
+/** seconds between refreshes of the fast-changing HUD readouts (each one repaints and re-uploads
+ * the HUD's canvas: at a tenth of a second the height ticking over had it doing that every frame
+ * or two down the slide) */
+const HUD_REFRESH = 0.25;
 
 export const skelterDeps: {
   state: GameState | null;
