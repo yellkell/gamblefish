@@ -227,21 +227,38 @@ export class Walks {
     const q = hd / HEAD_STEPS;
     /** the step a point `z` along the walk is laid in: a bay, or a quarter of the platform */
     const stepAt = (z: number): number => (z < L0 ? Math.min(def.bays - 1, Math.floor(z / def.bay)) : def.bays + Math.min(HEAD_STEPS - 1, Math.floor((z - L0) / q)));
-    // the deck boards, end to end all the way out: across the walk, then across the platform
-    for (let pz = PLANK / 2; pz + 0.1 <= L0 + hd + 1e-6; pz += PLANK) {
-      const w = pz < L0 ? WALK_W : hw;
-      // (a wide board wanders as far at its ends as a narrow one)
-      P.box(stepAt(pz), (r() - 0.5) * 0.02, DECK - 0.025, pz, w + (r() - 0.5) * 0.03, 0.05, 0.2, timber(r), ((r() - 0.5) * 0.03) / w);
-    }
-    // a row of piles across the deck at `pz`, and the cap beam they carry
+    // The timber stacks, each piece bearing on the one below: boards (the top 5 cm), on joists
+    // (JOIST deep), on the cap beams, on the piles.
+    const BOARD = 0.05;
+    const JOIST = 0.25;
+    const CAP = 0.18;
+    const joistY = DECK - BOARD - JOIST / 2;
+    const capY = DECK - BOARD - JOIST - CAP / 2;
+    // the deck boards: a whole number of them along the walk and along the platform, evenly
+    // spaced, so each stretch starts and ends on a board's edge
+    const boards = (z0: number, z1: number, w: number): void => {
+      const n = Math.max(1, Math.round((z1 - z0) / PLANK));
+      const pitch = (z1 - z0) / n;
+      for (let i = 0; i < n; i++) {
+        const pz = z0 + (i + 0.5) * pitch;
+        // (a wide board wanders as far at its ends as a narrow one)
+        P.box(stepAt(pz), (r() - 0.5) * 0.02, DECK - BOARD / 2, pz, w + (r() - 0.5) * 0.02, BOARD, pitch - 0.03, timber(r), ((r() - 0.5) * 0.02) / w);
+      }
+    };
+    boards(0, L0, WALK_W);
+    boards(L0, L0 + hd, hw);
+    // a row of piles across the deck at `pz`, and the cap beam they carry, flush with the deck's sides
     const bent = (step: number, pz: number, w: number, xs: number[]): void => {
-      for (const px of xs) P.cyl(step, px, seabed(px, pz), DECK - 0.36, pz, 0.14, pile);
-      P.box(step, 0, DECK - 0.44, pz, w + 0.2, 0.18, 0.2, beam);
+      for (const px of xs) P.cyl(step, px, seabed(px, pz), capY, pz, 0.14, pile);
+      P.box(step, 0, capY, pz, w, CAP, 0.2, beam);
     };
-    // the stringers under a stretch [z0, z1], on the cap beams, under the boards
+    // the joists under a stretch [z0, z1], on the cap beams, under the boards (the outer ones are
+    // the deck's edge boards)
     const stringers = (step: number, z0: number, z1: number, xs: number[]): void => {
-      for (const sx of xs) P.box(step, sx, DECK - 0.16, (z0 + z1) / 2, 0.1, 0.18, z1 - z0, beam);
+      for (const sx of xs) P.box(step, sx, joistY, (z0 + z1) / 2, 0.1, JOIST, z1 - z0, beam);
     };
+    // an edge board across the deck's end at `pz`
+    const header = (step: number, pz: number, w: number): void => P.box(step, 0, joistY, pz, w, JOIST, 0.1, beam);
     // a rail along one side of a stretch: posts at its ends, a top and a mid rail
     const railRun = (step: number, x: number, z0: number, z1: number, posts: number[]): void => {
       for (const pz of posts) P.box(step, x, DECK + 0.5, pz, 0.11, 1.0, 0.11, post);
@@ -258,12 +275,12 @@ export class Walks {
       const z1 = z0 + def.bay;
       if (i === 0) bent(i, 0.2, WALK_W, walkPiles);
       if (i < def.bays - 1) bent(i, z1, WALK_W, walkPiles);
-      stringers(i, z0, z1, [-half + 0.3, 0, half - 0.3]);
+      stringers(i, z0, z1, [-half + 0.05, 0, half - 0.05]);
       for (const x of [-half + 0.05, half - 0.05]) railRun(i, x, z0, z1, i === 0 ? [z0, z1] : [z1]);
       floor(i, 0, (z0 + z1) / 2, half, def.bay / 2 + 0.05);
     }
     // the platform at the end, laid in four: three rows of three piles, evenly across and along
-    const rows = [L0 + 0.1, L0 + hd / 2, L0 + hd - 0.2];
+    const rows = [L0 + 0.1, L0 + hd / 2, L0 + hd - 0.1];
     const platPiles = [-hw / 2 + 0.12, 0, hw / 2 - 0.12];
     const lanterns: Mesh[] = [];
     const last = def.bays + HEAD_STEPS - 1;
@@ -273,7 +290,9 @@ export class Walks {
       const z0 = L0 + k * q;
       const z1 = z0 + q;
       for (const pz of rows) if (stepAt(pz) === s) bent(s, pz, hw, platPiles);
-      stringers(s, z0, z1, [-hw / 2 + 0.3, -hw / 4, 0, hw / 4, hw / 2 - 0.3]);
+      stringers(s, z0, z1, [-hw / 2 + 0.05, -hw / 4, 0, hw / 4, hw / 2 - 0.05]);
+      // the platform's front edge, either side of where the walk comes in
+      if (k === 0) header(s, z0 + 0.05, hw);
       // railed down both sides (the lantern posts stand at the far corners)
       for (const x of [-hw / 2 + 0.05, hw / 2 - 0.05]) railRun(s, x, z0, z1, s === last ? [] : [z1]);
       floor(s, 0, (z0 + z1) / 2, hw / 2, q / 2 + 0.05);
@@ -291,7 +310,7 @@ export class Walks {
       if (s === last) {
         // the far edge is open to fish off: an edge board under the boards' ends, and a lantern
         // on a tall post at each corner
-        P.box(s, 0, DECK - 0.13, z1 - 0.04, hw + 0.02, 0.2, 0.07, beam);
+        header(s, z1 - 0.05, hw);
         for (const side of [-1, 1]) {
           P.box(s, side * (hw / 2 - 0.05), DECK + 1.3, z1 - 0.06, 0.13, 2.6, 0.13, post);
           P.box(s, side * (hw / 2 - 0.05), DECK + 2.62, z1 - 0.06, 0.3, 0.05, 0.3, post);
