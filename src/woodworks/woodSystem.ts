@@ -83,9 +83,11 @@ export const woodDeps: {
   addBox: ((b: BoxCollider) => void) | null;
   removeBox: ((b: BoxCollider) => void) | null;
   env: Texture | null;
+  /** 0 by day .. 1 after dark (world/sky.ts) */
+  night: { value: number } | null;
   /** are you indoors, or is the backpack open (the axe stays away) */
   busy: (() => boolean) | null;
-} = { state: null, ground: null, addBox: null, removeBox: null, env: null, busy: null };
+} = { state: null, ground: null, addBox: null, removeBox: null, env: null, night: null, busy: null };
 
 const _v = new Vector3();
 const _w = new Vector3();
@@ -241,6 +243,7 @@ export class WoodSystem extends createSystem({}) {
       removeBox: d.removeBox ?? (() => {}),
       renderer: this.renderer,
       pierWood: (this.scene.getObjectByName('village_wood') as Mesh | undefined) ?? null,
+      night: d.night ?? { value: 0 },
       onFinished: (w, at) => {
         winFanfare(30);
         this.party.win({ at, tier: 3, banner: w.id === 'reef' ? 'REEF WALK OPEN!' : 'DEEP WALK OPEN!', bannerAt: at.clone().add(new Vector3(0, 1.6, 0)), scale: 2.5 });
