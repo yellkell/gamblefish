@@ -84,6 +84,10 @@ export const backpackDeps: {
   walks: (() => Record<string, number>) | null;
   /** go to a place on the chart; false if you can't just now (a fish on the line) */
   travel: ((p: Place) => boolean) | null;
+  /** where you stand to get on the helter skelter, and what you face (the chart's marker for it) */
+  skelter?: (() => { at: [number, number]; face: [number, number] } | null) | null;
+  /** the backpack stays shut (up the helter skelter) */
+  blocked?: (() => boolean) | null;
 } = { state: null, props: null, chart: null, where: null, walks: null, travel: null };
 
 /** Somewhere in the world that takes a fish from your hand (Joe's scale, a counter...). */
@@ -300,7 +304,7 @@ export class BackpackSystem extends createSystem({}) {
     register(this.tabs);
     // going somewhere off the chart shuts the backpack behind you
     const travel = backpackDeps.travel;
-    this.guide = new FieldGuide(backpackDeps.state!, backpackDeps.props!, this.renderer, backpackDeps.chart, backpackDeps.where, backpackDeps.walks, travel ? (p) => travel(p) && this.close() : null);
+    this.guide = new FieldGuide(backpackDeps.state!, backpackDeps.props!, this.renderer, backpackDeps.chart, backpackDeps.where, backpackDeps.walks, travel ? (p) => travel(p) && this.close() : null, backpackDeps.skelter ?? null);
     this.guide.group.position.y = 0.03;
     this.tray.group.add(this.guide.group);
     backpackView.takeInHand = (id, hand) => this.takeInHand(id, hand);
@@ -629,7 +633,7 @@ export class BackpackSystem extends createSystem({}) {
       const pad = this.input.xr.gamepads[h];
       if (pad?.getButtonDown(h === 'right' ? InputComponent.A_Button : InputComponent.X_Button)) {
         if (backpackView.open) this.close();
-        else this.open();
+        else if (!backpackDeps.blocked?.()) this.open();
       }
     }
     locomotion.enabled = locomotion.enabled && !backpackView.open;

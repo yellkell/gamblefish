@@ -27,6 +27,8 @@ import { silhouette, thumbnail } from '../ui/thumbnail.ts';
 import { SHARK_ID } from '../fishing/shark.ts';
 import { drawChart, KEY, CHART, type ChartSource, type Place } from './chart.ts';
 import { WALKS } from '../woodworks/gates.ts';
+import { PLINTH_RADIUS, TOWER_RADIUS } from '../skelter/constants.ts';
+import { SKELTER } from '../skelter/site.ts';
 
 /** a line or two about each one, in the book's voice */
 const NOTES: Record<string, string> = {
@@ -129,6 +131,8 @@ export class FieldGuide {
     private readonly walks: (() => Record<string, number>) | null = null,
     /** go to a place on the chart */
     private readonly travel: ((p: Place) => void) | null = null,
+    /** where you get on the helter skelter (it's on the chart once it's up) */
+    private readonly skelter: (() => { at: [number, number]; face: [number, number] } | null) | null = null,
   ) {
     const regular = FISH_IDS.filter((id) => !BIG.includes(id) && id !== SHARK_ID);
     this.pages = [{ kind: 'title' }, { kind: 'chart' }];
@@ -531,6 +535,49 @@ export class FieldGuide {
       c.fillText(w.id === 'reef' ? 'REEF WALK' : 'DEEP WALK', lx, ly);
     }
     c.lineCap = 'butt';
+    // the helter skelter, once it's up: the tower in plan, its stripes wound round, the plinth
+    // under it (point at it to go to its gate)
+    const gate = (built.skelter ?? 0) >= 1 ? this.skelter?.() : null;
+    if (gate) {
+      const [sx, sy] = px(SKELTER.x, SKELTER.z);
+      const rp = Math.max(9, px(SKELTER.x + PLINTH_RADIUS, SKELTER.z)[0] - sx);
+      const rt = Math.max(6, (rp * TOWER_RADIUS) / PLINTH_RADIUS);
+      const id = 'skelter';
+      c.fillStyle = '#cfc2a8';
+      c.strokeStyle = INK_BROWN;
+      c.lineWidth = 2;
+      c.beginPath();
+      c.arc(sx, sy, rp, 0, Math.PI * 2);
+      c.fill();
+      c.stroke();
+      for (let k = 0; k < 12; k++) {
+        c.fillStyle = k % 2 ? '#fff4e0' : '#e8322e';
+        c.beginPath();
+        c.moveTo(sx, sy);
+        c.arc(sx, sy, rt, (k / 12) * Math.PI * 2 + 0.3, ((k + 1) / 12) * Math.PI * 2 + 0.3);
+        c.closePath();
+        c.fill();
+      }
+      c.lineWidth = hover === id ? 4 : 2;
+      c.strokeStyle = hover === id ? '#ffd24a' : '#8a1a12';
+      c.beginPath();
+      c.arc(sx, sy, hover === id ? rp + 4 : rt, 0, Math.PI * 2);
+      c.stroke();
+      c.fillStyle = '#f4c542';
+      c.beginPath();
+      c.arc(sx, sy, Math.max(2.5, rt * 0.18), 0, Math.PI * 2);
+      c.fill();
+      c.font = font(700, 18);
+      c.textAlign = 'center';
+      c.textBaseline = 'middle';
+      c.lineWidth = 4;
+      c.strokeStyle = 'rgba(246, 236, 212, 0.9)';
+      c.strokeText('HELTER SKELTER', sx, sy + rp + 16);
+      c.fillStyle = '#8a1a12';
+      c.fillText('HELTER SKELTER', sx, sy + rp + 16);
+      this.places.set(id, { text: 'Helter skelter', at: gate.at, face: gate.face });
+      buttons.push({ id, x: sx - rp - 4, y: sy - rp - 4, w: rp * 2 + 8, h: rp * 2 + 8 });
+    }
     // you are here
     const me = this.where?.();
     if (me && me.x > CHART.x0 && me.x < CHART.x1 && me.z > CHART.z0 && me.z < CHART.z1) {

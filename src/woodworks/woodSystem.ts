@@ -247,7 +247,7 @@ export class WoodSystem extends createSystem({}) {
       onFinished: (w, at) => {
         winFanfare(30);
         this.party.win({ at, tier: 3, banner: w.id === 'reef' ? 'REEF WALK OPEN!' : 'DEEP WALK OPEN!', bannerAt: at.clone().add(new Vector3(0, 1.6, 0)), scale: 2.5 });
-        this.toast.show(w.id === 'reef' ? 'The reef walk is finished! Fish the reef from its end.' : 'The deep walk is finished! 14 m of water off its end.', 5, INK.good);
+        this.toast.show(w.id === 'reef' ? 'The reef walk is finished! Fish the reef from its end.' : 'The deep walk is finished! 14 m of water off its end. And there’s a plot for a helter skelter at the back of the village…', 6, INK.good);
       },
     });
     this.scene.add(this.walks.group);

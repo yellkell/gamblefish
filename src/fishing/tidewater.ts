@@ -10,7 +10,7 @@ import * as BitesJs from '../../vendor/tidewater/src/game/Bites.js';
 import { CatchMinigame as CatchMinigameJs } from '../../vendor/tidewater/src/game/CatchMinigame.js';
 import { GameState as GameStateJs } from '../../vendor/tidewater/src/game/GameState.js';
 import * as GearJs from '../../vendor/tidewater/src/game/Gear.js';
-import { registerGear } from './gear.ts';
+import { baitShift, registerGear } from './gear.ts';
 import { biting, registerTimedFish } from './timedFish.ts';
 import { registerTrophyFish, trophyOdds, type Rig } from './trophyFish.ts';
 import { registerSharkFish, sharkOdds, sharkUnlocked } from './shark.ts';
@@ -213,9 +213,11 @@ export function createGameState(): GameState {
   const toJSON = s.toJSON.bind(s);
   const fromJSON = s.fromJSON.bind(s);
   const reset = s.reset.bind(s);
-  s.toJSON = () => ({ ...(toJSON() as object), home: s.home, woodworks: s.woodworks });
+  // (baitGoop: this save's bait levels count goop bait: fishing/gear.ts baitShift)
+  s.toJSON = () => ({ ...(toJSON() as object), home: s.home, woodworks: s.woodworks, baitGoop: true });
   s.fromJSON = (d: unknown) => {
     if (!fromJSON(d)) return false;
+    s.upgrades.bait = (s.upgrades.bait | 0) + baitShift(d as Parameters<typeof baitShift>[0]);
     const home = (d as { home?: unknown }).home;
     s.home = Array.isArray(home) ? home.filter((x): x is string => typeof x === 'string') : [];
     s.woodworks = readWoodworks(d);

@@ -1,0 +1,568 @@
+import {
+  AdditiveBlending,
+  BoxGeometry,
+  BufferGeometry,
+  CatmullRomCurve3,
+  Color,
+  ConeGeometry,
+  CylinderGeometry,
+  DoubleSide,
+  EdgesGeometry,
+  Float32BufferAttribute,
+  Group,
+  InstancedMesh,
+  LineBasicMaterial,
+  LineSegments,
+  Matrix4,
+  Mesh,
+  MeshBasicMaterial,
+  MeshToonMaterial,
+  PlaneGeometry,
+  Quaternion,
+  RingGeometry,
+  ShaderMaterial,
+  TubeGeometry,
+  UniformsLib,
+  UniformsUtils,
+  Vector3
+} from 'three';
+
+import {
+  BARRIER_SIZE,
+  INNER_LIP,
+  OUTER_LIP,
+  PAINT,
+  SLIDE_PITCH,
+  TRACK_WIDTH
+} from './constants.ts';
+import { HelterPath, type PathSample } from './path.ts';
+import {
+  getWoodTexture,
+  LIGHT_GLSL,
+  makeStripeTexture,
+  makeTextTexture,
+  toon,
+  withSkyLight,
+  WOOD_TILE
+} from './fx.ts';
+
+export interface TrackHandles {
+  group: Group;
+  uniforms: { uTime: { value: number } };
+  /** Expanding ring shown on the bay when a tier lands (DOWN's shockwave). */
+  arrivalRing: Mesh;
+}
+
+const SAMPLE_STEP = 0.6;
+
+type Offset = (s: PathSample, out: Vector3) => Vector3;
+
+/**
+ * Builds a two-edged strip of quads along the path: edge A and edge B are
+ * given as offsets from each sample. UV.x runs 0..1 from A to B, UV.y is
+ * the distance along the slide in metres.
+ */
+function buildStrip(
+  samples: PathSample[],
+  distances: number[],
+  edgeA: Offset,
+  edgeB: Offset,
+  normalOf: (s: PathSample, out: Vector3) => Vector3
+): BufferGeometry {
+  const positions: number[] = [];
+  const normals: number[] = [];
+  const uvs: number[] = [];
+  const indices: number[] = [];
+  const a = new Vector3();
+  const b = new Vector3();
+  const n = new Vector3();
+  samples.forEach((s, i) => {
+    edgeA(s, a);
+    edgeB(s, b);
+    normalOf(s, n);
+    positions.push(a.x, a.y, a.z, b.x, b.y, b.z);
+    normals.push(n.x, n.y, n.z, n.x, n.y, n.z);
+    uvs.push(0, distances[i], 1, distances[i]);
+    if (i < samples.length - 1) {
+      const k = i * 2;
+      indices.push(k, k + 2, k + 1, k + 1, k + 2, k + 3);
+    }
+  });
+  const geometry = new BufferGeometry();
+  geometry.setAttribute('position', new Float32BufferAttribute(positions, 3));
+  geometry.setAttribute('normal', new Float32BufferAttribute(normals, 3));
+  geometry.setAttribute('uv', new Float32BufferAttribute(uvs, 2));
+  geometry.setIndex(indices);
+  return geometry;
+}
+
+/** Varnished timber slide bed: boards, red lane lines, gold arrows flowing downhill. */
+function createBedMaterial(uTime: { value: number }): ShaderMaterial {
+  const uniforms = UniformsUtils.merge([
+    UniformsLib.fog,
+    { uWidth: { value: TRACK_WIDTH }, uTile: { value: WOOD_TILE } }
+  ]);
+  // (the clock and the texture after the merge, which would copy them)
+  uniforms.uTime = uTime;
+  uniforms.uWood = { value: getWoodTexture() };
+  withSkyLight(uniforms);
+  return new ShaderMaterial({
+    fog: true,
+    side: DoubleSide,
+    uniforms,
+    vertexShader: /* glsl */ `
+      varying vec3 vWorld;
+      varying vec3 vNormal;
+      varying vec2 vUv;
+      #include <fog_pars_vertex>
+      void main() {
+        vUv = uv;
+        vec4 wp = modelMatrix * vec4(position, 1.0);
+        vWorld = wp.xyz;
+        vNormal = normalize(mat3(modelMatrix) * normal);
+        vec4 mvPosition = viewMatrix * wp;
+        gl_Position = projectionMatrix * mvPosition;
+        #include <fog_vertex>
+      }
+    `,
+    fragmentShader: /* glsl */ `
+      varying vec3 vWorld;
+      varying vec3 vNormal;
+      varying vec2 vUv;
+      uniform float uTime;
+      uniform float uWidth;
+      uniform float uTile;
+      uniform sampler2D uWood;
+      #include <fog_pars_fragment>
+      ${LIGHT_GLSL}
+
+      float lineAt(float x, float target, float width) {
+        float d = abs(x - target);
+        float w = fwidth(d) * 1.5;
+        return 1.0 - smoothstep(width, width + w, d);
+      }
+
+      void main() {
+        float x = (vUv.x - 0.5) * uWidth; // metres across, - outer .. + tower
+        float s = vUv.y;                  // metres along
+
+        vec3 red = vec3(0.82, 0.10, 0.08);
+        vec3 gold = vec3(0.95, 0.72, 0.16);
+
+        // Timber boards running down the slide (the texture tiles every
+        // uTile metres, six boards across the bed).
+        vec3 albedo = texture2D(uWood, vec2(vUv.x, s / uTile)).rgb;
+        // Varnish darkens a touch toward the edges where feet don't polish it.
+        albedo *= 1.0 - smoothstep(0.6, 1.2, abs(x)) * 0.12;
+
+        // Lane lines framing the three lanes (centres at -0.5, 0, 0.5).
+        float lanes = lineAt(x, -0.75, 0.02) + lineAt(x, -0.25, 0.02)
+                    + lineAt(x, 0.25, 0.02) + lineAt(x, 0.75, 0.02);
+        albedo = mix(albedo, red, clamp(lanes, 0.0, 1.0) * 0.9);
+
+        // Gold chevrons flowing downhill — DOWN's motion cue, in paint.
+        float chev = fract((s + abs(x) * 1.6) * 0.14 - uTime * 1.4);
+        float arrow = smoothstep(0.0, 0.05, chev) * smoothstep(0.16, 0.11, chev);
+        albedo = mix(albedo, gold, arrow * 0.55);
+
+        vec3 n = normalize(vNormal);
+        if (!gl_FrontFacing) n = -n;
+        vec3 col = shade(albedo, n);
+        // Varnish: a soft sun highlight that slides over the boards with the view.
+        vec3 v = normalize(cameraPosition - vWorld);
+        vec3 h = normalize(SUN_DIR + v);
+        col += vec3(1.0, 0.95, 0.85) * pow(max(dot(n, h), 0.0), 28.0) * 0.3;
+        gl_FragColor = vec4(col, 1.0);
+        #include <fog_fragment>
+        #include <tonemapping_fragment>
+        #include <colorspace_fragment>
+      }
+    `
+  });
+}
+
+/**
+ * The slide, built once around the tower: a painted bed with lane lines,
+ * a tall outer lip and a low inner one, gold rails along both, a dark
+ * underside, and iron brackets tying it back to the tower.
+ */
+export function createSlideTrack(path: HelterPath): TrackHandles {
+  const group = new Group();
+  const uTime = { value: 0 };
+
+  // Sample the whole path once.
+  const samples: PathSample[] = [];
+  const distances: number[] = [];
+  const count = Math.ceil(path.totalLength / SAMPLE_STEP);
+  for (let i = 0; i <= count; i++) {
+    const s = Math.min(path.totalLength, i * SAMPLE_STEP);
+    samples.push(path.sample(s, HelterPath.makeSample()));
+    distances.push(s);
+  }
+
+  const half = TRACK_WIDTH / 2;
+  const up = new Vector3(0, 1, 0);
+  const at = (dx: number, dy: number): Offset => (s, out) =>
+    out.copy(s.position).addScaledVector(s.right, dx).addScaledVector(up, dy);
+  const upNormal = (_s: PathSample, out: Vector3): Vector3 => out.set(0, 1, 0);
+  const downNormal = (_s: PathSample, out: Vector3): Vector3 => out.set(0, -1, 0);
+  const inwardNormal = (s: PathSample, out: Vector3): Vector3 => out.copy(s.right); // faces the bed from the outer lip
+  const outwardNormal = (s: PathSample, out: Vector3): Vector3 => out.copy(s.right).negate();
+
+  // Bed (the rig's floor is exactly this surface).
+  const bed = new Mesh(
+    buildStrip(samples, distances, at(-half, 0.0), at(half, 0.0), upNormal),
+    createBedMaterial(uTime)
+  );
+  group.add(bed);
+
+  // Lips: tall on the outside (that's where you'd fly off), low by the tower.
+  const lipMaterial = toon({ color: PAINT.red, side: DoubleSide });
+  const inkMaterial = toon({ color: PAINT.ink });
+  const outerLip = new Mesh(
+    buildStrip(samples, distances, at(-half, 0.0), at(-half, OUTER_LIP), inwardNormal),
+    lipMaterial
+  );
+  const innerLip = new Mesh(
+    buildStrip(samples, distances, at(half, 0.0), at(half, INNER_LIP), outwardNormal),
+    lipMaterial
+  );
+  group.add(outerLip, innerLip);
+
+  // Cream cap boards along the lip tops.
+  const capMaterial = toon({ color: 0xf3e8d2, side: DoubleSide });
+  group.add(
+    new Mesh(
+      buildStrip(samples, distances, at(-half - 0.12, OUTER_LIP), at(-half + 0.12, OUTER_LIP), upNormal),
+      capMaterial
+    ),
+    new Mesh(
+      buildStrip(samples, distances, at(half - 0.1, INNER_LIP), at(half + 0.1, INNER_LIP), upNormal),
+      capMaterial
+    )
+  );
+
+  // Underside + outer skirt so the slide has thickness from below. Deep
+  // enough to swallow the bracket ends, which used to show as black stubs.
+  const UNDER = 0.42;
+  const underMaterial = toon({ color: 0x8a3128, side: DoubleSide });
+  group.add(
+    new Mesh(buildStrip(samples, distances, at(-half, -UNDER), at(half, -UNDER), downNormal), underMaterial),
+    new Mesh(buildStrip(samples, distances, at(-half, -UNDER), at(-half, 0.0), outwardNormal), underMaterial)
+  );
+
+  // Gold handrails riding the lip tops.
+  const railMaterial = toon({ color: PAINT.gold });
+  const railPoints = (dx: number, dy: number): Vector3[] =>
+    samples.filter((_, i) => i % 2 === 0).map((s) => at(dx, dy)(s, new Vector3()));
+  const makeRail = (dx: number, dy: number, radius: number): Mesh => {
+    const curve = new CatmullRomCurve3(railPoints(dx, dy), false, 'catmullrom', 0.0);
+    const geometry = new TubeGeometry(curve, Math.ceil(samples.length / 2), radius, 6, false);
+    return new Mesh(geometry, railMaterial);
+  };
+  group.add(makeRail(-half, OUTER_LIP + 0.08, 0.085), makeRail(half, INNER_LIP + 0.06, 0.06));
+
+  // Ink rail posts up the outer lip, and pennant bunting slung from the rail
+  // — the whole spiral dressed like the front of a pier.
+  const postSamples = samples.filter((_, i) => i % 8 === 0);
+  // The posts stop under the cap board; they used to run on up through it
+  // and stand proud of the rail.
+  const POST_H = OUTER_LIP - 0.02;
+  const posts = new InstancedMesh(
+    new CylinderGeometry(0.045, 0.045, POST_H, 6),
+    inkMaterial,
+    postSamples.length
+  );
+  const bunting = new InstancedMesh(makePennantGeometry(), toon({ side: DoubleSide }), postSamples.length * 2);
+  const buntingColors = [PAINT.red, PAINT.cream, PAINT.gold, PAINT.sea, PAINT.mint];
+  const pm = new Matrix4();
+  const pq = new Quaternion();
+  const pqFlag = new Quaternion();
+  const pqPitch = new Quaternion();
+  const pp = new Vector3();
+  const pOne = new Vector3(1, 1, 1);
+  const pColor = new Color();
+  const yAxisP = new Vector3(0, 1, 0);
+  const xAxisP = new Vector3(1, 0, 0);
+  // On the spiral the rail drops at the slide's pitch; the pennants tilt
+  // with it so their top edges follow the string instead of floating level
+  // across a rail that is falling away beneath them.
+  pqPitch.setFromAxisAngle(xAxisP, -SLIDE_PITCH);
+  postSamples.forEach((s, i) => {
+    pq.setFromAxisAngle(yAxisP, s.yaw);
+    at(-half + 0.08, POST_H / 2)(s, pp);
+    pm.compose(pp, pq, pOne);
+    posts.setMatrixAt(i, pm);
+    // Two pennants between each pair of posts, hung just under the rail.
+    pqFlag.setFromAxisAngle(yAxisP, Math.PI / 2);
+    for (let k = 0; k < 2; k++) {
+      const idx = Math.min(samples.length - 1, i * 8 + 3 + k * 3);
+      const fs = samples[idx];
+      pq.setFromAxisAngle(yAxisP, fs.yaw);
+      if (!fs.flat) pq.multiply(pqPitch);
+      pq.multiply(pqFlag);
+      at(-half + 0.1, OUTER_LIP + 0.02)(fs, pp);
+      pm.compose(pp, pq, pOne);
+      bunting.setMatrixAt(i * 2 + k, pm);
+      pColor.setHex(buntingColors[(i * 2 + k) % buntingColors.length]);
+      bunting.setColorAt(i * 2 + k, pColor);
+    }
+  });
+  group.add(posts, bunting);
+
+  // Iron brackets back to the tower wall — every few metres of the spiral.
+  const ironMaterial = toon({ color: 0x2a2624 });
+  const helixSamples = samples.filter((s, i) => !s.flat && i % 10 === 0);
+  const brackets = new InstancedMesh(new BoxGeometry(1, 1, 1), ironMaterial, helixSamples.length * 2);
+  const m = new Matrix4();
+  const q = new Quaternion();
+  const qRoll = new Quaternion();
+  const pos = new Vector3();
+  const scale = new Vector3();
+  const zAxis = new Vector3(0, 0, 1);
+  const yAxis = new Vector3(0, 1, 0);
+  const wallX = half + 0.4; // the tower wall in rig-space x
+  helixSamples.forEach((s, i) => {
+    q.setFromAxisAngle(yAxis, s.yaw);
+    // Horizontal beam under the bed, from just inside the outer skirt to
+    // the wall. (It used to overshoot the skirt by 15 cm — black stubs
+    // poking out of the side of every tier below you.)
+    const beamOuter = -half + 0.06;
+    at((beamOuter + wallX) / 2, -0.3)(s, pos);
+    scale.set(wallX - beamOuter, 0.16, 0.16);
+    m.compose(pos, q, scale);
+    brackets.setMatrixAt(i * 2, m);
+    // Knee brace: from under the outer edge down to the wall. (It was built
+    // the other way up, its low end hanging 2.7 m below the outer edge —
+    // the black poles sticking out of the side of every tier.)
+    const run = wallX - beamOuter;
+    const drop = 2.4;
+    at((beamOuter + wallX) / 2, -0.3 - drop / 2)(s, pos);
+    qRoll.setFromAxisAngle(zAxis, -Math.atan2(drop, run));
+    scale.set(Math.hypot(run, drop), 0.12, 0.12);
+    m.compose(pos, q.clone().multiply(qRoll), scale);
+    brackets.setMatrixAt(i * 2 + 1, m);
+  });
+  group.add(brackets);
+
+  // Landing shockwave ring: parked until a tier lands.
+  const arrivalRing = new Mesh(
+    new RingGeometry(0.8, 1.0, 48),
+    new MeshBasicMaterial({
+      color: 0xfff1c0,
+      transparent: true,
+      opacity: 0,
+      blending: AdditiveBlending,
+      depthWrite: false,
+      side: DoubleSide
+    })
+  );
+  arrivalRing.rotation.x = -Math.PI / 2;
+  arrivalRing.visible = false;
+  group.add(arrivalRing);
+
+  // Finish: a painted arch just past the exit strip.
+  const end = path.sample(path.totalLength, HelterPath.makeSample());
+  group.add(createFinishArch(end));
+
+  return { group, uniforms: { uTime }, arrivalRing };
+}
+
+/** A little downward-pointing pennant, hung by its top edge at the origin. */
+function makePennantGeometry(): BufferGeometry {
+  const g = new BufferGeometry();
+  g.setAttribute(
+    'position',
+    new Float32BufferAttribute([-0.2, 0, 0, 0.2, 0, 0, 0, -0.46, 0], 3)
+  );
+  g.setAttribute('normal', new Float32BufferAttribute([0, 0, 1, 0, 0, 1, 0, 0, 1], 3));
+  g.setAttribute('uv', new Float32BufferAttribute([0, 1, 1, 1, 0.5, 0], 2));
+  return g;
+}
+
+function createFinishArch(end: PathSample): Group {
+  const arch = new Group();
+  const ahead = end.position.clone().addScaledVector(end.forward, 5.2);
+  ahead.y = end.position.y;
+  arch.position.copy(ahead);
+  arch.rotation.y = end.yaw;
+
+  const postMat = toon({ color: PAINT.red });
+  const postGeo = new CylinderGeometry(0.16, 0.16, 3.6, 10);
+  [-2.2, 2.2].forEach((x) => {
+    const post = new Mesh(postGeo, postMat);
+    post.position.set(x, 1.8, 0);
+    arch.add(post);
+  });
+  const sign = new Mesh(
+    new PlaneGeometry(5.2, 1.3),
+    toon({
+      map: makeTextTexture('WELL DONE  -  MIND THE STEP', {
+        color: '#e8322e',
+        background: '#fff4e0',
+        border: '#e8322e'
+      }),
+      side: DoubleSide
+    })
+  );
+  sign.position.set(0, 3.3, 0);
+  arch.add(sign);
+  return arch;
+}
+
+// ---------------------------------------------------------------------------
+// Gates — DOWN's slide barriers, dressed as fairground boards.
+// ---------------------------------------------------------------------------
+
+let gateGeometry: BoxGeometry | null = null;
+let gateEdges: EdgesGeometry | null = null;
+let gateEdgeMaterial: LineBasicMaterial | null = null;
+const gateMaterials = new Map<number, MeshToonMaterial>();
+let pennantGeometry: ConeGeometry | null = null;
+let pennantMaterial: MeshToonMaterial | null = null;
+
+function toHex(color: number): string {
+  return `#${color.toString(16).padStart(6, '0')}`;
+}
+
+/** Where a gate stands: its world matrix (board centred on the origin) and paint. */
+export interface GatePlacement {
+  matrix: Matrix4;
+  color: number;
+}
+
+/**
+ * Every gate on the course in a handful of draw calls: candy-striped boards
+ * instanced per colour, all the pennants in one mesh, and all the ink edges
+ * in one line set. Each board is exactly the size DOWN's collision test
+ * expects — lean past it or you're off the ride. (Seventy gates as separate
+ * board + edges + pennant objects were two hundred draw calls a frame.)
+ */
+export function createGateBatch(placements: GatePlacement[]): Group {
+  gateGeometry ??= new BoxGeometry(BARRIER_SIZE.w, BARRIER_SIZE.h, BARRIER_SIZE.d);
+  pennantGeometry ??= new ConeGeometry(0.16, 0.5, 4);
+  pennantMaterial ??= toon({ color: PAINT.gold });
+  // Ink edges drawn as lines: the same crisp frame from every angle, unlike
+  // a pushed-out hull, which fattens edge-on and vanishes face-on.
+  gateEdges ??= new EdgesGeometry(gateGeometry);
+  gateEdgeMaterial ??= new LineBasicMaterial({ color: PAINT.ink });
+
+  const group = new Group();
+  const byColor = new Map<number, GatePlacement[]>();
+  for (const p of placements) {
+    let list = byColor.get(p.color);
+    if (!list) byColor.set(p.color, (list = []));
+    list.push(p);
+  }
+  byColor.forEach((list, color) => {
+    let material = gateMaterials.get(color);
+    if (!material) {
+      material = toon({ map: makeStripeTexture(toHex(color), '#fff4e0', 6) });
+      gateMaterials.set(color, material);
+    }
+    const boards = new InstancedMesh(gateGeometry!, material, list.length);
+    list.forEach((p, i) => boards.setMatrixAt(i, p.matrix));
+    group.add(boards);
+  });
+
+  const pennants = new InstancedMesh(pennantGeometry, pennantMaterial, placements.length);
+  const lift = new Matrix4().makeTranslation(0, BARRIER_SIZE.h / 2 + 0.25, 0);
+  const m = new Matrix4();
+  placements.forEach((p, i) => pennants.setMatrixAt(i, m.multiplyMatrices(p.matrix, lift)));
+  group.add(pennants);
+
+  const edgeSource = gateEdges.attributes.position;
+  const edgePositions = new Float32Array(edgeSource.count * 3 * placements.length);
+  const v = new Vector3();
+  placements.forEach((p, k) => {
+    const base = k * edgeSource.count * 3;
+    for (let i = 0; i < edgeSource.count; i++) {
+      v.fromBufferAttribute(edgeSource, i).applyMatrix4(p.matrix);
+      v.toArray(edgePositions, base + i * 3);
+    }
+  });
+  const edgeGeometry = new BufferGeometry();
+  edgeGeometry.setAttribute('position', new Float32BufferAttribute(edgePositions, 3));
+  group.add(new LineSegments(edgeGeometry, gateEdgeMaterial));
+  return group;
+}
+
+// ---------------------------------------------------------------------------
+
+export interface StreakHandles {
+  object: LineSegments;
+  uniforms: {
+    uOffset: { value: number };
+    uStrength: { value: number };
+  };
+}
+
+/**
+ * Wind streaks that whip past during slides — DOWN's, in daylight colours.
+ * One draw call; the whole field scrolls via a wrap-around offset in the
+ * vertex shader. Raked down the slope so they run parallel to the descent.
+ */
+export function createStreaks(): StreakHandles {
+  const COUNT = 170;
+  const WINDOW = 46;
+  const positions: number[] = [];
+  const alphas: number[] = [];
+  const colors: number[] = [];
+  const white = new Color(0xffffff);
+  const cream = new Color(0xfff1c8);
+  const pale = new Color(0xcfe9ff);
+
+  for (let i = 0; i < COUNT; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const radius = 2.6 + Math.random() * 5.5;
+    const x = Math.cos(angle) * radius;
+    const y = Math.sin(angle) * radius * 0.7 + 1.2;
+    const z = -Math.random() * WINDOW;
+    const len = 1.2 + Math.random() * 2.2;
+    positions.push(x, y, z, x, y, z - len);
+    const c = Math.random() < 0.5 ? white : Math.random() < 0.5 ? cream : pale;
+    colors.push(c.r, c.g, c.b, c.r, c.g, c.b);
+    alphas.push(0.85, 0.0);
+  }
+
+  const geometry = new BufferGeometry();
+  geometry.setAttribute('position', new Float32BufferAttribute(positions, 3));
+  geometry.setAttribute('aColor', new Float32BufferAttribute(colors, 3));
+  geometry.setAttribute('aAlpha', new Float32BufferAttribute(alphas, 1));
+
+  const uniforms = { uOffset: { value: 0 }, uStrength: { value: 0 } };
+  const material = new ShaderMaterial({
+    blending: AdditiveBlending,
+    transparent: true,
+    depthWrite: false,
+    uniforms,
+    vertexShader: /* glsl */ `
+      attribute vec3 aColor;
+      attribute float aAlpha;
+      uniform float uOffset;
+      varying vec3 vColor;
+      varying float vAlpha;
+      void main() {
+        vColor = aColor;
+        vAlpha = aAlpha;
+        vec3 p = position;
+        p.z = mod(p.z + uOffset, 46.0) - 38.0;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
+      }
+    `,
+    fragmentShader: /* glsl */ `
+      uniform float uStrength;
+      varying vec3 vColor;
+      varying float vAlpha;
+      void main() {
+        gl_FragColor = vec4(vColor, vAlpha * uStrength * 0.5);
+      }
+    `
+  });
+
+  const object = new LineSegments(geometry, material);
+  object.frustumCulled = false;
+  object.visible = false;
+  object.rotation.x = -SLIDE_PITCH;
+  return { object, uniforms };
+}

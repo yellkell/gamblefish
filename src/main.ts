@@ -50,6 +50,7 @@ import { buildLamps } from './world/lamps.ts';
 import { runBootIntro } from './experience/bootIntro.ts';
 import { cutGates } from './woodworks/gates.ts';
 import { WoodSystem, woodDeps, woodView } from './woodworks/woodSystem.ts';
+import { SkelterSystem, skelterDeps, skelterView } from './skelter/SkelterSystem.ts';
 import { onFontsReady } from './ui/fonts.ts';
 import { drawLogo, drawLogoFish, hasLogoFish, setLogoFish } from './ui/logo.ts';
 import { thumbnail } from './ui/thumbnail.ts';
@@ -211,7 +212,11 @@ World.create(container, {
   backpackDeps.props = fishingDeps.props;
   backpackDeps.chart = { heightAt: (x, z) => heightfield.heightAt(x, z), layout: json.layout, buildings: frames };
   backpackDeps.where = () => world.camera.getWorldPosition(new Vector3());
-  backpackDeps.walks = () => woodView.walks?.() ?? {};
+  // (and the helter skelter, once it's up)
+  backpackDeps.walks = () => ({ ...(woodView.walks?.() ?? {}), skelter: skelterView.progress() });
+  backpackDeps.skelter = () => skelterView.gate;
+  // no backpack up the helter skelter
+  backpackDeps.blocked = () => skelterView.onTower;
   // the chart's places: point at one in the field guide and you're there
   backpackDeps.travel = (p) => {
     const st = fishingView.state?.();
@@ -270,8 +275,8 @@ World.create(container, {
 
   // what bites, and when, follows the island's day
   fishingDeps.hour = () => sky.state.hour;
-  // indoors, or with the axe out among the trees, the rod goes over your shoulder
-  fishingDeps.indoors = () => interiorAt(interiors, world.player.position.x, world.player.position.z) !== null || woodView.axeOut;
+  // indoors, with the axe out among the trees, or up the helter skelter, the rod goes over your shoulder
+  fishingDeps.indoors = () => interiorAt(interiors, world.player.position.x, world.player.position.z) !== null || woodView.axeOut || skelterView.onTower;
 
   // the woodworks: the timber yard, the woodlot and the walks off the pier head
   Object.assign(woodDeps, {
@@ -281,9 +286,21 @@ World.create(container, {
     removeBox: (b: BoxCollider) => surfaces.removeBox(b),
     env: casinoEnv(world.renderer),
     night: sky.state.night,
-    busy: () => backpackView.open || interiorAt(interiors, world.player.position.x, world.player.position.z) !== null,
+    busy: () => backpackView.open || skelterView.onTower || interiorAt(interiors, world.player.position.x, world.player.position.z) !== null,
   });
   world.registerSystem(WoodSystem);
+
+  // the helter skelter at the back of the village: raised with wood once the deep walk's done
+  Object.assign(skelterDeps, {
+    state: game,
+    ground: (x: number, z: number) => heightfield.heightAt(x, z),
+    addBox: (b: BoxCollider) => surfaces.addBox(b),
+    removeBox: (b: BoxCollider) => surfaces.removeBox(b),
+    sky: sky.state,
+    unlocked: () => (woodView.walks?.().deep ?? 0) >= 1,
+    blink: () => blink.fire(),
+  });
+  world.registerSystem(SkelterSystem);
 
   // the village's people and counters
   const stall = frames.find((b) => b.name === 'stall');
@@ -340,7 +357,7 @@ World.create(container, {
   world.player.rotation.set(0, s.yaw, 0);
 
   // Dev hook: drive the rig without a headset (`__fish.move.to(x, z, yaw)`).
-  (window as unknown as { __fish: unknown }).__fish = { world, surfaces, move: teleportView, json, game, fishing: fishingView, vegetation, backpack: backpackView, interiors, tables, music, shore, sky, homeShops, gearShops, villa, fx, props: fishingDeps.props, wood: woodView, spotFor };
+  (window as unknown as { __fish: unknown }).__fish = { world, surfaces, move: teleportView, json, game, fishing: fishingView, vegetation, backpack: backpackView, interiors, tables, music, shore, sky, homeShops, gearShops, villa, fx, props: fishingDeps.props, wood: woodView, skelter: skelterView, spotFor };
 
   if (import.meta.env.DEV) void import('./dev/harness.ts').then((m) => m.installHarness(world));
 

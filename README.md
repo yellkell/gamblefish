@@ -152,7 +152,11 @@ and the vendors.
   - The **Tackle Shop** sells rods (cast distance), reels (reel speed) and line
     (breaking strain), each now with a big-game top level, and hooks: sharper hooks
     hold the window to strike open longer.
-  - The **Bait Shop** sells bait, up to live bonito. Better bait brings bites sooner.
+  - The **Bait Shop** sells bait, up to live bonito. Better bait brings bites sooner. The cheapest
+    step up ($25) is **goop bait**: FIRE FIGHT 2's Goopliath no bigger than your thumb, by the tub
+    (`src/village/wares/goop.ts`). His twenty gel blobs in ff2's boxer's stance are polygonised once
+    at load from the same smooth-min, in his lime-to-bottle-green gel with the nucleus glowing
+    through and his two bead eyes. A save from before goop bait keeps the bait it had.
   - The **Fortune Teller** sells luck charms, up to the sea king's doubloon. They
     make trophy fish bite more often.
   - Each board says what a level does for you in plain numbers against what you have (cast 13 m
@@ -235,6 +239,10 @@ and the vendors.
     Once you own the axe, walk up to either and it's in your hand. Swing it into a trunk: four good blows and the tree creaks, falls away
     from you, and its 4 logs fly into your backpack. A sapling grows back from the stump
     about a minute later. The backpack tray shows your log count.
+  - **The build boards** (`src/woodworks/buildSign.ts`): what asks for wood is a notice board of old
+    planks nailed into a frame on two stakes, with a pitched cap, lettered by hand like the shop
+    signs. How far along it is shows as a row of log ends, the ones in painted in, the rest chalked
+    round; PUT IN WOOD is a tag hung under it on two cords. It's lit like everything round it.
   - **The walks:** put wood in a build crate on the pier head and a walk lays itself out plank by
     plank through a gateway in the rail. At first only the **reef walk** (48 logs) is on offer: it
     runs 60 m out to a platform over the reef's edge. Until it's finished the deep walk's gateway
@@ -243,6 +251,27 @@ and the vendors.
     railed down its sides and open at the far edge to fish off, and has a lantern at each corner and
     a bucket and a coil of rope made fast to a cleat (`src/woodworks/bucket.ts`). Each walk appears
     on the field guide's chart, named, once it's finished. Wood, the axe and the walks are saved.
+    Until a walk's finished a rope with its sign hangs across the gateway and the way is shut; with
+    the last plank down it's unhooked, swings down and it's gone, and the walk is open. (Tidewater
+    hung a string of floats on the head's rail right across the reef walk's gateway; the bake hangs
+    it along the rail past the gateway instead.)
+- **The helter skelter** (`src/skelter/`): [HELTER SKELTER](https://github.com/yellkell/helter) in
+  its full glory, at the back left of the village (as the chart draws it). Once the deep walk's
+  finished its plot is staked out, with a build crate and a board: **500 logs**. The logs raise it as
+  they go in: the plinth, the 300 m candy-striped drum with the slide spiralling up round it, the
+  roof, the finial and the flag, a timber collar climbing with the work. Then it's on the chart.
+  - **To the top:** the board by the crate becomes the ride's: RIDE TO THE TOP takes you up to the
+    balcony, where a warning comes up before the descent: centre yourself in your play space (a
+    ring on the balcony floor marks the middle; hold the Meta button to recentre), because the ride
+    moves you and you dodge the gates with your real body.
+  - **The ride:** helter's, carried over whole: DOWN's sliding, three tiers with a landing between,
+    gates to lean past, the voiced 3-2-1 on each bay, 4 Leaf Clovers at the top and New Song 98 or
+    New Song 129 on the way down (`src/audio/skelter.ts`). While you're up the teleport is off and
+    the slide moves you, the rod's away and the island's songs step aside.
+  - **The coins are money:** $1 a coin, $5 a gem, paid into your wallet at every landing. Clip a
+    gate and you're off the ride, but you keep what you caught. At the bottom: back up to the top,
+    or step off into the village.
+  - The painted tower is lit by the island's sun, so it goes gold at sunset and dark at night.
 - **ALWAYS DAY:** a switch under MUSIC in the backpack holds the island in the early
   afternoon. The fish that only bite at night won't bite while it's on.
 - **Wallet:** `src/ui/wallet.ts` puts an odometer-style money counter on both
@@ -307,7 +336,8 @@ same questions as ff2's `TELEPORT_AREAS`, `floorYAt` and `crossesWall`:
 | `src/world/` | baked data reader, heightfield, surfaces (pure), terrain, ocean, sky, village |
 | `src/audio/` | ff2's synth SFX bus and cash chime; Tidewater's sampled fishing and shore sounds; the music |
 | `src/fishing/` | the rod, cast, bites, fight, landing, catch card, tension gauge |
-| `src/woodworks/` | the axe, the woodlots and the timber yard; the reef and deep walks, their build crates and the bucket at the end |
+| `src/woodworks/` | the axe, the woodlots and the timber yard; the reef and deep walks, their build crates and boards, and the bucket at the end |
+| `src/skelter/` | the helter skelter: its plot, the tower and slide, the ride (from HELTER SKELTER) |
 | `src/ui/` | ff2's Rajdhani type kit and coin symbol, canvas panels, the wrist wallet |
 | `src/dev/harness.ts` | dev-only emulator driver |
 | `tools/bake-world.mjs` | Tidewater → `public/world/` |

@@ -6,7 +6,8 @@
  *   hooks   the TACKLE SHOP: a sharper hook holds on longer when a fish takes it, so the
  *           window to strike is longer.
  *   bait    the BAIT SHOP: what's on the hook. Better bait brings the bites quicker, and the
- *           trophy fish won't look at frozen shrimp.
+ *           trophy fish won't look at frozen shrimp. The cheapest step up is goop bait: a
+ *           Goopliath no bigger than your thumb (village/wares/goop.ts), off FIRE FIGHT 2.
  *   charm   the FORTUNE TELLER: luck. A charm makes the trophy fish bite more often.
  *
  * Everything reads through Tidewater's gearStats(state.upgrades), so buying a level is
@@ -39,6 +40,8 @@ const NEW: Tracks = {
     name: 'Bait',
     levels: [
       { cost: 0, label: 'Frozen shrimp', baitTier: 0, biteMul: 1 },
+      // cheap, and the fish will have a go at it; the trophy fish won't
+      { cost: 25, label: 'Goop bait', baitTier: 0, biteMul: 0.93 },
       { cost: 150, label: 'Live pilchards', baitTier: 1, biteMul: 0.85 },
       { cost: 450, label: 'Live squid', baitTier: 2, biteMul: 0.72 },
       { cost: 1100, label: 'Glow-lit squid rig', baitTier: 3, biteMul: 0.6 },
@@ -85,6 +88,13 @@ export function gearEffect(levels: Level[], track: string, level: number, have: 
       return '';
   }
 }
+
+/**
+ * Goop bait went in as the bait track's second level, so a save from before it (which has no
+ * `baitGoop` mark) has every bait bought above shrimp one level lower than it is now: this is
+ * how many to add.
+ */
+export const baitShift = (d: { baitGoop?: unknown; upgrades?: { bait?: unknown } }): number => (d.baitGoop !== true && Number(d.upgrades?.bait) >= 1 ? 1 : 0);
 
 /** Which tracks each village shop sells (village/gearShop.ts). */
 export const GEAR_SHOPS: Record<string, string[]> = {

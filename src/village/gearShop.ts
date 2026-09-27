@@ -117,7 +117,7 @@ function baitDecor(k: Kit, room: Interior, top: number, cz: number): Group {
   c.at(M.metal(k.renderer, '#c8ccd0', 0.25), rounded(1.9, 0.03, 0.3, 0.01), 0, top + 0.015, cz);
   c.at(M.glaze(k.renderer, '#a8c4d0'), rounded(1.84, 0.012, 0.26, 0.006), 0, top + 0.03, cz);
   g.add(c.group());
-  for (let lv = 0; lv < 5; lv++) put(g, bait(k, lv), -0.76 + lv * 0.38, top + 0.036, cz, -0.3, 0, 0, lv === 4 ? 0.8 : 1);
+  for (let lv = 0; lv < 6; lv++) put(g, bait(k, lv), -0.8 + lv * 0.32, top + 0.036, cz, -0.3, 0, 0, lv === 5 ? 0.7 : 1);
   return g;
 }
 

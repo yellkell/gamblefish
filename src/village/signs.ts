@@ -513,9 +513,9 @@ const LOOKS: Record<string, Look> = {
 const lookOf = (name: string, r: BuildingRole): Look => LOOKS[name] ?? { style: r.role === 'casino' ? 'neon' : 'painted', board: r.colour, text: '#f2e6c8', ink: '#f2e6c8', hi: '#f2e6c8' };
 
 /** a sign-writer's serif (Noto Serif on the headset) */
-const serif = (weight: number, px: number): string => `${weight} ${px}px 'Noto Serif', Georgia, 'DejaVu Serif', 'Liberation Serif', serif`;
+export const serif = (weight: number, px: number): string => `${weight} ${px}px 'Noto Serif', Georgia, 'DejaVu Serif', 'Liberation Serif', serif`;
 
-function rngOf(seed: number): () => number {
+export function rngOf(seed: number): () => number {
   let a = (seed * 2654435761) >>> 0 || 1;
   return () => {
     a = (a + 0x6d2b79f5) >>> 0;
@@ -530,7 +530,7 @@ function rngOf(seed: number): () => number {
  * Lettering by hand: each letter a hair off the line and off square, a painted shadow down and
  * to the right, squeezed to fit `maxW` if it must be (the way a sign-writer narrows his letters).
  */
-function handLetter(c: CanvasRenderingContext2D, text: string, cx: number, cy: number, maxW: number, fnt: string, fill: string, shadow: string | null, seed: number): void {
+export function handLetter(c: CanvasRenderingContext2D, text: string, cx: number, cy: number, maxW: number, fnt: string, fill: string, shadow: string | null, seed: number): void {
   const r = rngOf(seed);
   c.font = fnt;
   c.textAlign = 'left';
@@ -561,7 +561,7 @@ function handLetter(c: CanvasRenderingContext2D, text: string, cx: number, cy: n
 }
 
 /** Planks, their grain, the dark seams between them. */
-function plankBoard(c: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, tint: string, seed: number, planks = 3): void {
+export function plankBoard(c: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, tint: string, seed: number, planks = 3): void {
   const r = rngOf(seed + 7);
   for (let i = 0; i < planks; i++) {
     const py = y + (i * h) / planks;
@@ -602,7 +602,7 @@ function plankBoard(c: CanvasRenderingContext2D, x: number, y: number, w: number
  * flecks of paint gone everywhere, rust-and-rain streaks from the top, grime along the bottom,
  * and the whole board a little bleached.
  */
-function weather(c: CanvasRenderingContext2D, w: number, h: number, seed: number, amount = 1): void {
+export function weather(c: CanvasRenderingContext2D, w: number, h: number, seed: number, amount = 1): void {
   const r = rngOf(seed * 31 + 5);
   const bare = (a: number): string => `rgba(${138 + Math.floor(r() * 20)}, ${122 + Math.floor(r() * 16)}, ${100 + Math.floor(r() * 14)}, ${a.toFixed(2)})`;
   // chips: mostly at the edges and the seams
