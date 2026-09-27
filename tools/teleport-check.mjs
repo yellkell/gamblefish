@@ -21,6 +21,9 @@
  *   8. NO CRAWLING UNDER. An arc thrown at a doorway from the ground (your hand
  *      below the room's floor) lands on the porch or the floor, never on the
  *      ground under the house; arcs thrown around a room land on its floor.
+ *   9. OVER THE CLUTTER. The rowboats pulled up on the sand by the west woodlot
+ *      are hopped over, not walked round, but you can't come down inside one;
+ *      a fence still stops you.
  */
 
 import { readFileSync } from 'node:fs';
@@ -209,6 +212,31 @@ console.log('\n8. no crawling under a house');
     }
     check(`${b.name}: arcs around the room land on its floor`, inBad === 0, `${inBad}/${inArcs} elsewhere`);
   }
+}
+
+console.log('\n9. over the clutter');
+{
+  // a hop across the middle of each rowboat on the west woodlot's sand, 3 m either side of it
+  const boats = json.colliders.boxes.filter((b) => b.tag === 'rowboat' && b.cx < 30 && b.cz > -65 && b.cz < -50);
+  check('the west woodlot has its two rowboats', boats.length === 2, boats.length);
+  for (const b of boats) {
+    // across the hull: its local x, world (cos, -sin)
+    const ax = Math.cos(b.rotY);
+    const az = -Math.sin(b.rotY);
+    const p0 = [b.cx - ax * 3, b.cz - az * 3];
+    const p1 = [b.cx + ax * 3, b.cz + az * 3];
+    const y = Math.max(hf.heightAt(...p0), hf.heightAt(...p1));
+    check(`over the rowboat at (${b.cx}, ${b.cz})`, !S.crossesWall(p0[0], p0[1], p1[0], p1[1], y));
+    check(`  but not down inside it`, S.crossesWall(p0[0], p0[1], b.cx, b.cz, Math.max(y, hf.heightAt(b.cx, b.cz))));
+  }
+  // a fence (1.2 m of it) still stops the hop
+  const f = json.colliders.boxes.find((b) => b.tag === 'fence');
+  const ax = Math.sin(f.rotY);
+  const az = Math.cos(f.rotY);
+  const across = f.hx < f.hz ? [Math.cos(f.rotY), -Math.sin(f.rotY)] : [ax, az];
+  const q0 = [f.cx - across[0] * 2, f.cz - across[1] * 2];
+  const q1 = [f.cx + across[0] * 2, f.cz + across[1] * 2];
+  check('a fence still stops a hop', S.crossesWall(q0[0], q0[1], q1[0], q1[1], Math.max(hf.heightAt(...q0), hf.heightAt(...q1))));
 }
 
 const failed = results.filter((r) => !r).length;

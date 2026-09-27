@@ -221,7 +221,7 @@ export class BlackjackTable {
     r.act(a);
     this.phase = 'dealing';
     this.eventT = GAP - 0.12;
-    this.status = a === 'stand' ? 'Stand' : a === 'double' ? 'Double down — one card' : a === 'split' ? 'Split' : 'Hit';
+    this.status = a === 'stand' ? 'Stand' : a === 'double' ? 'Double down: one card' : a === 'split' ? 'Split' : 'Hit';
   }
 
   /** Leaving mid-hand: you stand on everything, the dealer plays it out, and you're paid what's due. */
@@ -268,7 +268,7 @@ export class BlackjackTable {
       }
       if (this.settleT > 3.9) {
         this.phase = 'betting';
-        this.status = this.shoe.due ? 'Shuffling up — place your bet' : 'Place your bet';
+        this.status = this.shoe.due ? 'Shuffling up. Place your bet' : 'Place your bet';
         this.paintBoard();
       }
     }
@@ -302,7 +302,7 @@ export class BlackjackTable {
     if (back > 0) payOut(this.state, back);
     const words: Record<Outcome, string> = { blackjack: 'Blackjack!', win: 'You win', push: 'Push', lose: 'Dealer wins', bust: 'Bust' };
     const net = back - staked;
-    this.status = this.results.map((s) => words[s.outcome]).join(' · ') + (net > 0 ? ` — +$${net}` : net < 0 ? ` — −$${-net}` : '');
+    this.status = this.results.map((s) => words[s.outcome]).join(' · ') + (net > 0 ? ` · +$${net}` : net < 0 ? ` · −$${-net}` : '');
     const blackjack = this.results.some((s) => s.outcome === 'blackjack');
     if (net > 0) {
       winFanfare(blackjack ? 8 : 2);
@@ -335,7 +335,7 @@ export class BlackjackTable {
     const h = r.hand;
     const t = total(h.cards);
     const which = r.hands.length > 1 ? `Hand ${r.active + 1}: ` : '';
-    return `${which}${t.soft && t.total < 21 ? 'soft ' : ''}${t.total} — hit or stand?`;
+    return `${which}${t.soft && t.total < 21 ? 'soft ' : ''}${t.total}: hit or stand?`;
   }
 
   /* ── layout ─────────────────────────────────────────────────────── */

@@ -7,7 +7,9 @@
  * another (a thunk each), and the walk lays itself out, a bay at a time: its piles, cap beam and
  * stringers, then the planks dropping on, then the rails, a clap and two hammer taps per step.
  * Until the walk is finished a rope with a sign hangs across the gateway and the way is shut;
- * with the last plank down it's unhooked, drops away, and the walk is open.
+ * with the last plank down it's unhooked, drops away, and the walk is open. Whatever of the
+ * pier's own gear stood in the gateway (the deep walk's: a life ring and two rods on the rail) is
+ * moved along the rail out of the way as it drops, and the crate and its board go with the rope.
  * Only the reef walk is on offer at first: the deep walk's gateway is still closed by the pier's
  * own rail, and its crate and rope aren't there, until the reef walk is finished.
  *
@@ -57,6 +59,9 @@ import { CRATES, DECK, HEAD_STEPS, logsFor, stepsOf, WALK_W, WALKS, type WalkDef
 /** seconds a step takes to lay, and between logs flying into the crate */
 const STEP_S = 0.42;
 const LOG_S = 0.1;
+/** seconds the gear in a gateway takes to move out of the way, and how far it's lifted doing it */
+const GEAR_S = 1.6;
+const GEAR_LIFT = 0.06;
 /** deck boards: one every PLANK m, the whole way out */
 const PLANK = 0.23;
 
@@ -153,6 +158,9 @@ interface Built {
   gateRail: Mesh | null;
   gateBox: BoxCollider | null;
   gateIn: boolean;
+  /** Tidewater's gear in the gateway (baked in the world's frame), and how far it's moved: 0..1 */
+  gear: Mesh | null;
+  gearT: number;
 }
 
 export interface WalkDeps {
@@ -166,6 +174,8 @@ export interface WalkDeps {
   renderer: WebGLRenderer | null;
   /** Tidewater's baked timber (world/village.ts `village_wood`): the pier's rails, to match */
   pierWood: Mesh | null;
+  /** the gear standing in a walk's gateway (world/village.ts `village_<id>Gear`), if any */
+  gear?: (id: WalkId) => Mesh | null;
   /** 0 by day .. 1 after dark (world/sky.ts): the lanterns light up */
   night: { value: number };
   /** a walk has just been finished */
@@ -187,7 +197,11 @@ export class Walks {
       w.uniforms.uBuilt.value = steps;
       w.uniforms.uDrop.value = 1;
       for (let i = 0; i < steps; i++) for (const b of w.colliders[i]) deps.addBox(b);
-      if (steps >= stepsOf(w.def)) w.ropeDrop = 1;
+      if (steps >= stepsOf(w.def)) {
+        w.ropeDrop = 1;
+        w.gearT = 1;
+        this.placeGear(w);
+      }
       this.paintBoard(w);
     }
     this.sync();
@@ -466,6 +480,8 @@ export class Walks {
       gateRail: gate?.mesh ?? null,
       gateBox: gate?.box ?? null,
       gateIn: false,
+      gear: def.gear ? (this.deps.gear?.(def.id) ?? null) : null,
+      gearT: 0,
     };
     sign.board.onClick = (id) => id === 'deposit' && this.deposit(built);
     return built;
@@ -534,8 +550,15 @@ export class Walks {
         const k = Math.min(1, w.ropeDrop / 0.6);
         w.ropeSwing.rotation.z = -(Math.PI / 2) * (1 - Math.cos(k * Math.PI)) * 0.5 - Math.sin(Math.min(1, w.ropeDrop * 2) * Math.PI * 3) * 0.08 * (1 - k);
         w.ropeSwing.scale.setScalar(w.ropeDrop < 0.75 ? 1 : Math.max(0.001, 1 - (w.ropeDrop - 0.75) / 0.25));
+        // and the crate and its board, not wanted now, shrink away with it
+        w.crate.scale.setScalar(w.ropeDrop < 0.5 ? 1 : Math.max(0.001, 1 - (w.ropeDrop - 0.5) / 0.5));
       }
       w.rope.visible = this.open(w.def) && w.ropeDrop < 1;
+      // and the gear that stood in the gateway goes along the rail, out of the way
+      if (w.gear && w.ropeDrop > 0 && w.gearT < 1) {
+        w.gearT = Math.min(1, w.gearT + dt / GEAR_S);
+        this.placeGear(w);
+      }
       const fill = w.crate.getObjectByName('fill')!;
       const left = this.logsIn(w.def) - w.shown * w.def.cost;
       fill.position.y = 0.06 + Math.min(0.5, left * 0.05);
@@ -555,10 +578,12 @@ export class Walks {
     const d = this.deps;
     for (const w of this.walks) {
       const open = this.open(w.def);
-      w.crate.visible = open;
-      if (open !== w.crateIn) {
-        (open ? d.addBox : d.removeBox)(w.crateBox);
-        w.crateIn = open;
+      // the crate's there from when the walk's open to build until its rope's down
+      const crate = open && w.ropeDrop < 1;
+      w.crate.visible = crate;
+      if (crate !== w.crateIn) {
+        (crate ? d.addBox : d.removeBox)(w.crateBox);
+        w.crateIn = crate;
       }
       const shut = open && w.ropeDrop === 0;
       if (shut !== w.ropeIn) {
@@ -577,6 +602,17 @@ export class Walks {
         w.cornerIn = done;
       }
     }
+  }
+
+  /** The gateway's gear, `gearT` of the way along to where it's moved: lifted off, along, set down. */
+  private placeGear(w: Built): void {
+    const g = w.gear;
+    const [dx, dz] = w.def.gear ?? [0, 0];
+    if (!g) return;
+    const k = w.gearT;
+    const e = k * k * (3 - 2 * k);
+    g.position.set(dx * e, GEAR_LIFT * Math.sin(k * Math.PI), dz * e);
+    g.updateMatrix();
   }
 
   /** A step has come down: nail it, make it walkable, and see if the walk's done. */

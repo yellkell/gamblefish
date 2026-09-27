@@ -32,6 +32,7 @@ import {
   INNER_LIP,
   OUTER_LIP,
   PAINT,
+  PLINTH_TOP,
   SLIDE_PITCH,
   TRACK_WIDTH
 } from './constants.ts';
@@ -380,33 +381,52 @@ function makePennantGeometry(): BufferGeometry {
   return g;
 }
 
+/**
+ * The painted arch over the way off the slide: WELL DONE - MIND THE STEP. The tower is only a
+ * metre and a bit inside the slide down here, so the arch stands a little outboard of the slide's
+ * line (its inner post clear of the tower's foot, the way off still under it), and its board reads
+ * from both sides: the rider coming down, and anyone walking up from the village.
+ */
 function createFinishArch(end: PathSample): Group {
   const arch = new Group();
-  const ahead = end.position.clone().addScaledVector(end.forward, 5.2);
-  ahead.y = end.position.y;
+  const OUTBOARD = 1.2; // across, away from the tower (the rider's left)
+  const AHEAD = 4.0;
+  const ahead = end.position.clone().addScaledVector(end.forward, AHEAD).addScaledVector(end.right, -OUTBOARD);
+  ahead.y = PLINTH_TOP; // its posts stand on the plinth, beside the bed's end
   arch.position.copy(ahead);
   arch.rotation.y = end.yaw;
 
+  const SPAN = 4.5; // the posts just past the board's ends
+  const TOP = 3.4;
   const postMat = toon({ color: PAINT.red });
-  const postGeo = new CylinderGeometry(0.16, 0.16, 3.6, 10);
-  [-2.2, 2.2].forEach((x) => {
+  const postGeo = new CylinderGeometry(0.14, 0.16, TOP, 10);
+  [-SPAN / 2, SPAN / 2].forEach((x) => {
     const post = new Mesh(postGeo, postMat);
-    post.position.set(x, 1.8, 0);
+    post.position.set(x, TOP / 2, 0);
     arch.add(post);
+    const knob = new Mesh(new ConeGeometry(0.2, 0.4, 10), toon({ color: PAINT.gold }));
+    knob.position.set(x, TOP + 0.2, 0);
+    arch.add(knob);
   });
-  const sign = new Mesh(
-    new PlaneGeometry(5.2, 1.3),
-    toon({
-      map: makeTextTexture('WELL DONE  -  MIND THE STEP', {
-        color: '#e8322e',
-        background: '#fff4e0',
-        border: '#e8322e'
-      }),
-      side: DoubleSide
+  // the board: a red-rimmed plank with the words painted on both faces
+  const W = 4.0;
+  const H = 1.0;
+  const board = new Mesh(new BoxGeometry(W + 0.12, H + 0.12, 0.06), toon({ color: PAINT.red }));
+  board.position.set(0, TOP - 0.55, 0);
+  arch.add(board);
+  const words = toon({
+    map: makeTextTexture('WELL DONE  -  MIND THE STEP', {
+      color: '#e8322e',
+      background: '#fff4e0',
+      border: '#e8322e'
     })
-  );
-  sign.position.set(0, 3.3, 0);
-  arch.add(sign);
+  });
+  for (const side of [1, -1]) {
+    const face = new Mesh(new PlaneGeometry(W, H), words);
+    face.position.set(0, TOP - 0.55, side * 0.032);
+    face.rotation.y = side > 0 ? 0 : Math.PI;
+    arch.add(face);
+  }
   return arch;
 }
 

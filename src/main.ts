@@ -51,6 +51,7 @@ import { runBootIntro } from './experience/bootIntro.ts';
 import { cutGates } from './woodworks/gates.ts';
 import { WoodSystem, woodDeps, woodView } from './woodworks/woodSystem.ts';
 import { SkelterSystem, skelterDeps, skelterView } from './skelter/SkelterSystem.ts';
+import { SKELTER } from './skelter/site.ts';
 import { onFontsReady } from './ui/fonts.ts';
 import { drawLogo, drawLogoFish, hasLogoFish, setLogoFish } from './ui/logo.ts';
 import { thumbnail } from './ui/thumbnail.ts';
@@ -164,8 +165,10 @@ World.create(container, {
     villageTick(dt);
     lastT = t;
     ocean.update(t, camera);
-    vegetation.update(t, camera);
-    grass?.update(t, camera);
+    // up the helter skelter the plants and the grass stay picked round its tower, not round you
+    const hold = skelterView.onTower ? SKELTER : null;
+    vegetation.update(t, camera, hold);
+    grass?.update(t, camera, hold);
     signs.update(1 / 72);
   };
 
@@ -364,7 +367,7 @@ World.create(container, {
   // the curtain goes up the moment the session starts, before the island's first frame in it
   world.renderer.xr.addEventListener('sessionstart', () => runBootIntro(world.camera as PerspectiveCamera, world.scene));
 
-  status.textContent = navigator.xr ? 'Ready.' : 'WebXR not available in this browser — desktop preview only.';
+  status.textContent = navigator.xr ? 'Ready.' : 'WebXR not available in this browser: desktop preview only.';
   enter.disabled = !navigator.xr;
   enter.addEventListener('click', () => {
     ensureAudio();

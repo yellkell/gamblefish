@@ -26,6 +26,11 @@ export interface WalkDef {
   cost: number;
   /** the walk that must be finished first */
   after?: WalkId;
+  /**
+   * Tidewater's gear standing in the gateway (the bake ships it as the village class
+   * `<id>Gear`), and how far along the rail (x, z) it's moved, out of the way, as the rope drops
+   */
+  gear?: [number, number];
 }
 
 const reefDir = ((): [number, number] => {
@@ -59,6 +64,9 @@ export const WALKS: WalkDef[] = [
     head: [6, 5],
     cost: 2,
     after: 'reef',
+    // the life ring hung on the rail and the two rods leaning on it: along to the stretch between
+    // the bench and the build crate
+    gear: [-3.1, 0],
   },
 ];
 

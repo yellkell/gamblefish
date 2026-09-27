@@ -58,6 +58,10 @@ interface Wall {
   r: number;
   sill: number;
   bottom: number;
+  /** clutter on the ground you can teleport over, low enough (HOP_OVER) */
+  over: boolean;
+  /** what it is (the collider's tag) */
+  tag: string;
   /** bounding circle for the cheap reject */
   bx: number;
   bz: number;
@@ -67,6 +71,12 @@ interface Wall {
 /** Tidewater tags that are walkable in its character controller but not a
  *  place to stand after a teleport. */
 const NOT_A_FLOOR = new Set(['ladder']);
+
+/** Things lying about that the teleport arcs over (up to GROUND.hopOver tall), instead of
+ *  refusing the hop: boats pulled up on the sand, the wreck, crates, traps, barrels, benches,
+ *  tables, log piles, bollards, a bucket, rocks, a build crate. Rails, fences, walls, counters,
+ *  furniture indoors and standing trees still stop you. */
+const HOP_OVER = new Set(['rowboat', 'boat', 'wreck', 'crate', 'crates', 'trap', 'traps', 'barrel', 'bench', 'table', 'woodpile', 'logPile', 'bollard', 'bucket', 'rock', 'buildCrate']);
 
 const _n = { x: 0, y: 1, z: 0 };
 
@@ -79,7 +89,7 @@ export class Surfaces {
     this.terrain = terrain;
     for (const b of colliders.boxes) this.addBox(b);
     for (const c of colliders.cylinders) {
-      this.walls.push({ pts: null, x: c.x, z: c.z, r: c.r, sill: c.top, bottom: c.bottom, bx: c.x, bz: c.z, br: c.r });
+      this.walls.push({ pts: null, x: c.x, z: c.z, r: c.r, sill: c.top, bottom: c.bottom, over: HOP_OVER.has(c.tag), tag: c.tag, bx: c.x, bz: c.z, br: c.r });
     }
   }
 
@@ -106,7 +116,7 @@ export class Surfaces {
         [b.hx, b.hz],
         [-b.hx, b.hz],
       ].map(([lx, lz]) => [b.cx + lx * cos + lz * sin, b.cz - lx * sin + lz * cos]);
-      const w: Wall = { pts, x: 0, z: 0, r: 0, sill: b.top, bottom: b.bottom, bx: b.cx, bz: b.cz, br: Math.hypot(b.hx, b.hz) };
+      const w: Wall = { pts, x: 0, z: 0, r: 0, sill: b.top, bottom: b.bottom, over: HOP_OVER.has(b.tag), tag: b.tag, bx: b.cx, bz: b.cz, br: Math.hypot(b.hx, b.hz) };
       this.walls.push(w);
       this.added.set(b, w);
     }
@@ -137,6 +147,11 @@ export class Surfaces {
    * `margin` m — or −Infinity if there's none. The grass keeps out from under the raised paths.
    */
   deckOver(x: number, z: number, margin = 0): number {
+    return this.deckAt(x, z, margin)?.top ?? -Infinity;
+  }
+
+  /** The highest deck over (x, z) (its footprint grown by `margin` m), or null. */
+  private deckAt(x: number, z: number, margin = 0): Deck | null {
     const C = 4;
     if (!this.deckGrid) {
       const g = new Map<number, Deck[]>();
@@ -153,15 +168,15 @@ export class Surfaces {
       }
       this.deckGrid = g;
     }
-    let top = -Infinity;
+    let best: Deck | null = null;
     for (const d of this.deckGrid.get(Math.floor(x / C) * 100003 + Math.floor(z / C)) ?? []) {
       const dx = x - d.cx;
       const dz = z - d.cz;
       const lx = dx * d.cos - dz * d.sin;
       const lz = dx * d.sin + dz * d.cos;
-      if (Math.abs(lx) <= d.hx + margin && Math.abs(lz) <= d.hz + margin && d.top > top) top = d.top;
+      if (Math.abs(lx) <= d.hx + margin && Math.abs(lz) <= d.hz + margin && (!best || d.top > best.top)) best = d;
     }
-    return top;
+    return best;
   }
 
   /** The natural surface at (x, z): the ground, or the sea over it. */
@@ -249,7 +264,8 @@ export class Surfaces {
    * legal over the pier's own under-deck beams without also opening them to
    * anyone standing on the sand beneath. Anything whose underside is above
    * head height is overhead, not in the way. An obstacle you're already
-   * standing inside can't trap you.
+   * standing inside can't trap you. Low clutter on the ground (HOP_OVER) is
+   * hopped over, but you can't land in it.
    */
   crossesWall(x0: number, z0: number, x1: number, z1: number, atY = 0): boolean {
     const minX = Math.min(x0, x1);
@@ -260,6 +276,11 @@ export class Surfaces {
       if (atY >= w.sill - 1e-6) continue;
       if (w.bottom >= atY + GROUND.headroom) continue;
       if (w.bx + w.br < minX || w.bx - w.br > maxX || w.bz + w.br < minZ || w.bz - w.br > maxZ) continue;
+      if (w.over && w.sill <= atY + GROUND.hopOver) {
+        // over it, as long as you don't come down in it
+        if (w.pts ? insidePoly(x1, z1, w.pts) && !insidePoly(x0, z0, w.pts) : Math.hypot(x1 - w.x, z1 - w.z) <= w.r && Math.hypot(x0 - w.x, z0 - w.z) > w.r) return true;
+        continue;
+      }
       if (w.pts) {
         if (insidePoly(x0, z0, w.pts)) continue;
         for (let i = 0; i < 4; i++) {
@@ -274,7 +295,131 @@ export class Surfaces {
     }
     return false;
   }
+
+  /**
+   * The top of whatever stands at (x, z) no higher than `below`: the ground, a deck, a rail (at the
+   * height of the rail itself, not its collider). `walls` narrows the search to those near by.
+   */
+  topAt(x: number, z: number, below = Infinity, walls: readonly Wall[] = this.walls): number {
+    let h = Math.max(this.terrain.heightAt(x, z), this.deckOver(x, z));
+    for (const w of walls) {
+      const top = w.sill + (LINE_TOP[w.tag] ?? 0);
+      if (top <= h || w.bottom > below) continue;
+      if (Math.abs(x - w.bx) > w.br || Math.abs(z - w.bz) > w.br) continue;
+      if (w.pts ? insidePoly(x, z, w.pts) : Math.hypot(x - w.x, z - w.z) <= w.r) h = top;
+    }
+    return h;
+  }
+
+  /**
+   * A fish under a deck (the pier: they do go under when you're bringing them in): the line to it
+   * comes over the deck's edge, down its face and in under it. Finds the edge it wraps round (the
+   * nearest way out from under the deck, counting the line's way back up to the tip at `a`) and
+   * gives the line's two bends there: `top`, over the edge, and `under`, beneath it. False if the
+   * fish at `b` isn't under a deck.
+   */
+  lineUnder(a: Vec3, b: Vec3, top: Vec3, under: Vec3, lift = 0.02): boolean {
+    const first = this.deckAt(b.x, b.z);
+    if (!first || !(first.top > b.y + 0.3)) return false;
+    const covers = (x: number, z: number): Deck | null => {
+      const d = this.deckAt(x, z);
+      return d && d.top > b.y + 0.3 ? d : null;
+    };
+    let best = Infinity;
+    let edge: Deck = first;
+    const tryDir = (dx: number, dz: number): void => {
+      let last: Deck = first;
+      for (let d = 0.05; d <= 12; d += 0.05) {
+        const hit = covers(b.x + dx * d, b.z + dz * d);
+        if (hit) {
+          last = hit;
+          continue;
+        }
+        // the edge itself, between the last step under the deck and this one out from it
+        let lo = d - 0.05;
+        let hi = d;
+        for (let k = 0; k < 8; k++) {
+          const m = (lo + hi) / 2;
+          if (covers(b.x + dx * m, b.z + dz * m)) lo = m;
+          else hi = m;
+        }
+        const out = hi + EDGE_CLEAR;
+        const x = b.x + dx * out;
+        const z = b.z + dz * out;
+        const cost = out + Math.hypot(a.x - x, a.z - z);
+        if (cost < best) {
+          best = cost;
+          edge = last;
+          top.x = under.x = x;
+          top.z = under.z = z;
+        }
+        return;
+      }
+    };
+    const toA = Math.hypot(a.x - b.x, a.z - b.z);
+    if (toA > 1e-3) tryDir((a.x - b.x) / toA, (a.z - b.z) / toA);
+    for (let i = 0; i < 16; i++) tryDir(Math.cos((i / 16) * Math.PI * 2), Math.sin((i / 16) * Math.PI * 2));
+    if (best === Infinity) return false;
+    // over the planks' top, and down the deck's face to under the beams they're laid on
+    top.y = edge.top + lift;
+    under.y = Math.max(b.y, edge.top - (DECK_DEPTH[edge.tag] ?? DECK_DEPTH.other) - EDGE_CLEAR);
+    return true;
+  }
+
+  /**
+   * A fishing line from a rod tip at `a` to the fish (or float) at `b` lies over whatever stands
+   * between them: the sand, a deck's edge, a rail. Of everything along the way that the straight
+   * line would go through, the one it comes to rest on is the one it has to climb to most steeply
+   * from the fish's end; that point (`out`, on top of it) is returned, or false if the line clears
+   * everything. `lift` is how far over a surface the line lies.
+   */
+  lineRest(a: Vec3, b: Vec3, out: Vec3, lift = 0.02): boolean {
+    const dx = b.x - a.x;
+    const dz = b.z - a.z;
+    const L = Math.hypot(dx, dz);
+    if (L < 0.1) return false;
+    const minX = Math.min(a.x, b.x);
+    const maxX = Math.max(a.x, b.x);
+    const minZ = Math.min(a.z, b.z);
+    const maxZ = Math.max(a.z, b.z);
+    const lo = Math.min(a.y, b.y);
+    const near = this.walls.filter((w) => w.sill > lo && !(w.bx + w.br < minX || w.bx - w.br > maxX || w.bz + w.br < minZ || w.bz - w.br > maxZ));
+    // every 5 cm: thin enough not to step over a rail
+    const n = Math.min(800, Math.ceil(L / 0.05));
+    let best = -Infinity;
+    for (let i = 1; i < n; i++) {
+      const s = i / n;
+      const x = a.x + dx * s;
+      const z = a.z + dz * s;
+      const yl = a.y + (b.y - a.y) * s;
+      const h = this.topAt(x, z, yl, near) + lift;
+      if (h <= yl) continue;
+      const climb = (h - b.y) / ((1 - s) * L);
+      if (climb > best) {
+        best = climb;
+        out.x = x;
+        out.y = h;
+        out.z = z;
+      }
+    }
+    return best > -Infinity;
+  }
 }
+
+/**
+ * Where a collider's top differs from the top of the thing itself, for a fishing line lying over
+ * it: the pier's rail colliders stand 10 cm over its top rail, the walks' 1.5 cm under theirs.
+ */
+const LINE_TOP: Record<string, number> = { pierRail: -0.105, walkRail: 0.015 };
+
+/**
+ * How deep a deck is at its edge, from the top of its planks to the bottom of the beam flush with
+ * its side: Tidewater's pier (planks, stringers, the cap beam along its edge) and the walks you
+ * build (boards, joists, cap beams).
+ */
+const DECK_DEPTH: Record<string, number> = { pierDeck: 0.055 + 0.22 + 0.26, walkDeck: 0.05 + 0.25 + 0.18, other: 0.35 };
+/** how far off a deck's edge a line hangs */
+const EDGE_CLEAR = 0.03;
 
 /** Proper crossing of two XZ segments (ff2's `segmentsCross`). */
 function segmentsCross(

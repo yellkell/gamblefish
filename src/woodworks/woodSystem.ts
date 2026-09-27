@@ -243,6 +243,7 @@ export class WoodSystem extends createSystem({}) {
       removeBox: d.removeBox ?? (() => {}),
       renderer: this.renderer,
       pierWood: (this.scene.getObjectByName('village_wood') as Mesh | undefined) ?? null,
+      gear: (id) => (this.scene.getObjectByName(`village_${id}Gear`) as Mesh | undefined) ?? null,
       night: d.night ?? { value: 0 },
       onFinished: (w, at) => {
         winFanfare(30);

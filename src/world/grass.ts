@@ -146,9 +146,12 @@ export class Grass {
     return out.setRGB(t.albedo[k] / 255, t.albedo[k + 1] / 255, t.albedo[k + 2] / 255).convertSRGBToLinear();
   }
 
-  update(time: number, camera: Camera): void {
+  /** `at`: grow the patch round there instead of round the eye (the helter skelter holds it round
+   * its tower while you ride: at slide speed it was re-sown several times a second) */
+  update(time: number, camera: Camera, at?: { x: number; z: number } | null): void {
     this.uniforms.uTime.value = time;
-    _p.setFromMatrixPosition(camera.matrixWorld); // read-only (see world/ocean.ts update)
+    if (at) _p.set(at.x, 0, at.z);
+    else _p.setFromMatrixPosition(camera.matrixWorld); // read-only (see world/ocean.ts update)
     const cx = _p.x;
     const cz = _p.z;
     if ((cx - this.last.x) ** 2 + (cz - this.last.z) ** 2 < 4) return;

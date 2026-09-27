@@ -56,8 +56,10 @@ const RISE = 30;
 const KNOCK_S = 0.3;
 /** the key in the save's woodworks.built */
 const KEY = 'skelter';
-/** seconds between refreshes of the fast-changing HUD readouts */
-const HUD_REFRESH = 0.1;
+/** seconds between refreshes of the fast-changing HUD readouts (each one repaints and re-uploads
+ * the HUD's canvas: at a tenth of a second the height ticking over had it doing that every frame
+ * or two down the slide) */
+const HUD_REFRESH = 0.25;
 
 export const skelterDeps: {
   state: GameState | null;
@@ -327,6 +329,7 @@ export class SkelterSystem extends createSystem({}) {
         tag: 'Ride to the top',
         can: !skelterView.onTower,
         done: false,
+        go: true,
       };
     const can = this.open() && ww.wood > 0 && inCrate < total;
     return {
@@ -663,7 +666,7 @@ export class SkelterSystem extends createSystem({}) {
     c.fill();
     c.fillStyle = '#fff4e0';
     c.font = font(700, 58);
-    c.fillText("I'M CENTRED — LET'S GO", W / 2, go.y + 85, go.w - 40);
+    c.fillText("I'M CENTRED. LET'S GO", W / 2, go.y + 85, go.w - 40);
     roundRect(c, down.x, down.y, down.w, down.h, 26);
     c.fillStyle = p.hover === 'down' ? 'rgba(26, 22, 20, 0.2)' : 'rgba(26, 22, 20, 0.08)';
     c.fill();

@@ -230,7 +230,7 @@ function propFish(k: Kit, species: string, len: number): Object3D {
 export function pilchards(k: Kit): Group {
   const g = new Group();
   const b = new Batch();
-  b.add(M.gloss(k.renderer, '#f4f4f0'), turned([[0, 0], [0.08, 0], [0.09, 0.07], [0.094, 0.075], [0.086, 0.078], [0.082, 0.07]], 24));
+  b.add(M.gloss(k.renderer, '#f4f4f0'), turned([[0, 0], [0.08, 0], [0.09, 0.07], [0.094, 0.075], [0.086, 0.078], [0.082, 0.07], [0.074, 0.006], [0, 0.006]], 24));
   // crushed ice
   for (let i = 0; i < 18; i++) {
     const a = i * 2.4;
@@ -290,7 +290,7 @@ export function bonito(k: Kit): Group {
 /** a little waxed-paper tub, for the goop bait */
 function goopCup(k: Kit): Group {
   const b = new Batch();
-  b.add(M.satin(k.renderer, '#e8e2d0'), turned([[0, 0], [0.042, 0], [0.05, 0.05], [0.053, 0.052], [0.049, 0.05], [0.041, 0.004]], 20));
+  b.add(M.satin(k.renderer, '#e8e2d0'), turned([[0, 0], [0.042, 0], [0.05, 0.05], [0.053, 0.052], [0.049, 0.05], [0.041, 0.004], [0, 0.004]], 20));
   // its rim painted goop green
   b.at(M.gloss(k.renderer, '#3cc860'), new TorusGeometry(0.0515, 0.0035, 5, 24).rotateX(Math.PI / 2), 0, 0.051, 0);
   return b.group();

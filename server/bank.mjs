@@ -523,7 +523,7 @@ export function handleHttp(req, res) {
   const path = url.pathname.replace(/\/+$/, '') || '/';
 
   if (req.method === 'GET' && path === '/health') return json(res, 200, { ok: true, mode: MODE });
-  if (CLOSED) return json(res, 503, { error: `the bank is not open yet — ${CLOSED_WHY}`, mode: 'closed' });
+  if (CLOSED) return json(res, 503, { error: `the bank is not open yet: ${CLOSED_WHY}`, mode: 'closed' });
 
   if (req.method === 'GET' && (path === '/' || path === '/packs')) {
     return json(res, 200, { bank: 'gamblefish', mode: MODE, currency: CURRENCY, ledger: ledger.persistent ? 'firestore' : 'memory', packs: PACKS });
@@ -534,7 +534,7 @@ export function handleHttp(req, res) {
       const body = await readBody(req);
       const pack = PACKS.find((p) => p.id === body?.pack);
       if (!pack) return json(res, 400, { error: 'no such pack' });
-      if (openFor(uid) >= MAX_OPEN_PER_UID) return json(res, 429, { error: 'too many open checkouts — pay or wait' });
+      if (openFor(uid) >= MAX_OPEN_PER_UID) return json(res, 429, { error: 'too many open checkouts: pay or wait' });
       json(res, 200, await createCheckout(req, uid, pack));
     });
 
@@ -557,7 +557,7 @@ export function handleHttp(req, res) {
       const email = String(body?.email ?? '').trim().toLowerCase();
       if (!EMAIL_OK.test(email)) return json(res, 400, { error: 'that is not an email address' });
       const out = await protect(uid, email);
-      if (!out.ok) return json(res, 409, { error: 'that email already has an account — LOG IN with it instead', taken: true });
+      if (!out.ok) return json(res, 409, { error: 'that email already has an account. LOG IN with it instead', taken: true });
       console.log(`[bank] ${uid} protected with ${maskEmail(email)}`);
       json(res, 200, { protected: true, email: maskEmail(email) });
     });
@@ -565,7 +565,7 @@ export function handleHttp(req, res) {
   if (req.method === 'POST' && path === '/handoff')
     return signed(req, res, async (uid) => {
       const code = newHandoff(uid);
-      if (!code) return json(res, 429, { error: 'too many codes on the go — wait ten minutes' });
+      if (!code) return json(res, 429, { error: 'too many codes on the go: wait ten minutes' });
       json(res, 200, { code, ttl: HANDOFF_TTL_MS });
     });
 
@@ -574,7 +574,7 @@ export function handleHttp(req, res) {
       const body = await readBody(req);
       const code = String(body?.code ?? '').trim();
       const h = /^\d{6}$/.test(code) ? handoffs.get(code) : undefined;
-      if (!h || h.at < Date.now() - HANDOFF_TTL_MS) return json(res, 404, { error: 'no such code — it may have expired' });
+      if (!h || h.at < Date.now() - HANDOFF_TTL_MS) return json(res, 404, { error: 'no such code: it may have expired' });
       handoffs.delete(code); // once
       try {
         const token = auth ? await auth.createCustomToken(h.uid) : `dev:${h.uid}`;

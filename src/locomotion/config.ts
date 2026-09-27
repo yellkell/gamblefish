@@ -80,4 +80,8 @@ export const GROUND = {
   /** An obstacle whose underside is this far above the hop's floor is
    *  overhead (an arch beam, an awning) and doesn't block the hop. */
   headroom: 2.0,
+  /** Things lying about on the ground (a rowboat pulled up on the sand, crates, a bench: see
+   *  world/surfaces.ts HOP_OVER) no taller than this over the hop's floor are hopped over, not
+   *  walked round; you still can't land in them. */
+  hopOver: 1.3,
 } as const;
