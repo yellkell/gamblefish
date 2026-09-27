@@ -1212,12 +1212,13 @@ export class FishingSystem extends createSystem({}) {
     // It lies over whatever's between the tip and the fish (a rail, the deck's edge, the sand),
     // rather than through it: where it rests, and where it rests on the tip's side of that. A fish
     // that's gone in under the pier has the line over the deck's edge, down its face and in under
-    // it, as a real line bends round the timber.
+    // it, as a real line bends round the timber. The same in flight: a cast coming down past the
+    // rail pulls the line over it, not through it.
     const pts = this.linePts;
     pts.length = 0;
     pts.push(a);
     const S = fishingDeps.surfaces;
-    if (S && this.state !== 'flying') {
+    if (S) {
       let end: Vector3 = b;
       if (S.lineUnder(a, b, _edgeTop, _edgeUnder)) end = _edgeTop;
       if (S.lineRest(a, end, _rest1)) {
