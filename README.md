@@ -217,7 +217,7 @@ and the vendors.
   - Its skin is its own pattern: denticles, scars, gill slits, snout pores and teeth.
 - **The woodworks** (`src/woodworks/`): build your own way out to the reef and deep water.
   - **Timber yard:** an open stall on the beach west of the pier foot. It sells the AXE
-    ($120), a bundle of 10 logs ($40) and a cart of 50 ($180) for when you'd rather not chop.
+    ($60), a bundle of 10 logs ($40) and a cart of 50 ($180) for when you'd rather not chop.
   - **Woodlots:** six almond trees behind the yard, and six more on the far side of the village
     past the boatyard, with a log pile and a chopping block but no stall (`src/woodworks/lots.ts`).
     Once you own the axe, walk up to either and it's in your hand. Swing it into a trunk: four good blows and the tree creaks, falls away

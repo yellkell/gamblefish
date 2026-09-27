@@ -55,7 +55,7 @@ import { EAST_PILE, EAST_TREES, WEST_TREES, YARD } from './lots.ts';
 import { Walks } from './walks.ts';
 
 /** what the timber yard charges */
-export const PRICES = { axe: 120, bundle: 40, cart: 180 };
+export const PRICES = { axe: 60, bundle: 40, cart: 180 };
 /** logs a felled tree gives, blows to fell one, seconds before its sapling comes up */
 const LOGS_PER_TREE = 4;
 const BLOWS = 4;
