@@ -6,14 +6,16 @@
  *  - SEA tinted by depth, pale over the shallows to deep blue past the drop-off, with the 6 m
  *    line (the drop-off: where the trophy fish start) dashed and the 12 m line drawn in;
  *  - THE PIER, the reef (hatched) and the village's buildings;
- *  - numbered markers on the places you'll want (the shops, the casinos, home), keyed in a list
- *    under the chart rather than lettered over it, so nothing overlaps.
+ *  - numbered markers on the places you'll want (the shops, the casinos, home, the woodworks),
+ *    keyed in a list under the chart rather than lettered over it, so nothing overlaps. Point at
+ *    a marker or a line of the key and you're there (backpack/fieldGuide.ts).
  *
  * North is up (−z): the village at the top, the sea at the bottom, as you see it from the pier.
  */
 
 import type { BuildingFrame } from '../village/signs.ts';
 import type { WorldJson } from '../world/data.ts';
+import { EAST_PILE, YARD } from '../woodworks/lots.ts';
 
 export interface ChartSource {
   heightAt(x: number, z: number): number;
@@ -24,21 +26,43 @@ export interface ChartSource {
 /** the part of the island charted (world metres) */
 export const CHART = { x0: -200, x1: 220, z0: -215, z1: 165 };
 
-/** the numbered places: [building name, what it is] */
-export const KEY: [string, string][] = [
-  ['S1', 'Home, your shack'],
-  ['S3', 'Tackle shop'],
-  ['S2', 'Bait shop'],
-  ['stall', 'Fish market'],
-  ['C', 'Roulette: the Lucky Lure'],
-  ['B', "Slots: Reel 'Em In"],
-  ['G', 'Blackjack: the Card Shark'],
-  ['H', 'Island bank'],
-  ['boathouse', 'Boatyard'],
-  ['N', 'Fortune teller'],
-  ['K', 'Taxidermist'],
-  ['L', "Villa Mar: Coral's"],
+/**
+ * A place you can go from the chart: a building (by its name in the layout), or a spot `at`
+ * (x, z) with where you'd stand there (`stand`) and what you'd be looking at (`face`).
+ */
+export interface Place {
+  text: string;
+  building?: string;
+  at?: [number, number];
+  stand?: [number, number];
+  face?: [number, number];
+}
+
+/** the numbered places */
+export const KEY: Place[] = [
+  { building: 'S1', text: 'Home, your shack' },
+  { building: 'S3', text: 'Tackle shop' },
+  { building: 'S2', text: 'Bait shop' },
+  { building: 'stall', text: 'Fish market' },
+  { building: 'C', text: 'Roulette: the Lucky Lure' },
+  { building: 'B', text: "Slots: Reel 'Em In" },
+  { building: 'G', text: 'Blackjack: the Card Shark' },
+  { building: 'H', text: 'Island bank' },
+  { building: 'boathouse', text: 'Boatyard' },
+  { building: 'N', text: 'Fortune teller' },
+  { building: 'K', text: 'Taxidermist' },
+  { building: 'L', text: "Villa Mar: Coral's" },
+  // at the counter's front (it faces +x), and among the east lot's trees by the log pile
+  { at: YARD, stand: [YARD[0] + 2.6, YARD[1]], face: YARD, text: 'Timber yard' },
+  { at: EAST_PILE, stand: [EAST_PILE[0] - 2.5, EAST_PILE[1] + 2.5], face: [118, -86], text: 'East woodlot' },
 ];
+
+/** where a place is on the island */
+export function placeAt(p: Place, buildings: BuildingFrame[]): [number, number] | null {
+  if (p.at) return p.at;
+  const b = buildings.find((k) => k.name === p.building);
+  return b ? [b.x, b.z] : null;
+}
 
 const INK = '#2e2214';
 
@@ -146,10 +170,10 @@ export function drawChart(src: ChartSource, w: number, h: number): { canvas: HTM
 
   // numbered markers, nudged apart where places crowd together (with a leader back to the building)
   const markers: { n: number; x: number; y: number; bx: number; by: number }[] = [];
-  KEY.forEach(([name], i) => {
-    const b = src.buildings.find((k) => k.name === name);
-    if (!b) return;
-    const [bx, by] = toPx(b.x, b.z);
+  KEY.forEach((place, i) => {
+    const at = placeAt(place, src.buildings);
+    if (!at) return;
+    const [bx, by] = toPx(at[0], at[1]);
     markers.push({ n: i + 1, x: bx, y: by - 18, bx, by });
   });
   const R = 14;

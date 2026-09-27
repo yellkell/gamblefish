@@ -63,7 +63,7 @@ import { font } from '../ui/fonts.ts';
 import { INK, Panel, roundRect } from '../ui/panel.ts';
 import { bounds, cellsOf, fill, findSpot, fits, GRID_SIZES, merge, MERGE_BONUS, mergePartners, rotate, shapeFor, TIERS, type Piece, type Rot } from './logic.ts';
 import { FieldGuide } from './fieldGuide.ts';
-import type { ChartSource } from './chart.ts';
+import type { ChartSource, Place } from './chart.ts';
 import { CELL, Tray } from './tray.ts';
 import { introActive } from '../experience/introGate.ts';
 
@@ -82,7 +82,9 @@ export const backpackDeps: {
   chart: ChartSource | null;
   where: (() => { x: number; z: number }) | null;
   walks: (() => Record<string, number>) | null;
-} = { state: null, props: null, chart: null, where: null, walks: null };
+  /** go to a place on the chart; false if you can't just now (a fish on the line) */
+  travel: ((p: Place) => boolean) | null;
+} = { state: null, props: null, chart: null, where: null, walks: null, travel: null };
 
 /** Somewhere in the world that takes a fish from your hand (Joe's scale, a counter...). */
 export interface DropTarget {
@@ -296,7 +298,9 @@ export class BackpackSystem extends createSystem({}) {
     this.paintTabs();
     this.tray.group.add(this.tabs.mesh);
     register(this.tabs);
-    this.guide = new FieldGuide(backpackDeps.state!, backpackDeps.props!, this.renderer, backpackDeps.chart, backpackDeps.where, backpackDeps.walks);
+    // going somewhere off the chart shuts the backpack behind you
+    const travel = backpackDeps.travel;
+    this.guide = new FieldGuide(backpackDeps.state!, backpackDeps.props!, this.renderer, backpackDeps.chart, backpackDeps.where, backpackDeps.walks, travel ? (p) => travel(p) && this.close() : null);
     this.guide.group.position.y = 0.03;
     this.tray.group.add(this.guide.group);
     backpackView.takeInHand = (id, hand) => this.takeInHand(id, hand);

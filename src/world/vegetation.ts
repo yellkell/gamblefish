@@ -38,6 +38,7 @@ import {
 } from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { unpack, type Typed } from './data.ts';
+import { heliconia, strelitzia } from './beds.ts';
 import { paintFoliage, REGION, TREE_SPRITE } from './foliage.ts';
 
 type Lobe = [number, number, number, number];
@@ -200,7 +201,7 @@ function frond(a: Arrays, o: Vector3, az: number, len: number, w: number, rise: 
   }
 }
 
-/** A broad leaf (banana, monstera, heliconia): a solid bent blade, vertex-coloured. */
+/** A broad leaf (banana, monstera, elephant ear): a solid bent blade, vertex-coloured. */
 function blade(a: Arrays, o: Vector3, az: number, len: number, w: number, rise: number, droop: number, segs: number, hex: number): void {
   const dir = new Vector3(Math.cos(az), 0, Math.sin(az));
   const side = new Vector3(-dir.z, 0, dir.x);
@@ -299,15 +300,13 @@ function youngPalm(): BufferGeometry {
   return fromArrays(a);
 }
 
-function broadleaf(hex: number, accent: number | null, leaves = 5, len = 1.0, h = 0.5): BufferGeometry {
+function broadleaf(hex: number, leaves = 5, len = 1.0, h = 0.5): BufferGeometry {
   const a = arrays();
   for (let i = 0; i < leaves; i++) {
     const az = (i / leaves) * Math.PI * 2 + hash(i + 40) * 0.6;
     blade(a, new Vector3(0, h * (0.6 + hash(i) * 0.8), 0), az, len, 0.32, 0.25, 0.45, 3, hex);
   }
-  const parts = [fromArrays(a)];
-  if (accent !== null) for (const k of [0, 1]) parts.push(lump(Math.cos(k * 3) * 0.25, h * 1.6 + k * 0.2, Math.sin(k * 3) * 0.25, 0.14, accent, 70 + k));
-  return mergeGeometries(parts)!;
+  return fromArrays(a);
 }
 
 function banana(): BufferGeometry {
@@ -324,6 +323,9 @@ function treeSprite(): BufferGeometry {
   for (let i = 0; i < n.count; i++) n.setXYZ(i, 0, 1, 0);
   return g;
 }
+
+/** the beds' flowers are drawn in full within this (m), coarse beyond */
+const BED_LOD = 16;
 
 /* ── placement data ────────────────────────────────────────────────────── */
 
@@ -352,8 +354,8 @@ class Grid {
   private key(x: number, z: number): number {
     return (Math.floor(x / this.size) + 512) * 4096 + (Math.floor(z / this.size) + 512);
   }
-  /** Indices within r of (x, z), nearest first, at most max. */
-  query(x: number, z: number, r: number, max: number): number[] {
+  /** Indices within r of (x, z) (and at least `min` away), nearest first, at most max. */
+  query(x: number, z: number, r: number, max: number, min = 0): number[] {
     const out: [number, number][] = [];
     const s = this.size;
     const D = this.p.data;
@@ -365,7 +367,7 @@ class Grid {
           const dx = D[i * this.stride] - x;
           const dz = D[i * this.stride + 2] - z;
           const d2 = dx * dx + dz * dz;
-          if (d2 < r * r) out.push([d2, i]);
+          if (d2 < r * r && d2 >= min * min) out.push([d2, i]);
         }
       }
     }
@@ -401,6 +403,8 @@ interface NearSet {
   mesh: InstancedMesh;
   grid: Grid;
   radius: number;
+  /** drawn from this far out (the ring beyond a detailed build of the same plant) */
+  from: number;
   tint: number;
 }
 
@@ -476,22 +480,26 @@ export class Vegetation {
     }
 
     /* understory: near only */
-    const nearTypes: [string, BufferGeometry, Material, number, number][] = [
+    // [type, build, material, out to (m), at most, from (m)]
+    const nearTypes: [string, BufferGeometry, Material, number, number, number?][] = [
       // (the caps leave room for the village's planted beds and hedges: tools/bake-world.mjs)
       ['shrubs', shrub(meta), crownMat, 55, 480],
       ['ferns', fern(), leaf, 28, 260],
       ['youngPalms', youngPalm(), leaf, 45, 90],
       ['bananas', banana(), leaf, 50, 60],
-      ['monsteras', broadleaf(0x2f6a2a, null, 6, 0.9, 0.35), leaf, 40, 160],
-      ['elephantEars', broadleaf(0x3d7a36, null, 5, 1.3, 0.6), leaf, 40, 80],
-      ['heliconias', broadleaf(0x2f7034, 0xd8402a, 5, 1.0, 0.8), leaf, 40, 160],
-      ['strelitzias', broadleaf(0x3a6e40, 0xf08a1e, 5, 0.9, 0.7), leaf, 40, 120],
+      ['monsteras', broadleaf(0x2f6a2a, 6, 0.9, 0.35), leaf, 40, 160],
+      ['elephantEars', broadleaf(0x3d7a36, 5, 1.3, 0.6), leaf, 40, 80],
+      // the beds' flowers (world/beds.ts): in full round you, coarser further along the bed
+      ['heliconias', heliconia(true), leaf, BED_LOD, 36],
+      ['heliconias', heliconia(false), leaf, 40, 160, BED_LOD],
+      ['strelitzias', strelitzia(true), leaf, BED_LOD, 36],
+      ['strelitzias', strelitzia(false), leaf, 40, 120, BED_LOD],
     ];
-    for (const [type, geo, mat, radius, max] of nearTypes) {
+    for (const [type, geo, mat, radius, max, from = 0] of nearTypes) {
       const p = plants(type);
       if (!p.n) continue;
       const mesh = this.instanced(geo, mat, Math.min(max, p.n));
-      this.near.push({ mesh, grid: new Grid(p, this.stride, 32), radius, tint: hash(type.length) });
+      this.near.push({ mesh, grid: new Grid(p, this.stride, 32), radius, from, tint: hash(type.length) });
     }
 
     /* rocks: Tidewater's placements and shapes, low detail, all drawn */
@@ -656,7 +664,7 @@ export class Vegetation {
     if (T.instanceColor) T.instanceColor.needsUpdate = true;
 
     for (const s of this.near) {
-      const list = s.grid.query(x, z, s.radius, s.mesh.instanceMatrix.count);
+      const list = s.grid.query(x, z, s.radius, s.mesh.instanceMatrix.count, s.from);
       list.forEach((i, k) => {
         s.mesh.setMatrixAt(k, plantMatrix(s.grid.p.data, i, this.stride, _m));
         s.mesh.setColorAt(k, _c.setRGB(1, 1, 1).multiplyScalar(0.85 + hash(i * 0.7 + s.tint) * 0.3));

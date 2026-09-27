@@ -93,7 +93,9 @@ export class Surfaces {
     if (b.walkable) {
       if (NOT_A_FLOOR.has(b.tag)) return;
       const toGround = b.solid && b.bottom <= this.terrain.heightAt(b.cx, b.cz) + 0.05;
-      this.decks.push({ cx: b.cx, cz: b.cz, hx: b.hx, hz: b.hz, cos, sin, r: Math.hypot(b.hx, b.hz), top: b.top, tag: b.tag, toGround });
+      const d: Deck = { cx: b.cx, cz: b.cz, hx: b.hx, hz: b.hz, cos, sin, r: Math.hypot(b.hx, b.hz), top: b.top, tag: b.tag, toGround };
+      this.decks.push(d);
+      this.added.set(b, d);
       this.deckGrid = null;
     } else if (b.solid) {
       // Tidewater's local frame: local = R(rotY)·(world − centre), with
@@ -104,8 +106,27 @@ export class Surfaces {
         [b.hx, b.hz],
         [-b.hx, b.hz],
       ].map(([lx, lz]) => [b.cx + lx * cos + lz * sin, b.cz - lx * sin + lz * cos]);
-      this.walls.push({ pts, x: 0, z: 0, r: 0, sill: b.top, bottom: b.bottom, bx: b.cx, bz: b.cz, br: Math.hypot(b.hx, b.hz) });
+      const w: Wall = { pts, x: 0, z: 0, r: 0, sill: b.top, bottom: b.bottom, bx: b.cx, bz: b.cz, br: Math.hypot(b.hx, b.hz) };
+      this.walls.push(w);
+      this.added.set(b, w);
     }
+  }
+
+  /** what each box added became, so a box that goes away again can be taken out */
+  private readonly added = new Map<BoxCollider, Deck | Wall>();
+
+  /** Take out a box added earlier (a rail across a gateway that has opened). */
+  removeBox(b: BoxCollider): void {
+    const o = this.added.get(b);
+    if (!o) return;
+    this.added.delete(b);
+    const i = this.decks.indexOf(o as Deck);
+    if (i >= 0) {
+      this.decks.splice(i, 1);
+      this.deckGrid = null;
+    }
+    const j = this.walls.indexOf(o as Wall);
+    if (j >= 0) this.walls.splice(j, 1);
   }
 
   /** decks by 4 m cell (for deckOver: the grass asks thousands of times per re-grow) */

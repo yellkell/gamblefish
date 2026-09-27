@@ -72,6 +72,38 @@ const { DEMOLISHED } = await import('../src/village/roles.ts');
 const demolished = new Map();
 let frontWall = false;
 
+// A one-storey house with its porch roof under the main roof's eave (buildHouse: gable or hip)
+// hangs that roof from below the eave's fascia. Under a thick thatch eave it came down to eye
+// height: the Tackle Shop's porch beam was 1.4 m over its floor, its fringe lower still, so you
+// looked into the beam from the porch. Such a porch is pitched shallower and the house's walls
+// raised until the beam and the fringe clear 2.05 m (buildHouse's arithmetic, porch section).
+const PORCH_CLEAR = 2.05;
+/** the porch roof's lowest point (beam underside or thatch fringe) over the porch floor (m) */
+const porchClearance = (h) => {
+  const thatch = h.roofMat === 'thatch';
+  const a = h.pitch ?? (thatch ? 0.68 : 0.44);
+  const ta = Math.tan(a);
+  const T = thatch ? 0.28 : 0.06;
+  const ovE = h.ovE ?? (thatch ? 0.6 : 0.45);
+  const pp = h.porchPitch ?? 0.26;
+  const Tp = thatch ? 0.24 : 0.06;
+  const pd = h.porch.depth;
+  const yE = h.storyH ?? 2.95;
+  const yAtt = Math.min(yE - 0.03, yE + 0.12 - ovE * ta - (thatch ? T / Math.cos(a) + 0.16 : 0.22) - 0.03 + ovE * Math.tan(pp));
+  const beamTop = yAtt - (pd - 0.12) * Math.tan(pp) - Tp / Math.cos(pp) - 0.005;
+  const beam = beamTop - 0.18 + 0.05;
+  const fringe = thatch ? yAtt - (pd + 0.32) * Math.tan(pp) - Tp - 0.17 + 0.05 : Infinity;
+  return Math.min(beam, fringe);
+};
+function raisePorch(h) {
+  if (!h.porch || (h.stories ?? 1) > 1 || h.roof === 'gableFront') return;
+  // only the ones you'd duck under (the metal-roofed porches clear about 2 m as Tidewater builds them)
+  if (porchClearance(h) >= 1.8) return;
+  h.porchPitch = Math.min(h.porchPitch ?? 0.26, 0.15);
+  h.storyH = (h.storyH ?? 2.95) + Math.max(0, PORCH_CLEAR - porchClearance(h));
+  console.log(`porch raised: ${h.name} walls ${h.storyH.toFixed(2)} m, porch pitch ${h.porchPitch}, clearance ${porchClearance(h).toFixed(2)} m`);
+}
+
 // The boatyard's slipway. Tidewater lays each rail as one straight beam from the shed to 6.5 m
 // out, so it cuts through the sand where the beach dips and stops dead on the sand short of the
 // sea, and it gives each rail its own short ties, off-centre: two broken half-ladders. The bake
@@ -132,6 +164,7 @@ const clipRail = (kind, alongX, a0, a1, c, half) => {
     specs.houses = (specs.houses ?? []).filter((h) => !DEMOLISHED.includes(h.name));
     // the village's four outhouses (Tidewater's sheds) are gone too: no shed, no pad, no colliders
     specs.sheds = [];
+    for (const h of specs.houses) raisePorch(h);
     for (const h of specs.houses) houseAt.set(`${h.x},${h.z}`, h);
     boathouse = specs.boathouse ?? null;
     return specs;
@@ -568,6 +601,19 @@ const cylinders = colliders.cylinders.map((c) => ({
     const keep = list.filter((p) => !core(p) && !village.some((h) => plot(h, p.x, p.z, 7)));
     cleared += list.length - keep.length;
     veg[type] = keep;
+  }
+  // the woodlots (src/woodworks/lots.ts): the scatter keeps clear of their trees and log pile
+  {
+    const { WEST_TREES, EAST_TREES, EAST_PILE, YARD } = await import('../src/woodworks/lots.ts');
+    const spots = [...WEST_TREES, ...EAST_TREES, EAST_PILE, YARD];
+    for (const type of Object.keys(veg)) {
+      const list = veg[type];
+      if (!Array.isArray(list)) continue;
+      const r = type === 'trees' || type === 'palms' ? 4.5 : 2.2;
+      const keep = list.filter((p) => !spots.some(([x, z]) => Math.hypot(p.x - x, p.z - z) < r));
+      cleared += list.length - keep.length;
+      veg[type] = keep;
+    }
   }
   // a spot is free if it's dry land and clear of every collider (grown by r)
   const free = (x, z, r) => {

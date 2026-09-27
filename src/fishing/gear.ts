@@ -57,15 +57,34 @@ const NEW: Tracks = {
   },
 };
 
-/** a line of patter for each level, on the shop boards */
-export const GEAR_BLURB: Record<string, string[]> = {
-  rod: ['bends like a willow', 'light and quick', 'reaches past the breakers', 'casts out past the drop-off'],
-  reel: ['it squeaks', 'no more squeak', 'cranks like a winch', 'the one the marlin boats use'],
-  line: ['snaps if you look at it', 'good for the pier', 'holds a jack', 'holds a tarpon', 'holds anything that swims'],
-  hooks: ['they bend', 'a longer window to strike', 'they set themselves in the corner of the jaw', 'nothing throws one'],
-  bait: ['the fish are used to it', 'a jack can’t leave it alone', 'the big pelagics come up for it', 'swordfish hunt by its light', 'no marlin can pass it by'],
-  charm: ['', 'the sea owes you one', 'the rare ones find you', 'the sea gives up its best', 'the sea itself is on your side'],
-};
+/** a fraction as a whole percentage */
+const pct = (x: number): string => `${Math.round(x * 100)}%`;
+
+/**
+ * What a level does for you, in plain numbers, for the shop boards: the stat it sets, and (for one
+ * you haven't got) how that compares with what you have now.
+ */
+export function gearEffect(levels: Level[], track: string, level: number, have: number): string {
+  const lv = levels[level] as Record<string, number>;
+  const cur = levels[Math.min(have, levels.length - 1)] as Record<string, number>;
+  const up = level > have;
+  switch (track) {
+    case 'rod':
+      return up ? `Casts ${lv.castM - cur.castM} m further (${lv.castM} m)` : `Casts ${lv.castM} m`;
+    case 'reel':
+      return up ? `Reels in ${pct(lv.reelSpeed / cur.reelSpeed - 1)} faster (${lv.reelSpeed} m/s)` : `Reels in ${lv.reelSpeed} m/s`;
+    case 'line':
+      return up ? `Line strength ${lv.lineKg} kg, up from ${cur.lineKg}` : `Line strength ${lv.lineKg} kg`;
+    case 'hooks':
+      return level === 0 ? 'The usual time to strike' : `${pct(lv.strikeMul - 1)} longer to strike after a bite`;
+    case 'bait':
+      return level === 0 ? 'Bites at the usual pace' : `Bites come ${pct(1 - lv.biteMul)} sooner` + (up && have > 0 ? ` (yours ${pct(1 - cur.biteMul)})` : '');
+    case 'charm':
+      return level === 0 ? 'No effect' : `Trophy fish bite ${lv.luck}× as often` + (up && have > 0 ? ` (yours ${cur.luck}×)` : '');
+    default:
+      return '';
+  }
+}
 
 /** Which tracks each village shop sells (village/gearShop.ts). */
 export const GEAR_SHOPS: Record<string, string[]> = {
