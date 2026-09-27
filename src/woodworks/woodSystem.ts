@@ -56,6 +56,13 @@ import { Walks } from './walks.ts';
 
 /** what the timber yard charges */
 export const PRICES = { axe: 60, bundle: 40, cart: 180 };
+/**
+ * What it pays for your logs, once the helter skelter's built and there's nothing left for them
+ * to go into (woodDeps.buysLogs): under what it sells them for, so there's no buying low and
+ * selling high at the one counter. Until then the board says nothing about it.
+ */
+export const BUYS_AT = 2;
+const SELL_SOME = 10;
 /** logs a felled tree gives, blows to fell one, seconds before its sapling comes up */
 const LOGS_PER_TREE = 4;
 const BLOWS = 4;
@@ -87,6 +94,8 @@ export const woodDeps: {
   night: { value: number } | null;
   /** are you indoors, or is the backpack open (the axe stays away) */
   busy: (() => boolean) | null;
+  /** does the yard buy your logs back yet (the helter skelter's built) */
+  buysLogs?: (() => boolean) | null;
 } = { state: null, ground: null, addBox: null, removeBox: null, env: null, night: null, busy: null };
 
 const _v = new Vector3();
@@ -417,6 +426,10 @@ export class WoodSystem extends createSystem({}) {
   private buy(id: string): void {
     const s = woodDeps.state!;
     const w = s.woodworks;
+    if (id === 'sell' || id === 'sellAll') {
+      this.sell(id === 'sell' ? Math.min(SELL_SOME, w.wood) : w.wood);
+      return;
+    }
     const price = id === 'axe' ? PRICES.axe : id === 'bundle' ? PRICES.bundle : PRICES.cart;
     if ((id === 'axe' && w.axe) || !s.spend(price)) {
       uiDeny();
@@ -434,6 +447,22 @@ export class WoodSystem extends createSystem({}) {
     }
     s.save();
     s.emit();
+  }
+
+  /** Your logs over the counter, BUYS_AT a log (the wallet's chime rings). */
+  private sell(n: number): void {
+    const s = woodDeps.state!;
+    if (!woodDeps.buysLogs?.() || n <= 0) {
+      uiDeny();
+      if (woodDeps.buysLogs?.()) this.toast.show('You have no logs to sell', 2, INK.danger);
+      return;
+    }
+    s.woodworks.wood -= n;
+    s.money += n * BUYS_AT;
+    s.save();
+    s.emit();
+    this.toast.show(`Sold ${n} log${n === 1 ? '' : 's'} for $${n * BUYS_AT}`, 2.4, INK.good);
+    for (let i = 0; i < Math.min(6, n); i++) window.setTimeout(() => logThunk(), i * 70);
   }
 
   private paintBoard(): void {
@@ -464,36 +493,55 @@ export class WoodSystem extends createSystem({}) {
       ['bundle', 'BUNDLE OF 10 LOGS', 'straight into your backpack', PRICES.bundle, true],
       ['cart', 'CART OF 50 LOGS', 'for a whole walk and then some', PRICES.cart, true],
     ];
+    // with the helter skelter up, the yard buys logs too: a fourth row, the rows closing up for it
+    const buys = woodDeps.buysLogs?.() ?? false;
+    const pitch = buys ? 122 : 160;
+    const rowH = pitch - 22;
     const buttons: { id: string; x: number; y: number; w: number; h: number }[] = [];
-    rows.forEach(([id, name, sub, price, can], i) => {
-      const y = 130 + i * 160;
-      roundRect(c, 36, y, W - 72, 138, 20);
+    const row = (i: number, name: string, sub: string, textW: number): number => {
+      const y = (buys ? 118 : 130) + i * pitch;
+      roundRect(c, 36, y, W - 72, rowH, 20);
       c.fillStyle = 'rgba(255, 255, 255, 0.05)';
       c.fill();
       c.textAlign = 'left';
-      c.font = font(700, 44);
+      c.font = font(700, buys ? 38 : 44);
       c.fillStyle = INK.hot;
-      c.fillText(name, 66, y + 60, 470);
-      c.font = font(500, 26);
+      c.fillText(name, 66, y + rowH * 0.43, textW);
+      c.font = font(500, buys ? 24 : 26);
       c.fillStyle = INK.dim;
-      c.fillText(sub, 66, y + 102, 470);
+      c.fillText(sub, 66, y + rowH * 0.74, textW);
+      return y;
+    };
+    const button = (id: string, x: number, y: number, bw: number, text: string, on: boolean): void => {
+      const pad = buys ? 16 : 24;
+      const bh = rowH - pad * 2;
+      buttons.push({ id, x, y: y + pad, w: bw, h: bh });
+      roundRect(c, x, y + pad, bw, bh, 18);
+      c.fillStyle = b.hover === id && on ? '#ffffff' : on ? '#ffc070' : 'rgba(255,255,255,0.1)';
+      c.fill();
+      c.textAlign = 'center';
+      c.font = font(700, buys ? 34 : 40);
+      c.fillStyle = on ? '#2a1808' : INK.dim;
+      c.fillText(text, x + bw / 2, y + pad + bh / 2 + (buys ? 12 : 14), bw - 16);
+    };
+    rows.forEach(([id, name, sub, price, can], i) => {
+      const y = row(i, name, sub, 470);
       const bx = W - 300;
       if (!can) {
         c.textAlign = 'center';
         c.font = font(700, 38);
         c.fillStyle = INK.good;
-        c.fillText('✓ YOURS', bx + 125, y + 82);
+        c.fillText('✓ YOURS', bx + 125, y + rowH / 2 + 13);
         return;
       }
-      buttons.push({ id, x: bx, y: y + 24, w: 250, h: 90 });
-      roundRect(c, bx, y + 24, 250, 90, 18);
-      c.fillStyle = b.hover === id ? '#ffffff' : s.money >= price ? '#ffc070' : 'rgba(255,255,255,0.1)';
-      c.fill();
-      c.textAlign = 'center';
-      c.font = font(700, 40);
-      c.fillStyle = s.money >= price ? '#2a1808' : INK.dim;
-      c.fillText(`$${price}`, bx + 125, y + 82);
+      button(id, bx, y, 250, `$${price}`, s.money >= price);
     });
+    if (buys) {
+      const some = Math.min(SELL_SOME, w.wood);
+      const y = row(3, 'WE BUY LOGS', `$${BUYS_AT} a log, for the ones you've no use for`, 380);
+      button('sell', W - 440, y, 190, `${some || SELL_SOME} · $${(some || SELL_SOME) * BUYS_AT}`, some > 0);
+      button('sellAll', W - 240, y, 190, `ALL · $${w.wood * BUYS_AT}`, w.wood > 0);
+    }
     b.buttons = buttons;
     b.commit();
     if (this.yardAxe) this.yardAxe.visible = !w.axe;
