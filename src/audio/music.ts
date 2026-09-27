@@ -55,6 +55,8 @@ const MUTE_KEY = 'gamblefish.music.muted';
 /** The mute switch (the backpack's MUSIC button). */
 export const musicView = {
   muted: readMuted(),
+  /** the island's songs step aside (the helter skelter plays its own: audio/skelter.ts) */
+  away: false,
   toggle(): boolean {
     this.muted = !this.muted;
     try {
@@ -74,7 +76,7 @@ function readMuted(): boolean {
   }
 }
 
-interface Loaded {
+export interface Loaded {
   buffer: AudioBuffer;
   head: number;
   /** gain that levels it to NORM */
@@ -105,7 +107,7 @@ async function levelOf(buffer: AudioBuffer): Promise<number> {
   return rms > 0 ? Math.min(dB(12), dB(NORM) / rms) : 1;
 }
 
-async function decode(url: string): Promise<Loaded | null> {
+export async function decode(url: string): Promise<Loaded | null> {
   try {
     const bytes = await (await fetch(url)).arrayBuffer();
     const src = await new OfflineAudioContext(1, 1, LOFI_RATE).decodeAudioData(bytes);
@@ -174,7 +176,7 @@ export class Music {
       void this.playRotation(ctx, 0).then(() => this.playCasino(ctx));
     }
     const t = ctx.currentTime;
-    this.master!.gain.setTargetAtTime(musicView.muted ? 0 : 1, t, 0.12);
+    this.master!.gain.setTargetAtTime(musicView.muted || musicView.away ? 0 : 1, t, musicView.away ? 0.5 : 0.12);
 
     const p = camera.getWorldPosition(this.head);
     const inside = this.casinos.some((i) => i.inside(p.x, p.z));

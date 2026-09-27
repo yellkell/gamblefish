@@ -7,6 +7,7 @@
 import { CanvasTexture, CylinderGeometry, Group, Mesh, MeshBasicMaterial, MeshStandardMaterial, SphereGeometry, SRGBColorSpace, TorusGeometry, Vector3, type Object3D } from 'three';
 import { casinoEnv } from '../../casino/look.ts';
 import { Batch, blade, M, OUTLINE, rounded, stalk, turned, type Kit } from '../craft.ts';
+import { goopTub } from './goop.ts';
 
 /* ── rods ───────────────────────────────────────────────────────────── */
 
@@ -286,16 +287,27 @@ export function bonito(k: Kit): Group {
   return g;
 }
 
+/** a little waxed-paper tub, for the goop bait */
+function goopCup(k: Kit): Group {
+  const b = new Batch();
+  b.add(M.satin(k.renderer, '#e8e2d0'), turned([[0, 0], [0.042, 0], [0.05, 0.05], [0.053, 0.052], [0.049, 0.05], [0.041, 0.004]], 20));
+  // its rim painted goop green
+  b.at(M.gloss(k.renderer, '#3cc860'), new TorusGeometry(0.0515, 0.0035, 5, 24).rotateX(Math.PI / 2), 0, 0.051, 0);
+  return b.group();
+}
+
 /** a bait level's picture */
 export function bait(k: Kit, level: number): Object3D {
   switch (level) {
     case 0:
       return shrimp(k);
     case 1:
-      return pilchards(k);
+      return goopTub(k, goopCup);
     case 2:
-      return squid(k);
+      return pilchards(k);
     case 3:
+      return squid(k);
+    case 4:
       return squid(k, true);
     default:
       return bonito(k);

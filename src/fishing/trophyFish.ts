@@ -78,7 +78,7 @@ interface TrophyFish {
 export const TROPHY: Record<string, TrophyFish> = {
   roosterfish: {
     row: { name: 'Roosterfish', sci: 'Nematistius pectoralis', lw: [0.0158, 3.0], habitat: { shallows: 0.5, bay: 1, pier: 0.4 }, kg: [4, 22], price: 26, fight: 0.8, stamina: 14, rarity: 0.3 },
-    needs: { bait: 1, line: 2 },
+    needs: { bait: 2, line: 2 },
     minDepth: 2.5,
     when: 'takes live bait, on 30 lb braid',
     body: {
@@ -94,7 +94,7 @@ export const TROPHY: Record<string, TrophyFish> = {
   },
   opah: {
     row: { name: 'Opah', sci: 'Lampris guttatus', lw: [0.0321, 2.95], habitat: { bay: 1, deep: 1 }, kg: [8, 40], price: 30, fight: 0.6, stamina: 13, rarity: 0.25 },
-    needs: { bait: 2, rod: 2 },
+    needs: { bait: 3, rod: 2 },
     minDepth: 8,
     when: 'takes live squid, out past 8 m of water',
     body: {
@@ -114,7 +114,7 @@ export const TROPHY: Record<string, TrophyFish> = {
   },
   sailfish: {
     row: { name: 'Sailfish', sci: 'Istiophorus platypterus', lw: [0.0011, 3.1], habitat: { bay: 1, deep: 1 }, kg: [15, 45], price: 34, fight: 0.9, stamina: 16, rarity: 0.2 },
-    needs: { rod: 3, line: 3, bait: 2 },
+    needs: { rod: 3, line: 3, bait: 3 },
     minDepth: 10,
     when: 'big-game rod, 60 lb braid, live squid — past the drop-off',
     body: {
@@ -135,7 +135,7 @@ export const TROPHY: Record<string, TrophyFish> = {
   },
   swordfish: {
     row: { name: 'Swordfish', sci: 'Xiphias gladius', lw: [0.0021, 3.1], habitat: { bay: 0.8, deep: 1 }, kg: [30, 100], price: 36, fight: 0.95, stamina: 20, rarity: 0.2 },
-    needs: { bait: 3, line: 4, reel: 3 },
+    needs: { bait: 4, line: 4, reel: 3 },
     minDepth: 12,
     hours: [20, 5],
     when: 'only at night: glow rig, 100 lb braid, lever drag, 12 m down',
@@ -156,7 +156,7 @@ export const TROPHY: Record<string, TrophyFish> = {
   },
   marlin: {
     row: { name: 'Blue marlin', sci: 'Makaira nigricans', lw: [0.0021, 3.1], habitat: { bay: 0.6, deep: 1 }, kg: [45, 130], price: 42, fight: 1, stamina: 24, rarity: 0.12 },
-    needs: { rod: 3, reel: 3, line: 4, bait: 3, charm: 1 },
+    needs: { rod: 3, reel: 3, line: 4, bait: 4, charm: 1 },
     minDepth: 13,
     when: 'the king: the best of everything, and a little luck',
     body: {

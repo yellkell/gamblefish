@@ -1,11 +1,13 @@
 /**
  * THE WALKS: boardwalks you build off the pier head with wood (the layout is woodworks/gates.ts).
  *
- * Each has a build crate by its gateway, with a board on it: how many logs it still needs, how
- * many you're carrying, and PUT IN WOOD. Point and click: your logs fly out of your backpack into
- * the crate one after another (a thunk each), and the walk lays itself out, a bay at a time: its
- * piles, cap beam and stringers, then the planks dropping on, then the rails, a clap and two
- * hammer taps per step. Until its first bay is down a rope with a sign hangs across the gateway.
+ * Each has a build crate by its gateway, and behind it a notice board on two posts (woodworks/
+ * buildSign.ts): how many logs it still needs, how many you're carrying, and a tag hung under it,
+ * PUT IN WOOD. Point and click: your logs fly out of your backpack into the crate one after
+ * another (a thunk each), and the walk lays itself out, a bay at a time: its piles, cap beam and
+ * stringers, then the planks dropping on, then the rails, a clap and two hammer taps per step.
+ * Until the walk is finished a rope with a sign hangs across the gateway and the way is shut;
+ * with the last plank down it's unhooked, drops away, and the walk is open.
  * Only the reef walk is on offer at first: the deep walk's gateway is still closed by the pier's
  * own rail, and its crate and rope aren't there, until the reef walk is finished.
  *
@@ -46,11 +48,10 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { logThunk, plankLay, uiDeny } from '../audio/sfx.ts';
 import type { GameState } from '../fishing/tidewater.ts';
 import { font, onFontsReady } from '../ui/fonts.ts';
-import { INK, roundRect } from '../ui/panel.ts';
-import { InteractivePanel, register } from '../ui/pointer.ts';
 import type { BoxCollider } from '../world/data.ts';
 import { buildLamps } from '../world/lamps.ts';
 import { bucketAndRope } from './bucket.ts';
+import { BuildSign, type SignText } from './buildSign.ts';
 import { CRATES, DECK, HEAD_STEPS, logsFor, stepsOf, WALK_W, WALKS, type WalkDef, type WalkId } from './gates.ts';
 
 /** seconds a step takes to lay, and between logs flying into the crate */
@@ -130,8 +131,13 @@ interface Built {
   flying: { mesh: Mesh; t: number; from: Vector3 }[];
   queued: number;
   queueT: number;
-  board: InteractivePanel;
+  sign: BuildSign;
+  /** the rope across the gateway (and the pivot it drops from), its collider, how far it's fallen */
   rope: Group;
+  ropeSwing: Group;
+  ropeBox: BoxCollider;
+  ropeIn: boolean;
+  ropeDrop: number;
   crate: Group;
   /** the crate's collider, once it's there */
   crateBox: BoxCollider;
@@ -181,6 +187,7 @@ export class Walks {
       w.uniforms.uBuilt.value = steps;
       w.uniforms.uDrop.value = 1;
       for (let i = 0; i < steps; i++) for (const b of w.colliders[i]) deps.addBox(b);
+      if (steps >= stepsOf(w.def)) w.ropeDrop = 1;
       this.paintBoard(w);
     }
     this.sync();
@@ -366,17 +373,24 @@ export class Walks {
     mesh.frustumCulled = false;
     this.group.add(mesh);
 
-    // the rope across the gateway, with its sign, until the first bay is down
+    // the rope across the gateway, with its sign, until the walk is finished: then it's unhooked
+    // at one end and drops away (it swings down from the other, about `swing`)
     const rope = new Group();
+    const ropeSwing = new Group();
+    const g = def.gate;
+    const span = g.to - g.from;
     {
-      const g = def.gate;
-      const span = g.to - g.from;
       const ropeMesh = new Mesh(new CylinderGeometry(0.018, 0.018, span, 6).rotateZ(Math.PI / 2), new MeshLambertMaterial({ color: 0xc8b48a }));
       const sign = new Mesh(new PlaneGeometry(0.62, 0.3), new MeshBasicMaterial({ map: signTexture(def.id === 'reef' ? 'TO THE REEF' : 'TO THE DEEP'), toneMapped: false }));
       sign.position.set(0, -0.2, 0);
       const back = sign.clone();
       back.rotation.y = Math.PI;
-      rope.add(ropeMesh, sign, back);
+      const hung = new Group();
+      hung.position.x = span / 2;
+      hung.add(ropeMesh, sign, back);
+      ropeSwing.position.x = -span / 2;
+      ropeSwing.add(hung);
+      rope.add(ropeSwing);
       if (g.alongX) rope.position.set((g.from + g.to) / 2, DECK + 0.78, g.line);
       else {
         rope.position.set(g.line, DECK + 0.78, (g.from + g.to) / 2);
@@ -384,6 +398,8 @@ export class Walks {
       }
       this.group.add(rope);
     }
+    // while it's up the way is shut (the rail's own height: no hopping it)
+    const ropeBox: BoxCollider = { tag: 'pierRail', walkable: false, solid: true, cx: g.alongX ? (g.from + g.to) / 2 : g.line, cz: g.alongX ? g.line : (g.from + g.to) / 2, hx: g.alongX ? span / 2 : 0.08, hz: g.alongX ? 0.08 : span / 2, rotY: 0, top: DECK + 1.0, bottom: DECK };
 
     // the build crate and its board
     const crate = new Group();
@@ -397,13 +413,13 @@ export class Walks {
     const fill = mesh3(new BoxGeometry(0.72, 0.1, 0.72), new MeshLambertMaterial({ color: 0x7a5636 }), 0, 0.1, 0);
     fill.name = 'fill';
     crate.add(fill);
-    const board = new InteractivePanel([640, 520], [0.5, 0.406]);
-    board.mesh.position.set(0, 0.62 + 0.26, 0);
-    // faces the middle of the pier head
+    // faces the middle of the pier head; its notice board is on two stakes driven into its back
     crate.rotation.y = Math.atan2(55 - cx, 36.5 - cz);
-    board.mesh.rotation.x = -0.35;
-    crate.add(board.mesh);
-    register(board);
+    let built!: Built;
+    const sign = new BuildSign(def.id === 'reef' ? 31 : 47, () => this.signText(built));
+    sign.group.position.set(0, 0, -0.3);
+    sign.group.rotation.x = -0.05;
+    crate.add(sign.group);
     this.group.add(crate);
     const crateBox: BoxCollider = { tag: 'buildCrate', walkable: false, solid: true, cx, cz, hx: 0.4, hz: 0.4, rotY: 0, top: DECK + 0.62, bottom: DECK };
 
@@ -423,7 +439,7 @@ export class Walks {
     const gate = def.after ? gateRail(def, this.deps.pierWood) : null;
     if (gate) this.group.add(gate.mesh);
 
-    const built: Built = {
+    built = {
       def,
       mesh,
       uniforms,
@@ -433,8 +449,12 @@ export class Walks {
       flying: [],
       queued: 0,
       queueT: 0,
-      board,
+      sign,
       rope,
+      ropeSwing,
+      ropeBox,
+      ropeIn: false,
+      ropeDrop: 0,
       crate,
       crateBox,
       crateIn: false,
@@ -447,9 +467,7 @@ export class Walks {
       gateBox: gate?.box ?? null,
       gateIn: false,
     };
-    board.paint = () => this.paintBoard(built);
-    board.onClick = (id) => id === 'deposit' && this.deposit(built);
-    board.repaintOnFonts(() => this.paintBoard(built));
+    sign.board.onClick = (id) => id === 'deposit' && this.deposit(built);
     return built;
   }
 
@@ -510,7 +528,14 @@ export class Walks {
         w.dropT = 0;
         w.uniforms.uDrop.value = 0;
       }
-      w.rope.visible = w.shown === 0 && this.open(w.def);
+      // the rope comes down once the last plank's on: unhooked, it swings down and it's gone
+      if (w.ropeDrop > 0 && w.ropeDrop < 1) {
+        w.ropeDrop = Math.min(1, w.ropeDrop + dt / 1.1);
+        const k = Math.min(1, w.ropeDrop / 0.6);
+        w.ropeSwing.rotation.z = -(Math.PI / 2) * (1 - Math.cos(k * Math.PI)) * 0.5 - Math.sin(Math.min(1, w.ropeDrop * 2) * Math.PI * 3) * 0.08 * (1 - k);
+        w.ropeSwing.scale.setScalar(w.ropeDrop < 0.75 ? 1 : Math.max(0.001, 1 - (w.ropeDrop - 0.75) / 0.25));
+      }
+      w.rope.visible = this.open(w.def) && w.ropeDrop < 1;
       const fill = w.crate.getObjectByName('fill')!;
       const left = this.logsIn(w.def) - w.shown * w.def.cost;
       fill.position.y = 0.06 + Math.min(0.5, left * 0.05);
@@ -535,6 +560,11 @@ export class Walks {
         (open ? d.addBox : d.removeBox)(w.crateBox);
         w.crateIn = open;
       }
+      const shut = open && w.ropeDrop === 0;
+      if (shut !== w.ropeIn) {
+        (shut ? d.addBox : d.removeBox)(w.ropeBox);
+        w.ropeIn = shut;
+      }
       if (w.gateRail) w.gateRail.visible = !open;
       if (w.gateBox && !open !== w.gateIn) {
         (!open ? d.addBox : d.removeBox)(w.gateBox);
@@ -556,6 +586,8 @@ export class Walks {
     for (const b of w.colliders[i] ?? []) this.deps.addBox(b);
     this.paintBoard(w);
     if (w.shown === stepsOf(w.def)) {
+      // the rope across the gateway comes down: the way's open
+      w.ropeDrop = 0.001;
       const [ax, az] = w.def.dir;
       const L = w.def.bays * w.def.bay + w.def.head[1] / 2;
       // the chart in the field guide draws the walk now it's finished
@@ -565,46 +597,19 @@ export class Walks {
     }
   }
 
-  /* ── the board on the crate ────────────────────────────────────────── */
+  /* ── the notice board behind the crate ─────────────────────────────── */
 
   private paintBoard(w: Built): void {
-    const b = w.board;
-    const c = b.ctx;
-    const [W, H] = b.px;
-    b.clear();
-    roundRect(c, 6, 6, W - 12, H - 12, 26);
-    c.fillStyle = 'rgba(38, 26, 16, 0.94)';
-    c.fill();
-    c.lineWidth = 6;
-    c.strokeStyle = '#c8a26a';
-    c.stroke();
-    c.textBaseline = 'alphabetic';
-    c.textAlign = 'center';
-    c.font = font(700, 50);
-    c.fillStyle = '#ffd89a';
-    c.fillText(w.def.title, W / 2, 74, W - 60);
+    w.sign.draw();
+  }
+
+  /** what the board says: what's wanted, how far along, and what to do next */
+  private signText(w: Built): SignText {
     const total = logsFor(w.def);
     const inCrate = Math.min(total, this.logsIn(w.def));
     const done = w.shown >= stepsOf(w.def) && inCrate >= total;
     const open = this.open(w.def);
-    c.font = font(500, 26);
-    c.fillStyle = INK.dim;
-    c.fillText(w.def.id === 'reef' ? 'a boardwalk out over the reef' : 'a boardwalk out past the drop-off', W / 2, 114, W - 60);
-    // progress
-    const bx = 50;
-    const bw = W - 100;
-    c.fillStyle = 'rgba(255, 255, 255, 0.12)';
-    roundRect(c, bx, 150, bw, 34, 17);
-    c.fill();
-    c.fillStyle = done ? '#7dff5a' : '#e0a050';
-    roundRect(c, bx, 150, Math.max(34, (bw * inCrate) / total), 34, 17);
-    c.fill();
-    c.font = font(700, 40);
-    c.fillStyle = INK.hot;
-    c.fillText(done ? 'FINISHED' : `${inCrate} / ${total} logs`, W / 2, 244);
     const ww = this.deps.state.woodworks;
-    c.font = font(600, 28);
-    c.fillStyle = INK.dim;
     const note = done
       ? w.def.id === 'reef'
         ? 'Walk out to the end and fish the reef.'
@@ -616,16 +621,17 @@ export class Walks {
           : ww.axe
             ? 'Chop wood in the woodlot, or buy it at the timber yard.'
             : 'Buy an axe, or wood, at the timber yard on the beach.';
-    c.fillText(note, W / 2, 294, W - 60);
     const can = open && !done && ww.wood > 0;
-    b.buttons = can ? [{ id: 'deposit', x: 70, y: 340, w: W - 140, h: 120 }] : [];
-    roundRect(c, 70, 340, W - 140, 120, 22);
-    c.fillStyle = !can ? 'rgba(255,255,255,0.06)' : b.hover === 'deposit' ? '#ffffff' : '#ffc070';
-    c.fill();
-    c.font = font(700, 46);
-    c.fillStyle = can ? '#2a1808' : INK.dim;
-    c.fillText(done ? '✓' : 'PUT IN WOOD', W / 2, 418);
-    b.commit();
+    return {
+      title: w.def.id === 'reef' ? 'The Reef Walk' : 'The Deep Walk',
+      sub: w.def.id === 'reef' ? 'a boardwalk out over the reef' : 'a boardwalk out past the drop-off',
+      progress: inCrate / total,
+      count: done ? 'Finished' : `${inCrate} of ${total} logs`,
+      note,
+      tag: done ? 'Open' : can ? 'Put in wood' : 'Needs wood',
+      can,
+      done,
+    };
   }
 }
 

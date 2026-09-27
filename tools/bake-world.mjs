@@ -170,8 +170,30 @@ const clipRail = (kind, alongX, a0, a1, c, half) => {
     return specs;
   };
   const { Builder } = await import(url('world/village/GeoBuilder.js'));
-  const { pushAt, pop, box, beam, part, lathe } = Builder.prototype;
+  const { pushAt, pop, box, beam, part, lathe, tube } = Builder.prototype;
+  // Tidewater hangs a string of floats on the pier head's west rail, one of them from z 37.1 to
+  // 38.9: straight across the reef walk's gateway, a line strung over the way out. The bake hangs
+  // that string on along the rail past the gateway instead, floats and all.
+  let floats = null;
+  const floatZ = (z) => floats.a2 + ((z - floats.a) * (floats.b2 - floats.a2)) / (floats.b - floats.a);
+  Builder.prototype.tube = function (key, points, radius, o) {
+    if (key === 'rope' && points.length > 2 && onPier(this, points[0].x, points[0].z)) {
+      const x = points[0].x;
+      const a = Math.min(points[0].z, points.at(-1).z);
+      const b = Math.max(points[0].z, points.at(-1).z);
+      const w = points.every((p) => Math.abs(p.x - x) < 1e-3) && WALKS.find((k) => !k.gate.alongX && Math.abs(x - k.gate.line) < 0.3 && a < k.gate.to && b > k.gate.from);
+      if (w) {
+        const a2 = w.gate.to + 0.15;
+        floats = { x, a, b, a2, b2: Math.min(PIER.zEnd - 0.15, a2 + (b - a)) };
+        points = points.map((p) => p.clone().setZ(floatZ(p.z)));
+        console.log(`floats moved off the ${w.id} walk's gateway: z ${a.toFixed(2)}–${b.toFixed(2)} → ${floats.a2.toFixed(2)}–${floats.b2.toFixed(2)}`);
+      }
+    }
+    return tube.call(this, key, points, radius, o);
+  };
   Builder.prototype.pushAt = function (x, y, z, ...r) {
+    // the floats on that string, after it
+    if (floats && this.stack.length === 0 && Math.abs(x - floats.x) < 0.05 && z > floats.a - 0.01 && z < floats.b + 0.01) z = floatZ(z);
     const out = pushAt.call(this, x, y, z, ...r);
     const h = y === 0 ? houseAt.get(`${x},${z}`) : undefined;
     if (h) ((house = h), (houseDepth = this.stack.length), (frontWall = false));
@@ -344,13 +366,29 @@ const colliders = new Colliders();
 // Village flattens its building pads INTO the terrain, so it must be built
 // before the heights are sampled.
 const village = new Village({ scene: new E.Scene(), terrain, colliders });
+// The helter skelter's plot (src/skelter/site.ts): levelled to the ground's mean height, so the
+// tower's plinth sits on it, before anything grows or the rocks are placed.
+const { SKELTER } = await import('../src/skelter/site.ts');
+{
+  let sum = 0;
+  let n = 0;
+  for (let r = 0; r <= SKELTER.radius; r += 4)
+    for (let a = 0; a < Math.PI * 2; a += 0.5) {
+      sum += terrain.heightAt(SKELTER.x + Math.cos(a) * r, SKELTER.z + Math.sin(a) * r);
+      n++;
+    }
+  terrain.flatten(SKELTER.x, SKELTER.z, SKELTER.radius, sum / n, 16);
+  console.log(`helter skelter plot levelled at ${(sum / n).toFixed(2)} m`);
+}
+/** on the helter skelter's plot (grown by `pad`) */
+const onPlot = (x, z, pad) => Math.hypot(x - SKELTER.x, z - SKELTER.z) < SKELTER.radius + pad;
 // Where everything grows (Tidewater's own land-cover scatter, clear of the houses and paths)
 const vegSite = new VegSite(terrain, { footprints: village.getFootprints() });
 const veg = scatterVegetation(vegSite);
 // where the grass grows (Tidewater's grass mask: R dune grass, G meadow, B sea oats, A creeper)
 const grassMask = buildGrassMask(vegSite);
 // Rocks: Tidewater's placement; the emergent ones join the collision world as it does
-const rocks = Rocks.prototype._place.call({ terrainData: terrain, village }, mulberry32(4242));
+const rocks = Rocks.prototype._place.call({ terrainData: terrain, village }, mulberry32(4242)).filter((r) => !onPlot(r.x, r.z, 4));
 for (const r of rocks) {
   const top = r.y + r.size * r.sy * 0.8;
   if (r.size < 0.9 || top < -0.3) continue;
@@ -439,6 +477,9 @@ for (let j = 0; j < N; j++) {
       c = mix(c, PAL.path, sat(path * 0.9));
       const r = sat(Math.max(rock, smooth(0.55, 1.1, slope)));
       c = mix(c, mix(PAL.rock, PAL.rockDark, sat(0.5 + n)), r);
+      // the helter skelter's plot: trodden bare
+      const plot = 1 - smooth(SKELTER.radius - 5, SKELTER.radius + 3, Math.hypot(T.origin + (si + 0.5) * T.texel - SKELTER.x, T.origin + (sj + 0.5) * T.texel - SKELTER.z));
+      if (plot > 0) c = mix(c, mix(PAL.path, PAL.soil, sat(0.4 + n)), plot * 0.8);
     }
     const tone = 1 + n * 0.08;
     albedo[k * 4] = Math.round(sat(c[0] * tone) * 255);
@@ -641,6 +682,14 @@ const cylinders = colliders.cylinders.map((c) => ({
       cleared += list.length - keep.length;
       veg[type] = keep;
     }
+  }
+  // the helter skelter's plot is cleared to the edge of the levelling
+  for (const type of Object.keys(veg)) {
+    const list = veg[type];
+    if (!Array.isArray(list)) continue;
+    const keep = list.filter((p) => !onPlot(p.x, p.z, type === 'trees' || type === 'palms' ? 10 : 6));
+    cleared += list.length - keep.length;
+    veg[type] = keep;
   }
   // a spot is free if it's dry land and clear of every collider (grown by r)
   const free = (x, z, r) => {
