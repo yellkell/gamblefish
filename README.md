@@ -165,8 +165,8 @@ and the vendors.
   pier head, so the longer rods matter). The marlin needs everything at the top and a
   charm. Each has its own body, built from a Tidewater anatomy with a bill, a sail or a
   comb added. `npm run check:fish` checks that none bites without its gear.
-- **Signs** (`src/village/signs.ts`): every business has a painted timber board, 5 cm thick, on
-  two posts behind it (or fixed to the wall), lit by the scene. Each is lettered by hand in a
+- **Signs** (`src/village/signs.ts`): every business has a painted timber board, 5 cm thick,
+  lit by the scene. Each is lettered by hand in a
   sign-writer's serif, letters a hair off the line with a painted shadow, over wood grain, and has
   seen some weather: paint chipped back to grey timber at the edges and seams, flecks gone, rain
   streaks, grime along the foot. A picture of the trade sits beside the name and a line says what's

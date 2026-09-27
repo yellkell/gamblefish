@@ -792,7 +792,7 @@ function paintSign(c: CanvasRenderingContext2D, ox: number, oy: number, name: st
   c.restore();
 }
 
-/** the timber the boards are cut from: their edges, backs and the posts that hold them up */
+/** the timber the boards are cut from: their edges and backs */
 function paintEdge(c: CanvasRenderingContext2D, ox: number, oy: number): void {
   c.save();
   c.translate(ox, oy);
@@ -965,12 +965,6 @@ export class VillageSigns {
       const target = r.role === 'casino' ? neon : boards;
       // the board: a 5 cm slab, its painted face out front, bare timber round its edges and back
       slab(target, b, lx, ly, lz - BOARD_T / 2, sw, sh, BOARD_T, tileUV(p.tile), tileUV(edgeTile));
-      // and what holds it up: two posts behind, down into the roof or the fascia it stands on
-      // (a board on the wall is fixed to it)
-      if (!face) {
-        const drop = b.kind === 'stall' ? 0.5 : 0.35;
-        for (const side of [-1, 1]) slab(boards, b, lx + side * sw * 0.32, ly - sh / 2 - drop / 2 + 0.2, lz - BOARD_T - 0.035, 0.07, sh + drop - 0.2 - 0.15, 0.07, tileUV(edgeTile), tileUV(edgeTile));
-      }
       // marquee bulbs along the casino's front eaves (and down the corners of the facade), strung
       // under the roof's front edge where there is one, and never behind the board
       if (r.role === 'casino') {
