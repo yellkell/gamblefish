@@ -285,6 +285,18 @@ const clipRail = (kind, alongX, a0, a1, c, half) => {
     return lathe.call(this, key, x, y, z, profile, o);
   };
   Builder.prototype.beam = function (key, p0, p1, w, h, o) {
+    // A tall stair's handrail (buildHouse stairRun: 6 × 5 cm, from 0.9 m over the porch's front
+    // edge down to its newel post) stopped short in the air, 17 cm out from the porch railing's
+    // post at the side of the stair gap and 5 cm inside it. Its top end is carried back onto that
+    // post, 10 cm under its top, the way a stair rail dies into its newel.
+    if (key === 'wood' && w === 0.06 && h === 0.05 && house?.porch && this.stack.length === houseDepth && p0[0] === p1[0] && p1[2] > p0[2]) {
+      const pz1 = house.d / 2 + house.porch.depth;
+      if (near(p0[2], pz1 + 0.05)) {
+        const stairX = house.porch.stairX ?? house.doorX ?? 0;
+        const gx = stairX + Math.sign(p0[0] - stairX) * 0.68;
+        return beam.call(this, key, [gx, p0[1], pz1 - 0.12 + 0.05], p1, w, h, o);
+      }
+    }
     // the walkway's mid rails, one per bay along z: laid end to end (a sagging one keeps its sag)
     if (key === 'wood' && w === 0.05 && h === 0.14 && p0[0] === p1[0] && Math.abs(p0[1] - RAIL.mid) < 0.4 && onPier(this, p0[0], p0[2])) {
       const ab = clipRail('mid', false, Math.min(p0[2], p1[2]), Math.max(p0[2], p1[2]), p0[0], w / 2);
