@@ -2,7 +2,8 @@
  * The fishing readouts, painted on canvases in the world (no screen in VR). The line meter on
  * the rod lives in rodGauge.ts.
  *
- *  - Toast: a short message that drifts into view in front of you and fades ("Fish on!").
+ *  - Toast: a short message that drifts into view in front of you and fades. The quick calls
+ *    ("Fish on!", "Not yet") are just the words, outlined, with no panel behind them.
  *  - CatchCard: the landed fish's name, length, weight and price, with NEW SPECIES / RECORD.
  */
 
@@ -26,7 +27,8 @@ export class Toast {
   private readonly want = new Vector3();
   private readonly fwd = new Vector3();
 
-  show(text: string, seconds = 2, colour: string = INK.hot): void {
+  /** `plain`: just the words (outlined so they read against sky, sea or sand), no panel */
+  show(text: string, seconds = 2, colour: string = INK.hot, plain = false): void {
     const c = this.panel.ctx;
     this.panel.clear();
     const maxW = 940;
@@ -40,13 +42,26 @@ export class Toast {
     const lh = size * 1.08;
     const tw = Math.min(1000, Math.max(...lines.map((l) => c.measureText(l).width)) + 72);
     const th = lines.length * lh + 44;
-    roundRect(c, (1024 - tw) / 2, (320 - th) / 2, tw, th, 36);
-    c.fillStyle = INK.glass;
-    c.fill();
-    c.fillStyle = colour;
+    if (!plain) {
+      roundRect(c, (1024 - tw) / 2, (320 - th) / 2, tw, th, 36);
+      c.fillStyle = INK.glass;
+      c.fill();
+    }
     c.textAlign = 'center';
     c.textBaseline = 'middle';
-    lines.forEach((l, i) => c.fillText(l, 512, 160 + (i - (lines.length - 1) / 2) * lh, maxW));
+    const y = (i: number): number => 160 + (i - (lines.length - 1) / 2) * lh;
+    if (plain) {
+      c.save();
+      c.shadowColor = 'rgba(0, 0, 0, 0.55)';
+      c.shadowBlur = 18;
+      c.lineJoin = 'round';
+      c.lineWidth = size * 0.16;
+      c.strokeStyle = 'rgba(8, 14, 20, 0.9)';
+      lines.forEach((l, i) => c.strokeText(l, 512, y(i), maxW));
+      c.restore();
+    }
+    c.fillStyle = colour;
+    lines.forEach((l, i) => c.fillText(l, 512, y(i), maxW));
     this.panel.commit();
     this.t = 0;
     this.dur = seconds;

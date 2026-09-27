@@ -60,6 +60,8 @@ interface Wall {
   bottom: number;
   /** clutter on the ground you can teleport over, low enough (HOP_OVER) */
   over: boolean;
+  /** what it is (the collider's tag) */
+  tag: string;
   /** bounding circle for the cheap reject */
   bx: number;
   bz: number;
@@ -87,7 +89,7 @@ export class Surfaces {
     this.terrain = terrain;
     for (const b of colliders.boxes) this.addBox(b);
     for (const c of colliders.cylinders) {
-      this.walls.push({ pts: null, x: c.x, z: c.z, r: c.r, sill: c.top, bottom: c.bottom, over: HOP_OVER.has(c.tag), bx: c.x, bz: c.z, br: c.r });
+      this.walls.push({ pts: null, x: c.x, z: c.z, r: c.r, sill: c.top, bottom: c.bottom, over: HOP_OVER.has(c.tag), tag: c.tag, bx: c.x, bz: c.z, br: c.r });
     }
   }
 
@@ -114,7 +116,7 @@ export class Surfaces {
         [b.hx, b.hz],
         [-b.hx, b.hz],
       ].map(([lx, lz]) => [b.cx + lx * cos + lz * sin, b.cz - lx * sin + lz * cos]);
-      const w: Wall = { pts, x: 0, z: 0, r: 0, sill: b.top, bottom: b.bottom, over: HOP_OVER.has(b.tag), bx: b.cx, bz: b.cz, br: Math.hypot(b.hx, b.hz) };
+      const w: Wall = { pts, x: 0, z: 0, r: 0, sill: b.top, bottom: b.bottom, over: HOP_OVER.has(b.tag), tag: b.tag, bx: b.cx, bz: b.cz, br: Math.hypot(b.hx, b.hz) };
       this.walls.push(w);
       this.added.set(b, w);
     }
@@ -288,7 +290,67 @@ export class Surfaces {
     }
     return false;
   }
+
+  /**
+   * The top of whatever stands at (x, z) no higher than `below`: the ground, a deck, a rail (at the
+   * height of the rail itself, not its collider). `walls` narrows the search to those near by.
+   */
+  topAt(x: number, z: number, below = Infinity, walls: readonly Wall[] = this.walls): number {
+    let h = Math.max(this.terrain.heightAt(x, z), this.deckOver(x, z));
+    for (const w of walls) {
+      const top = w.sill + (LINE_TOP[w.tag] ?? 0);
+      if (top <= h || w.bottom > below) continue;
+      if (Math.abs(x - w.bx) > w.br || Math.abs(z - w.bz) > w.br) continue;
+      if (w.pts ? insidePoly(x, z, w.pts) : Math.hypot(x - w.x, z - w.z) <= w.r) h = top;
+    }
+    return h;
+  }
+
+  /**
+   * A fishing line from a rod tip at `a` to the fish (or float) at `b` lies over whatever stands
+   * between them: the sand, a deck's edge, a rail. Of everything along the way that the straight
+   * line would go through, the one it comes to rest on is the one it has to climb to most steeply
+   * from the fish's end; that point (`out`, on top of it) is returned, or false if the line clears
+   * everything. `lift` is how far over a surface the line lies.
+   */
+  lineRest(a: Vec3, b: Vec3, out: Vec3, lift = 0.02): boolean {
+    const dx = b.x - a.x;
+    const dz = b.z - a.z;
+    const L = Math.hypot(dx, dz);
+    if (L < 0.1) return false;
+    const minX = Math.min(a.x, b.x);
+    const maxX = Math.max(a.x, b.x);
+    const minZ = Math.min(a.z, b.z);
+    const maxZ = Math.max(a.z, b.z);
+    const lo = Math.min(a.y, b.y);
+    const near = this.walls.filter((w) => w.sill > lo && !(w.bx + w.br < minX || w.bx - w.br > maxX || w.bz + w.br < minZ || w.bz - w.br > maxZ));
+    // every 5 cm: thin enough not to step over a rail
+    const n = Math.min(800, Math.ceil(L / 0.05));
+    let best = -Infinity;
+    for (let i = 1; i < n; i++) {
+      const s = i / n;
+      const x = a.x + dx * s;
+      const z = a.z + dz * s;
+      const yl = a.y + (b.y - a.y) * s;
+      const h = this.topAt(x, z, yl, near) + lift;
+      if (h <= yl) continue;
+      const climb = (h - b.y) / ((1 - s) * L);
+      if (climb > best) {
+        best = climb;
+        out.x = x;
+        out.y = h;
+        out.z = z;
+      }
+    }
+    return best > -Infinity;
+  }
 }
+
+/**
+ * Where a collider's top differs from the top of the thing itself, for a fishing line lying over
+ * it: the pier's rail colliders stand 10 cm over its top rail, the walks' 1.5 cm under theirs.
+ */
+const LINE_TOP: Record<string, number> = { pierRail: -0.105, walkRail: 0.015 };
 
 /** Proper crossing of two XZ segments (ff2's `segmentsCross`). */
 function segmentsCross(

@@ -140,6 +140,9 @@ const _x = new Vector3();
 const _h = new Vector3();
 const _up = new Vector3(0, 1, 0);
 const _q = new Quaternion();
+/** where the line rests on its way down (updateLine) */
+const _rest0 = new Vector3();
+const _rest1 = new Vector3();
 const LINE_N = 40;
 
 const smooth = (e0: number, e1: number, x: number): number => {
@@ -163,6 +166,7 @@ export class FishingSystem extends createSystem({}) {
   private lineGeo!: LineGeometry;
   private lineMat!: LineMaterial;
   private readonly lineBuf = new Float32Array((LINE_N + 1) * 3);
+  private readonly linePts: Vector3[] = [];
 
   private bite: Bite | null = null;
   private fight: CatchMinigame | null = null;
@@ -173,7 +177,7 @@ export class FishingSystem extends createSystem({}) {
   private hapticT = 0;
   private hintT = 0;
 
-  private landing: { species: string; kg: number; mesh: Mesh; u: FishUniforms; len: number; from: Vector3 } | null = null;
+  private landing: { species: string; kg: number; mesh: Mesh; u: FishUniforms; len: number; from: Vector3; lift: number } | null = null;
 
   // the other hand on the crank
   private cranking = false;
@@ -335,7 +339,7 @@ export class FishingSystem extends createSystem({}) {
         this.updateBite(dt);
         if (this.bite?.phase === 'take' && (down || this.yanked())) this.strike();
         else if (this.bite?.phase === 'nibble' && this.yanked() && this.hintT <= 0) {
-          this.toast.show('Not yet — wait for it to go under', 1.6, INK.dim);
+          this.toast.show('Not yet', 1.4, INK.hot, true);
           this.hintT = 2;
         } else if (reelIn > 0.15 && this.bite?.phase !== 'take') {
           this.bite = null;
@@ -559,7 +563,7 @@ export class FishingSystem extends createSystem({}) {
       this.toast.show('Something HUGE has it…', 2.6, INK.danger);
       this.buzz(this.hand, 1, 400);
       this.buzz(this.other(this.hand), 0.6, 300);
-    } else this.toast.show('Fish on!', 1.2, INK.amber);
+    } else this.toast.show('Fish on!', 1.2, INK.amber, true);
     this.buzz(this.hand, 1, 220);
   }
 
@@ -802,7 +806,20 @@ export class FishingSystem extends createSystem({}) {
     const len = cm / 100;
     mesh.scale.setScalar(len);
     this.scene.add(mesh);
-    this.landing = { species, kg, mesh, u: uniforms, len, from: this.bob.clone() };
+    // how high it's swung to clear what's between it and you (the sand up the beach, the pier's
+    // edge and rail), over the swing's own 0.8 m
+    const hang = _v.copy(this.rod.tip);
+    hang.y -= FISHING.landLine;
+    let lift = 0.8;
+    const S = fishingDeps.surfaces;
+    for (let i = 1; S && i < 24; i++) {
+      const s = i / 24;
+      const e = s * s * (3 - 2 * s);
+      _x.lerpVectors(this.bob, hang, e);
+      const need = S.topAt(_x.x, _x.z) + len + 0.12 - _x.y;
+      if (need > 0) lift = Math.max(lift, need / Math.max(0.15, Math.sin(e * Math.PI)));
+    }
+    this.landing = { species, kg, mesh, u: uniforms, len, from: this.bob.clone(), lift };
     this.setState('landing');
     this.bobVel.set(0, 0, 0);
     const info = fishingDeps.state!.lastCatch;
@@ -819,10 +836,16 @@ export class FishingSystem extends createSystem({}) {
     hang.y -= FISHING.landLine;
     if (k < 1) {
       this.bob.lerpVectors(L.from, hang, e);
-      this.bob.y += Math.sin(e * Math.PI) * 0.8;
+      this.bob.y += Math.sin(e * Math.PI) * L.lift;
       this.bobVel.set(0, 0, 0);
     } else {
       this.dangle(this.bob, this.bobVel, this.rod.tip, FISHING.landLine, dt);
+    }
+    // it hangs a body's length under the hook: never down in the sand or through a deck
+    const floor = Math.max(fishingDeps.terrain?.heightAt(this.bob.x, this.bob.z) ?? -Infinity, fishingDeps.surfaces?.deckOver(this.bob.x, this.bob.z) ?? -Infinity) + L.len + 0.03;
+    if (this.bob.y < floor) {
+      this.bob.y = floor;
+      if (this.bobVel.y < 0) this.bobVel.y = 0;
     }
     // the fish hangs head-up by the mouth, thrashing, slowly turning so both flanks show
     L.mesh.position.copy(this.bob).y -= L.len * 0.5;
@@ -1031,11 +1054,16 @@ export class FishingSystem extends createSystem({}) {
         const side = _x.set(-_v.z, 0, _v.x).multiplyScalar(Math.sin(this.wander) * 0.9 * dt * (1 + f.surge));
         const dist = Math.max(1, f.distance);
         this.fishPos.set(tip.x + _v.x * dist, 0, tip.z + _v.z * dist).add(side);
+        // not in under a deck (the line would come up through it): out past its edge
+        const S = fishingDeps.surfaces;
+        for (let n = 0; S && n < 40 && S.deckOver(this.fishPos.x, this.fishPos.z, 0.35) > 0.5; n++) this.fishPos.addScaledVector(_v, 0.25);
         const k = 1 - Math.exp(-dt * 6);
         this.bob.x += (this.fishPos.x - this.bob.x) * k;
         this.bob.z += (this.fishPos.z - this.bob.z) * k;
         const water = ocean.heightAt(this.bob.x, this.bob.z);
-        this.bob.y += (water - 0.05 - 0.2 * f.surge - this.bob.y) * (1 - Math.exp(-dt * 8));
+        // in the water; pulled up the beach, over the sand, never through it
+        const sand = terrain.heightAt(this.bob.x, this.bob.z) + 0.04;
+        this.bob.y += (Math.max(water - 0.05 - 0.2 * f.surge, sand) - this.bob.y) * (1 - Math.exp(-dt * 8));
         break;
       }
     }
@@ -1059,14 +1087,42 @@ export class FishingSystem extends createSystem({}) {
     const taut = this.state === 'fighting' ? Math.min(1, (f ? f.tension : 0) * 1.5) : this.state === 'retrieving' ? 0.6 : 0;
     const slack = this.state === 'idle' || this.state === 'windup' || this.state === 'landing' ? 0 : 1;
     const sag = (this.lineOut * (this.state === 'flying' ? 0.03 : 0.07) * (1 - taut) + 0.02) * slack;
-    _v.copy(a).lerp(b, 0.5);
-    _v.y -= sag;
-    for (let i = 0; i <= LINE_N; i++) {
-      const t = i / LINE_N;
-      const u = 1 - t;
-      this.lineBuf[i * 3] = u * u * a.x + 2 * u * t * _v.x + t * t * b.x;
-      this.lineBuf[i * 3 + 1] = u * u * a.y + 2 * u * t * _v.y + t * t * b.y;
-      this.lineBuf[i * 3 + 2] = u * u * a.z + 2 * u * t * _v.z + t * t * b.z;
+    // It lies over whatever's between the tip and the fish (a rail, the deck's edge, the sand),
+    // rather than through it: where it rests, and where it rests on the tip's side of that.
+    const pts = this.linePts;
+    pts.length = 0;
+    pts.push(a);
+    const S = fishingDeps.surfaces;
+    if (S && this.state !== 'flying' && S.lineRest(a, b, _rest1)) {
+      if (S.lineRest(a, _rest1, _rest0)) pts.push(_rest0);
+      pts.push(_rest1);
+    }
+    pts.push(b);
+    // the points shared out over the spans by their length (each span at least one); only the
+    // first, off the tip, droops (past where it rests, the fish holds it straight)
+    const spans = pts.length - 1;
+    let total = 0;
+    for (let k = 1; k <= spans; k++) total += pts[k].distanceTo(pts[k - 1]);
+    let left = LINE_N;
+    let o = 0;
+    this.lineBuf[o++] = a.x;
+    this.lineBuf[o++] = a.y;
+    this.lineBuf[o++] = a.z;
+    for (let k = 1; k <= spans; k++) {
+      const p = pts[k - 1];
+      const q = pts[k];
+      const len = p.distanceTo(q);
+      const n = k === spans ? left : Math.max(1, Math.min(left - (spans - k), Math.round((LINE_N * len) / Math.max(total, 1e-6))));
+      left -= n;
+      _v.copy(p).lerp(q, 0.5);
+      if (k === 1) _v.y -= spans === 1 ? sag : Math.min(sag, 0.03 * len);
+      for (let j = 1; j <= n; j++) {
+        const t = j / n;
+        const u = 1 - t;
+        this.lineBuf[o++] = u * u * p.x + 2 * u * t * _v.x + t * t * q.x;
+        this.lineBuf[o++] = u * u * p.y + 2 * u * t * _v.y + t * t * q.y;
+        this.lineBuf[o++] = u * u * p.z + 2 * u * t * _v.z + t * t * q.z;
+      }
     }
     this.lineGeo.setPositions(this.lineBuf);
     // screen-space width needs the eye buffer's size (it differs in and out of the headset)
