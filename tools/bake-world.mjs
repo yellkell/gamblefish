@@ -524,13 +524,45 @@ const { SKELTER } = await import('../src/skelter/site.ts');
 }
 /** on the helter skelter's plot (grown by `pad`) */
 const onPlot = (x, z, pad) => Math.hypot(x - SKELTER.x, z - SKELTER.z) < SKELTER.radius + pad;
+// The fire dancers' camps (src/camps/sites.ts): each hidden plot levelled a little below the
+// ground's mean, a shallow hollow round the fire, so the flames sit down out of sight of the bay
+// (and the beach party's patch of sand just levelled).
+const { ALL_CAMPS: CAMPS, CAMP_PLOT, CAMP_BLEND, campSink } = await import('../src/camps/sites.ts');
+for (const c of CAMPS) {
+  let sum = 0;
+  let n = 0;
+  for (let r = 0; r <= CAMP_PLOT; r += 2.5)
+    for (let a = 0; a < Math.PI * 2; a += 0.5) {
+      sum += terrain.heightAt(c.x + Math.cos(a) * r, c.z + Math.sin(a) * r);
+      n++;
+    }
+  terrain.flatten(c.x, c.z, CAMP_PLOT, sum / n - campSink(c), CAMP_BLEND);
+  console.log(`camp ${c.id} levelled at ${(sum / n - campSink(c)).toFixed(2)} m`);
+}
+/** on a camp's plot (grown by `pad`) */
+const onCamp = (x, z, pad) => CAMPS.some((c) => Math.hypot(x - c.x, z - c.z) < CAMP_PLOT + pad);
 // Where everything grows (Tidewater's own land-cover scatter, clear of the houses and paths)
 const vegSite = new VegSite(terrain, { footprints: village.getFootprints() });
 const veg = scatterVegetation(vegSite);
 // where the grass grows (Tidewater's grass mask: R dune grass, G meadow, B sea oats, A creeper)
 const grassMask = buildGrassMask(vegSite);
+// no grass up through the camps' fires and chests: trodden bare, feathering back in at the plot's edge
+{
+  const res = grassMask.res;
+  const texel = terrain.size / res;
+  for (const c of CAMPS) {
+    const r = CAMP_PLOT + 2;
+    for (let j = Math.floor((c.z - r - terrain.origin) / texel); j <= Math.ceil((c.z + r - terrain.origin) / texel); j++)
+      for (let i = Math.floor((c.x - r - terrain.origin) / texel); i <= Math.ceil((c.x + r - terrain.origin) / texel); i++) {
+        if (i < 0 || j < 0 || i >= res || j >= res) continue;
+        const d = Math.hypot(terrain.origin + (i + 0.5) * texel - c.x, terrain.origin + (j + 0.5) * texel - c.z);
+        const keep = Math.min(1, Math.max(0, (d - (CAMP_PLOT - 2)) / 4));
+        for (let ch = 0; ch < 4; ch++) grassMask.data[(j * res + i) * 4 + ch] = Math.round(grassMask.data[(j * res + i) * 4 + ch] * keep);
+      }
+  }
+}
 // Rocks: Tidewater's placement; the emergent ones join the collision world as it does
-const rocks = Rocks.prototype._place.call({ terrainData: terrain, village }, mulberry32(4242)).filter((r) => !onPlot(r.x, r.z, 4));
+const rocks = Rocks.prototype._place.call({ terrainData: terrain, village }, mulberry32(4242)).filter((r) => !onPlot(r.x, r.z, 4) && !onCamp(r.x, r.z, 3));
 for (const r of rocks) {
   const top = r.y + r.size * r.sy * 0.8;
   if (r.size < 0.9 || top < -0.3) continue;
@@ -622,6 +654,12 @@ for (let j = 0; j < N; j++) {
       // the helter skelter's plot: trodden bare
       const plot = 1 - smooth(SKELTER.radius - 5, SKELTER.radius + 3, Math.hypot(T.origin + (si + 0.5) * T.texel - SKELTER.x, T.origin + (sj + 0.5) * T.texel - SKELTER.z));
       if (plot > 0) c = mix(c, mix(PAL.path, PAL.soil, sat(0.4 + n)), plot * 0.8);
+      // the dancers' camps: sand carried up from the beach, scuffed into the earth round the fire
+      for (const cp of CAMPS) {
+        const dc = Math.hypot(T.origin + (si + 0.5) * T.texel - cp.x, T.origin + (sj + 0.5) * T.texel - cp.z);
+        const k = 1 - smooth(CAMP_PLOT - 3, CAMP_PLOT + 2, dc + n * 2.5);
+        if (k > 0) c = mix(c, mix(PAL.sand, PAL.path, sat(0.35 + n * 1.2 + smooth(0, 2.2, dc) * 0.2 - smooth(1.8, 0, dc) * 0.3)), k * 0.85);
+      }
     }
     const tone = 1 + n * 0.08;
     albedo[k * 4] = Math.round(sat(c[0] * tone) * 255);
@@ -832,6 +870,14 @@ const cylinders = colliders.cylinders.map((c) => ({
       cleared += list.length - keep.length;
       veg[type] = keep;
     }
+  }
+  // the dancers' camps are cleared to their plots' edges (crowns further, so none hangs over a fire)
+  for (const type of Object.keys(veg)) {
+    const list = veg[type];
+    if (!Array.isArray(list)) continue;
+    const keep = list.filter((p) => !onCamp(p.x, p.z, type === 'trees' || type === 'palms' ? 5 : 1.5));
+    cleared += list.length - keep.length;
+    veg[type] = keep;
   }
   // the helter skelter's plot is cleared to the edge of the levelling
   for (const type of Object.keys(veg)) {

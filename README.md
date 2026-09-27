@@ -274,6 +274,27 @@ and the vendors.
     gate and you're off the ride, but you keep what you caught. At the bottom: back up to the top,
     or step off into the village.
   - The painted tower is lit by the island's sun, so it goes gold at sunset and dark at night.
+- **The fire dancers' camps** (`src/camps/`): FIRE FIGHT 2's beach-party dancers (the glowstick
+  crowd round its bonfires, ff2's `src/arena/cove/`) have gone off into the wilds in **eight** little
+  groups, each dancing round its own fire in a clearing with a chest beside it (the carpenter's
+  sea chest, built so its lid opens: hollow inside, lined in red velvet, its logs lying in the
+  bottom). None of them is on the chart and none can be seen from the
+  start: they're over the ridges, down the hollows and round the far coasts, a long walk out.
+  Listen for the drums, which carry further than the firelight. `npm run check:camps` proves every
+  one is hidden from the boardwalk, the pier and the beach, is level and standable, and can be
+  reached on foot.
+  - **Pleased to see you:** walk into a camp and its dancers throw their hands in the air, and gift
+    you everything in their chest ("2 of 8"). A hidden camp's gift is given once.
+  - **The chest:** click OPEN THEIR GIFT over it (or grip its lid). The lid swings up and the
+    **chest pack** rises out of it: a tray like your backpack's, with the dancers' fish lying in its
+    slots and their logs beside it. Reach in and **click** a fish to pack it straight into your
+    backpack, or **grip** it to take it in your hand and put it in your backpack yourself (A).
+    Point at the logs to add them to your stack, or TAKE ALL. There's always a prize fish a tier up
+    (the harder camps can hold a Gold). Walk away and the lid comes down.
+  - **The beach party:** find all eight and a ninth group comes down to the main beach, west of the
+    timber yard, and lights a fire there. Their chest fills every day with a couple of nice fish
+    (Silver or better) and a stack of logs, fresh at midnight. Which camps you've found, and what's left in each chest,
+    are saved.
 - **ALWAYS DAY:** a switch under MUSIC in the backpack holds the island in the early
   afternoon. The fish that only bite at night won't bite while it's on.
 - **Wallet:** `src/ui/wallet.ts` puts an odometer-style money counter on both
@@ -340,12 +361,14 @@ same questions as ff2's `TELEPORT_AREAS`, `floorYAt` and `crossesWall`:
 | `src/fishing/` | the rod, cast, bites, fight, landing, catch card, the line meter clipped to the rod |
 | `src/woodworks/` | the axe, the woodlots and the timber yard; the reef and deep walks, their build crates and boards, and the bucket at the end |
 | `src/skelter/` | the helter skelter: its plot, the tower and slide, the ride (from HELTER SKELTER) |
+| `src/camps/` | the fire dancers' hidden camps: their sites, fires and dancers (from FIRE FIGHT 2), the chests and what's in them, the drums |
 | `src/ui/` | ff2's Rajdhani type kit and coin symbol, canvas panels, the wrist wallet |
 | `src/dev/harness.ts` | dev-only emulator driver |
 | `tools/bake-world.mjs` | Tidewater → `public/world/` |
 | `tools/bake-props.mjs` | Tidewater's rod, bobber and fish → `public/props/` |
 | `tools/teleport-check.mjs` | headless teleport rules check, including no landing under a house floor |
 | `tools/fish-check.mjs` | headless check that the timed fish keep their hours and the trophy fish need their gear |
+| `tools/camps-check.mjs` | headless check that the camps are hidden from the start, level, reachable, and their chests fill properly |
 
 Dev hook: `__fish.move.to(x, z, yaw)`, `__fish.move.snapTurn(±1)` and
 `__fish.move.stepBack()`.
@@ -355,5 +378,5 @@ Dev hook: `__fish.move.to(x, z, yaw)`, `__fish.move.snapTurn(±1)` and
 - **Island, fishing rules, rod, fish and sounds:** from [Tidewater](https://github.com/dgreenheck/tidewater)
   by Dan Greenheck (MIT). See `vendor/tidewater/LICENSE` and `CREDITS.md`, and
   `public/audio/CREDITS.md` for the CC0 recordings.
-- **Teleport, cash chime, coin symbol, type kit, the sea's soundscape and the music:** from FIRE FIGHT 2. Rajdhani
+- **Teleport, cash chime, coin symbol, type kit, the sea's soundscape, the music, and the fire dancers and their bonfires:** from FIRE FIGHT 2. Rajdhani
   is under the SIL OFL (`src/assets/fonts/OFL-rajdhani.txt`).

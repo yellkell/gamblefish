@@ -1,0 +1,880 @@
+/**
+ * THE FIRE DANCERS' CAMPS: FIRE FIGHT 2's beach party, hidden in eight little groups out in the
+ * wilds of the island (camps/sites.ts), each dancing round its fire with a chest beside it.
+ *
+ *  FINDING ONE   None is on the chart and none can be seen from the start (tools/camps-check.mjs
+ *                proves it). Go and look: over the ridges, down the hollows. The drums carry
+ *                further than the firelight (camps/sound.ts). Walk into a camp and its dancers are
+ *                pleased to see you: they throw their hands in the air, and gift you everything
+ *                in their chest ("You found Ember Valley, 2 of 8").
+ *  THE BEACH     Find all eight and a ninth group comes down to the main beach, west of the timber
+ *                yard, and lights a fire there. Their chest fills with a couple of nice fish and a
+ *                stack of logs every day.
+ *  THE CHEST     Click the sign over it (or grip its lid) and it swings open: THE CHEST PACK rises
+ *                out of it, a tray like your backpack's with the dancers' fish lying in its slots
+ *                and their logs stacked beside it.
+ *                  - reach in and CLICK a fish (trigger): it goes into your backpack, wherever
+ *                    there's room;
+ *                  - GRIP a fish instead and it's in your hand, to put in your backpack yourself
+ *                    (press A), just like one off the line;
+ *                  - point at the LOGS and click: they all go on your stack for the walks;
+ *                  - TAKE ALL packs everything that fits.
+ *                Walk away (or CLOSE) and the lid comes down. A hidden camp's gift is given once;
+ *                the beach party's chest fills again tomorrow (camps/stock.ts).
+ *
+ * Everything the camps draw shares a handful of draws: every fire's layers (camps/fire.ts), every
+ * dancer and every glowstick (camps/dancers.ts); only the chests are their own meshes. All of it
+ * is hidden while you're nowhere near a camp.
+ */
+
+import { createSystem, InputComponent } from '@iwsdk/core';
+import { CylinderGeometry, Group, Matrix4, Mesh, MeshLambertMaterial, Vector3, type MeshStandardMaterial, type Object3D, type Sprite, type SpriteMaterial } from 'three';
+import { catchSting, logThunk, uiClick, uiDeny } from '../audio/sfx.ts';
+import { MIX, shot } from '../audio/samples.ts';
+import { backpackView, label, TIER_CSS, TIER_GLOW, TIER_HEX } from '../backpack/BackpackSystem.ts';
+import { bounds, cellsOf, findSpot, GRID_SIZES, TIERS, type Piece } from '../backpack/logic.ts';
+import { Tray } from '../backpack/tray.ts';
+import { introActive } from '../experience/introGate.ts';
+import { Toast } from '../fishing/hud.ts';
+import type { FishUniforms, Props } from '../fishing/props.ts';
+import { FISH, type GameState } from '../fishing/tidewater.ts';
+import { pulseHand } from '../input/haptics.ts';
+import { font } from '../ui/fonts.ts';
+import { INK, Panel, roundRect } from '../ui/panel.ts';
+import { InteractivePanel, pointerView, register } from '../ui/pointer.ts';
+import type { BoxCollider } from '../world/data.ts';
+import { Chest, CHEST_H } from './chest.ts';
+import { buildCrowd, type Crowd } from './dancers.ts';
+import { buildBonfires, type Bonfires, type FireSpot } from './fire.ts';
+import { CampSound } from './sound.ts';
+import { BEACH_CAMP, CAMPS, chestSpot, type CampSite } from './sites.ts';
+import { CHEST_GRID, dayNumber, stockFor, toCaught, type CampSave, type ChestFish } from './stock.ts';
+
+type Hand = 'left' | 'right';
+
+/** What the camps need from the game; set by main before registration. */
+export const campDeps: {
+  state: GameState | null;
+  props: Props | null;
+  ground: ((x: number, z: number) => number) | null;
+  addBox: ((b: BoxCollider) => void) | null;
+  /** the island's hour, for the fish's save entries */
+  hour: (() => number) | null;
+} = { state: null, props: null, ground: null, addBox: null, hour: null };
+
+/** Anyone can ask: is a chest open (the rod goes over your shoulder while it is)? */
+export const campView: {
+  busy: boolean;
+  /** dev: which camp you're nearest, and how far */
+  nearest?: () => { id: string; dist: number };
+  /** dev: open the nearest chest */
+  open?: () => void;
+  system?: CampSystem;
+} = { busy: false };
+
+/** the size of each fire (1 = ff2's big beach bonfire) */
+const FIRE_SIZE = 0.85;
+/** within this of a camp's fire it counts as found */
+const FOUND_R = 20;
+/** the chest's sign shows within this (close enough to reach in once it's open), and an open
+ *  chest shuts once you're past CLOSE_R (m, from the chest) */
+const SIGN_R = 4.5;
+const CLOSE_R = 6;
+/** how far the beach party's drums carry (the hidden camps' carry further: camps/sound.ts) */
+const BEACH_EARSHOT = 40;
+/** the camps are drawn only within this of the nearest one */
+const DRAW_R = 240;
+/** the chest pack's tray, tipped toward you like the backpack's */
+const TILT = (35 * Math.PI) / 180;
+
+interface Camp {
+  site: CampSite;
+  /** its dancers (the hidden camps share one crowd, the beach party has its own), and which of them */
+  crowd: Crowd;
+  party: number;
+  /** how pleased they are to see you, 0..1 */
+  cheer: number;
+  fire: FireSpot;
+  chest: Chest;
+  /** the chest's world position and which way its front faces (unit, xz) */
+  at: Vector3;
+  front: Vector3;
+  sign: InteractivePanel;
+}
+
+interface FishModel {
+  mesh: Mesh;
+  u: FishUniforms;
+  mat: MeshStandardMaterial;
+}
+
+interface Flight {
+  obj: Object3D;
+  from: Vector3;
+  t: number;
+  dur: number;
+  scale: number;
+  done?: () => void;
+}
+
+const _v = new Vector3();
+const _w = new Vector3();
+const UP = new Vector3(0, 1, 0);
+/** a log flying off the stack to you (the woodworks' colours) */
+const LOG_GEO = new CylinderGeometry(0.06, 0.06, 0.36, 8).rotateZ(Math.PI / 2);
+const LOG_MAT = new MeshLambertMaterial({ color: 0x8a6440 });
+
+export class CampSystem extends createSystem({}) {
+  private readonly root = new Group();
+  private camps: Camp[] = [];
+  private fires!: Bonfires;
+  /** the beach party's fire and dancers, and the camp itself: all hidden until the eight are found */
+  private readonly beachGroup = new Group();
+  private beach!: Camp;
+  private beachFires!: Bonfires;
+  private beachUp = false;
+  private readonly sound = new CampSound();
+  private toast!: Toast;
+
+  /** the chest pack: the tray, its fish, the readout behind it and the buttons either side */
+  private tray!: Tray;
+  private info!: Panel;
+  private buttons!: InteractivePanel;
+  private logs!: InteractivePanel;
+  private readonly models = new Map<ChestFish, FishModel>();
+  private openCamp: Camp | null = null;
+  /** the fish your hand is over in the tray */
+  private hover: ChestFish | null = null;
+  private infoKey = '';
+  private readonly trig: Record<Hand, boolean> = { left: false, right: false };
+  private readonly grip: Record<Hand, boolean> = { left: false, right: false };
+  private flights: Flight[] = [];
+  private tags: { s: Sprite; t: number }[] = [];
+  private wasShut = new Set<Chest>();
+  /** where you stood when the chest pack was last stood up for you */
+  private readonly placedFrom = new Vector3();
+
+  init(): void {
+    const ground = campDeps.ground!;
+    this.root.name = 'camps';
+    this.root.visible = false;
+    this.scene.add(this.root);
+    const kit = { renderer: this.renderer, props: campDeps.props! };
+    const make = (site: CampSite, party: number, crowd: () => Crowd, into: Group): Camp => {
+      const fire: FireSpot = { x: site.x, y: ground(site.x, site.z), z: site.z, size: FIRE_SIZE };
+      const [cx, cz] = chestSpot(site);
+      const chest = new Chest(kit);
+      const at = new Vector3(cx, ground(cx, cz), cz);
+      // its front to the outside of the ring, the fire behind it as you open it
+      const front = new Vector3(Math.cos(site.chestAt), 0, Math.sin(site.chestAt));
+      chest.group.position.copy(at);
+      chest.group.rotation.y = Math.atan2(front.x, front.z);
+      into.add(chest.group);
+      this.wasShut.add(chest);
+      const camp: Camp = { site, fire, chest, at, front, sign: this.makeSign(), cheer: 0, party, get crowd() { return crowd(); } };
+      camp.sign.onClick = () => this.openChest(camp);
+      into.add(camp.sign.mesh);
+      return camp;
+    };
+    let hidden: Crowd | null = null;
+    let beach: Crowd | null = null;
+    this.camps = CAMPS.map((site, i) => make(site, i, () => hidden!, this.root));
+    for (const c of this.camps) this.colliders(c);
+    this.fires = buildBonfires(this.camps.map((c) => c.fire));
+    hidden = buildCrowd(
+      this.camps.map((c) => ({ fire: c.fire, dancers: c.site.dancers, gap: c.site.chestAt })),
+      ground,
+    );
+    this.root.add(...this.fires.meshes, ...hidden.meshes);
+    // the ninth, on the beach
+    this.beachGroup.visible = false;
+    this.root.add(this.beachGroup);
+    this.beach = make(BEACH_CAMP, 0, () => beach!, this.beachGroup);
+    this.beachFires = buildBonfires([this.beach.fire]);
+    beach = buildCrowd([{ fire: this.beach.fire, dancers: BEACH_CAMP.dancers, gap: BEACH_CAMP.chestAt }], ground);
+    this.beachGroup.add(...this.beachFires.meshes, ...beach.meshes);
+    this.checkBeach(false);
+
+    this.toast = new Toast();
+    this.toast.panel.mesh.visible = false;
+    this.scene.add(this.toast.panel.mesh);
+
+    // the chest pack
+    this.tray = new Tray();
+    this.tray.build(...CHEST_GRID);
+    this.scene.add(this.tray.group);
+    this.info = new Panel([640, 200], [0.44, 0.1375]);
+    this.tray.group.add(this.info.mesh);
+    this.buttons = new InteractivePanel([320, 272], [0.17, 0.1445]);
+    this.buttons.mesh.rotation.x = -Math.PI / 2;
+    this.buttons.paint = () => this.paintButtons();
+    this.buttons.onClick = (id) => (id === 'all' ? this.takeAll() : this.closeChest());
+    this.buttons.repaintOnFonts(() => this.paintButtons());
+    this.tray.group.add(this.buttons.mesh);
+    register(this.buttons);
+    this.logs = new InteractivePanel([320, 272], [0.17, 0.1445]);
+    this.logs.mesh.rotation.x = -Math.PI / 2;
+    this.logs.paint = () => this.paintLogs();
+    this.logs.onClick = () => this.takeLogs();
+    this.logs.repaintOnFonts(() => this.paintLogs());
+    this.tray.group.add(this.logs.mesh);
+    register(this.logs);
+    const w = this.tray.width;
+    const h = this.tray.height;
+    this.info.mesh.position.set(0, 0.075, -h / 2 - 0.1);
+    this.buttons.mesh.position.set(-w / 2 - 0.13, 0.012, -h / 2 + 0.078);
+    this.logs.mesh.position.set(w / 2 + 0.13, 0.012, -h / 2 + 0.078);
+
+    campView.nearest = () => {
+      const n = this.nearest();
+      return { id: n.camp.site.id, dist: n.dist };
+    };
+    campView.open = () => this.openChest(this.nearest().camp);
+    campView.system = this;
+  }
+
+  private get state(): GameState {
+    return campDeps.state!;
+  }
+
+  /** No landing in a camp's fire or on its chest. */
+  private colliders(c: Camp): void {
+    const [cx, cz] = chestSpot(c.site);
+    campDeps.addBox?.({ tag: 'campfire', walkable: false, solid: true, cx: c.fire.x, cz: c.fire.z, hx: 1.1, hz: 1.1, rotY: 0, top: c.fire.y + 1.2, bottom: c.fire.y - 1 });
+    campDeps.addBox?.({ tag: 'chest', walkable: false, solid: true, cx, cz, hx: 0.55, hz: 0.55, rotY: 0, top: c.at.y + CHEST_H, bottom: c.at.y - 1 });
+  }
+
+  /** How many of the eight hidden camps you've found. */
+  private foundCount(): number {
+    return CAMPS.filter((s) => this.state.camps[s.id]?.found).length;
+  }
+
+  /** Once all eight are found, the ninth sets up on the beach (`announce`: tell them so). */
+  private checkBeach(announce: boolean): void {
+    if (this.beachUp || !campDeps.state || this.foundCount() < CAMPS.length) return;
+    this.beachUp = true;
+    this.beachGroup.visible = true;
+    this.colliders(this.beach);
+    if (announce)
+      window.setTimeout(() => {
+        this.toast.show("That's every camp! The dancers are coming down to the main beach, west of the timber yard, to light a fire for you there.", 7, INK.amber);
+        catchSting(true);
+      }, 6500);
+  }
+
+  /** the camps you can go to: the hidden eight, and the beach party once it's there */
+  private get live(): Camp[] {
+    return this.beachUp ? [...this.camps, this.beach] : this.camps;
+  }
+
+  /**
+   * A camp's save entry. A hidden camp's chest is filled once, the day you first come (their gift,
+   * never refilled); the beach party's fills afresh every day.
+   */
+  private save(c: Camp): CampSave {
+    const s = this.state;
+    const today = dayNumber();
+    let e = s.camps[c.site.id];
+    if (!e || (c.site.beach && e.day !== today)) {
+      e = { ...stockFor(c.site, today), found: e?.found ?? false };
+      s.camps[c.site.id] = e;
+    }
+    return e;
+  }
+
+  private nearest(): { camp: Camp; dist: number } {
+    this.camera.getWorldPosition(_v);
+    let best = this.camps[0];
+    let bd = Infinity;
+    for (const c of this.live) {
+      const d = Math.hypot(_v.x - c.fire.x, _v.z - c.fire.z);
+      if (d < bd) {
+        bd = d;
+        best = c;
+      }
+    }
+    return { camp: best, dist: bd };
+  }
+
+  /* ── frame ───────────────────────────────────────────────────────────── */
+
+  update(delta: number, time: number): void {
+    const dt = Math.min(delta, 0.05);
+    if (!campDeps.state || introActive()) return;
+    // (the cloud save can come in after we start: it may hold the eighth camp)
+    this.checkBeach(false);
+    const { camp, dist } = this.nearest();
+    this.root.visible = dist < DRAW_R;
+    // the beach party's drums stay on the beach, under the village's music
+    this.sound.update(dt, camp.fire, dist, camp.site.beach ? BEACH_EARSHOT : undefined);
+    this.toast.update(dt, this.camera);
+    this.animate(dt);
+    if (!this.root.visible) return;
+    this.fires.update(time);
+    this.beachFires.update(time);
+    this.camera.getWorldPosition(_v);
+    for (const c of this.live) {
+      c.crowd.update(time);
+      // they see you coming: the nearer you are, the more pleased
+      const want = Math.hypot(_v.x - c.fire.x, _v.z - c.fire.z) < FOUND_R ? 1 : 0;
+      c.cheer += (want - c.cheer) * (1 - Math.exp(-dt * 2.5));
+      c.crowd.cheer(c.party, c.cheer);
+      c.chest.update(dt, time);
+      // what's lying in the bottom: its logs, while you can see in
+      if (c.chest.amount > 0) c.chest.setLogs(this.save(c).logs);
+      // the lid coming down: a clap of wood
+      const shut = c.chest.amount < 0.02;
+      if (shut && !this.wasShut.has(c.chest)) logThunk();
+      if (shut) this.wasShut.add(c.chest);
+      else this.wasShut.delete(c.chest);
+    }
+
+    // walking in for the first time
+    if (dist < FOUND_R) {
+      const e = this.save(camp);
+      if (!e.found) {
+        e.found = true;
+        this.state.save();
+        if (camp.site.beach) this.toast.show(`${camp.site.name}! The dancers are so pleased to see you. Every day their chest has a couple of nice fish and a stack of logs in it for you.`, 7, INK.amber);
+        else {
+          const n = this.foundCount();
+          this.toast.show(`You found ${camp.site.name}, ${n} of ${CAMPS.length}! The dancers are pleased to see you: everything in their chest is a gift for you.`, 6, INK.amber);
+          this.checkBeach(true);
+        }
+        catchSting(true);
+      }
+    }
+
+    this.camera.getWorldPosition(_v);
+    const eye = _v.clone();
+    // the chest's sign, over the nearest chest while it's shut
+    for (const c of this.live) {
+      const near = Math.hypot(eye.x - c.at.x, eye.z - c.at.z) < SIGN_R;
+      const show = near && !c.chest.open && !backpackView.open;
+      c.sign.mesh.visible = show;
+      if (show) {
+        c.sign.mesh.position.set(c.at.x, c.at.y + CHEST_H + 0.75 + 0.02 * Math.sin(time * 2), c.at.z);
+        c.sign.mesh.lookAt(eye.x, c.at.y + CHEST_H + 0.75, eye.z);
+      }
+    }
+    // or grip its lid
+    if (!this.openCamp && camp && !backpackView.open && !backpackView.holding) {
+      for (const hand of ['left', 'right'] as const) {
+        const g = this.input.xr.gamepads[hand]?.getButtonValue(InputComponent.Squeeze) ?? 0;
+        const down = !this.grip[hand] && g > 0.6;
+        if (g > 0.6) this.grip[hand] = true;
+        else if (g < 0.3) this.grip[hand] = false;
+        if (!down) continue;
+        this.player.gripSpaces[hand].getWorldPosition(_w);
+        if (_w.distanceTo(_v.copy(camp.at).addScaledVector(UP, CHEST_H * 0.85)) < 0.5) this.openChest(camp);
+      }
+    }
+
+    const o = this.openCamp;
+    campView.busy = !!o;
+    if (!o) return;
+    if (Math.hypot(eye.x - o.at.x, eye.z - o.at.z) > CLOSE_R) {
+      this.closeChest();
+      return;
+    }
+    // a hop round the chest: the tray turns to face you again
+    if (Math.hypot(eye.x - this.placedFrom.x, eye.z - this.placedFrom.z) > 0.75) this.placeTray(o);
+    // the tray rises once the lid is up, and steps aside while your backpack is out
+    const show = o.chest.amount > 0.55 && !backpackView.open;
+    this.tray.group.visible = show;
+    if (!show) {
+      this.hover = null;
+      return;
+    }
+    this.handleInput();
+    this.paintTray(time);
+    this.paintInfo();
+  }
+
+  /* ── open / close ────────────────────────────────────────────────────── */
+
+  private openChest(c: Camp): void {
+    if (this.openCamp === c) return;
+    if (this.openCamp) this.closeChest();
+    this.openCamp = c;
+    c.chest.open = true;
+    this.save(c);
+    this.placeTray(c);
+    this.syncModels();
+    this.infoKey = '';
+    this.paintButtons();
+    this.paintLogs();
+    // triggers already down aren't clicks in here
+    for (const h of ['left', 'right'] as const) {
+      this.trig[h] = (this.input.xr.gamepads[h]?.getButtonValue(InputComponent.Trigger) ?? 0) > 0.3;
+      this.grip[h] = (this.input.xr.gamepads[h]?.getButtonValue(InputComponent.Squeeze) ?? 0) > 0.3;
+    }
+    // the hasp, then the lid going up
+    shot('bail_click', MIX.bail + 6, { rate: 0.5, at: c.at });
+    shot('bail_click', MIX.bail + 2, { rate: 0.42, at: c.at, delay: 0.12 });
+    uiClick();
+  }
+
+  private closeChest(): void {
+    const c = this.openCamp;
+    if (!c) return;
+    c.chest.open = false;
+    this.openCamp = null;
+    campView.busy = false;
+    this.tray.group.visible = false;
+    this.hover = null;
+    for (const m of this.models.values()) {
+      this.tray.group.remove(m.mesh);
+      m.mat.dispose();
+    }
+    this.models.clear();
+  }
+
+  /** Stand the chest pack up over the open chest, at your waist, tipped toward you. */
+  private placeTray(c: Camp): void {
+    const head = this.camera.getWorldPosition(new Vector3());
+    this.placedFrom.copy(head);
+    // from you to the chest, level
+    const d = new Vector3(c.at.x - head.x, 0, c.at.z - head.z);
+    if (d.lengthSq() < 1e-4) d.copy(c.front).negate();
+    d.normalize();
+    const X = new Vector3().crossVectors(d, UP).normalize();
+    const Y = UP.clone().multiplyScalar(Math.cos(TILT)).addScaledVector(d, -Math.sin(TILT));
+    const Z = new Vector3().crossVectors(X, Y);
+    const y = Math.min(c.at.y + 1.25, Math.max(c.at.y + 0.9, head.y - 0.55));
+    const pos = new Vector3(c.at.x, y, c.at.z).addScaledVector(d, -0.2);
+    this.tray.group.quaternion.setFromRotationMatrix(new Matrix4().makeBasis(X, Y, Z));
+    this.tray.group.position.copy(pos);
+    this.tray.group.updateMatrixWorld(true);
+    // the readout faces your eyes, level
+    this.info.mesh.lookAt(head);
+  }
+
+  /* ── the chest's fish ────────────────────────────────────────────────── */
+
+  private makeModel(f: ChestFish): FishModel {
+    const { mesh, uniforms } = campDeps.props!.makeFish(f.species);
+    const mat = mesh.material;
+    mat.emissive.setHex(TIER_GLOW[f.tier] ?? 0);
+    uniforms.uSwim.value = 0.012;
+    uniforms.uFreq.value = 0.8;
+    return { mesh, u: uniforms, mat };
+  }
+
+  /** The chest's fish lying in the tray (and none that have gone). */
+  private syncModels(): void {
+    const c = this.openCamp;
+    const fish = c ? this.save(c).fish : [];
+    for (const f of fish) {
+      if (this.models.has(f)) continue;
+      const m = this.makeModel(f);
+      m.mesh.matrixAutoUpdate = false;
+      this.tray.slotMatrix(f, m.mesh.matrix);
+      this.tray.group.add(m.mesh);
+      this.models.set(f, m);
+    }
+    for (const [f, m] of this.models) {
+      if (fish.includes(f)) continue;
+      this.tray.group.remove(m.mesh);
+      m.mat.dispose();
+      this.models.delete(f);
+    }
+  }
+
+  private handleInput(): void {
+    const fish = this.save(this.openCamp!).fish;
+    this.hover = null;
+    for (const hand of ['left', 'right'] as const) {
+      const pad = this.input.xr.gamepads[hand];
+      const t = pad?.getButtonValue(InputComponent.Trigger) ?? 0;
+      const g = pad?.getButtonValue(InputComponent.Squeeze) ?? 0;
+      const tDown = !this.trig[hand] && t > 0.6;
+      const gDown = !this.grip[hand] && g > 0.6;
+      if (t > 0.6) this.trig[hand] = true;
+      else if (t < 0.3) this.trig[hand] = false;
+      if (g > 0.6) this.grip[hand] = true;
+      else if (g < 0.3) this.grip[hand] = false;
+      // which fish is this hand in?
+      this.player.gripSpaces[hand].getWorldPosition(_v);
+      this.tray.group.worldToLocal(_v);
+      if (_v.y > 0.22 || _v.y < -0.08) continue;
+      const at = this.tray.cellAt(_v);
+      const cx = Math.floor(at.c);
+      const cy = Math.floor(at.r);
+      const f = fish.find((k) => cellsOf(k).some(([x, y]) => x === cx && y === cy));
+      if (!f) continue;
+      this.hover = f;
+      if (backpackView.holding) {
+        if (tDown || gDown) this.deny(hand, 'Your hands are full: put that fish in your backpack first (A)');
+        continue;
+      }
+      if (tDown && !pointerView.claimed[hand]) this.packFish(f, hand);
+      else if (gDown) this.handFish(f, hand);
+    }
+  }
+
+  /** Click: the fish goes into your backpack, wherever there's room. */
+  private packFish(f: ChestFish, hand: Hand, quiet = false): boolean {
+    const s = this.state;
+    const inv = s.inventory as unknown as Piece[];
+    const lv = Math.max(0, Math.min(GRID_SIZES.length - 1, s.upgrades.hold | 0));
+    const [C, R] = GRID_SIZES[lv];
+    const box = s as unknown as { _nextId: number };
+    const e = toCaught(f, box._nextId, campDeps.hour?.() ?? 12) as unknown as Piece;
+    const b = bounds(e.shape);
+    e.rot = b.w >= b.h ? 0 : 1;
+    const spot = findSpot(e, inv, C, R);
+    if (!spot) {
+      if (!quiet) this.deny(hand, `No room in your backpack for the ${FISH[f.species].name.toLowerCase()}`);
+      return false;
+    }
+    box._nextId++;
+    Object.assign(e, spot, { placed: true });
+    inv.push(e);
+    this.fly(f, hand, `${f.tier ? `${TIERS[f.tier]} ` : ''}${FISH[f.species].name} · $${f.value}`, TIER_CSS[f.tier]);
+    this.takeOut(f);
+    this.buzz(hand, 0.5, 50);
+    return true;
+  }
+
+  /** Grip: the fish is in your hand, to put in your backpack yourself. */
+  private handFish(f: ChestFish, hand: Hand): void {
+    const s = this.state;
+    const box = s as unknown as { _nextId: number };
+    const e = toCaught(f, box._nextId++, campDeps.hour?.() ?? 12);
+    (s.inventory as unknown as Piece[]).push(e as unknown as Piece);
+    this.takeOut(f);
+    backpackView.takeInHand?.(e.id, hand);
+    this.toast.show('Press A to open your backpack and put it in', 2.4, INK.dim);
+  }
+
+  /** The fish has left the chest (the save first, then its model). */
+  private takeOut(f: ChestFish): void {
+    const e = this.save(this.openCamp!);
+    e.fish = e.fish.filter((k) => k !== f);
+    this.state.save();
+    this.state.emit();
+    const m = this.models.get(f);
+    if (m) {
+      this.models.delete(f);
+      m.mat.dispose();
+      this.tray.group.remove(m.mesh);
+    }
+    this.infoKey = '';
+    this.paintButtons();
+  }
+
+  private takeLogs(): void {
+    const c = this.openCamp;
+    if (!c) return;
+    const e = this.save(c);
+    if (e.logs <= 0) {
+      uiDeny();
+      return;
+    }
+    const n = e.logs;
+    const s = this.state;
+    s.woodworks.wood += n;
+    e.logs = 0;
+    s.save();
+    s.emit();
+    // a few of them fly to you; the thunks land with them
+    this.logs.mesh.getWorldPosition(_w);
+    for (let i = 0; i < Math.min(n, 5); i++) {
+      const log = new Mesh(LOG_GEO, LOG_MAT);
+      log.position.copy(_w).add(_v.set((Math.random() - 0.5) * 0.1, 0.02 * i, (Math.random() - 0.5) * 0.1));
+      this.scene.add(log);
+      this.flights.push({ obj: log, from: log.position.clone(), t: -i * 0.07, dur: 0.45, scale: 1, done: () => logThunk() });
+    }
+    this.toast.show(`+${n} logs, into your backpack (${s.woodworks.wood})`, 2.4, INK.good);
+    this.paintLogs();
+    this.paintButtons();
+    this.infoKey = '';
+  }
+
+  /** TAKE ALL: every fish that fits (the biggest first), and the logs. */
+  private takeAll(): void {
+    const c = this.openCamp;
+    if (!c) return;
+    const e = this.save(c);
+    const hand: Hand = 'right';
+    const order = [...e.fish].sort((a, b) => b.shape.length - a.shape.length);
+    let packed = 0;
+    let left = 0;
+    for (const f of order) (this.packFish(f, hand, true) ? packed++ : left++);
+    const logs = e.logs;
+    if (logs > 0) this.takeLogs();
+    if (!packed && !logs) {
+      if (left) this.deny(hand, 'No room in your backpack');
+      else uiDeny();
+      return;
+    }
+    const parts = [packed ? `${packed} fish` : '', logs ? `${logs} logs` : ''].filter(Boolean).join(' and ');
+    this.toast.show(`Took ${parts}${left ? `. ${left} fish won't fit: make room in your backpack` : ''}`, 3.2, left ? INK.warn : INK.good);
+  }
+
+  private deny(hand: Hand, why: string): void {
+    uiDeny();
+    this.buzz(hand, 0.6, 70);
+    this.toast.show(why, 2.4, INK.danger);
+  }
+
+  /* ── the flights to your backpack ────────────────────────────────────── */
+
+  /** A fish lifts out of its slot and flies to your hip, into your backpack. */
+  private fly(f: ChestFish, hand: Hand, text: string, colour: string): void {
+    const m = this.models.get(f);
+    if (!m) return;
+    // out of the tray, into the world where it lies
+    m.mesh.updateMatrixWorld();
+    const wm = m.mesh.matrixWorld.clone();
+    this.models.delete(f);
+    this.tray.group.remove(m.mesh);
+    this.scene.add(m.mesh);
+    m.mesh.matrixAutoUpdate = true;
+    wm.decompose(m.mesh.position, m.mesh.quaternion, m.mesh.scale);
+    m.u.uSwim.value = 0.08;
+    m.u.uFreq.value = 2.4;
+    this.flights.push({
+      obj: m.mesh,
+      from: m.mesh.position.clone(),
+      t: 0,
+      dur: 0.42,
+      scale: m.mesh.scale.x,
+      done: () => {
+        m.mat.dispose();
+        shot('fish_flop', MIX.fishFlop - 2, { rate: 1.1 + Math.random() * 0.1 });
+        uiClick();
+      },
+    });
+    // its name and worth rising off the slot
+    const tag = label(text, colour, 40);
+    tag.position.copy(m.mesh.position).y += 0.1;
+    this.scene.add(tag);
+    this.tags.push({ s: tag, t: 0 });
+    this.buzz(hand, 0.4, 40);
+  }
+
+  private animate(dt: number): void {
+    const hip = this.camera.getWorldPosition(_w).add(_v.set(0, -0.55, 0));
+    this.flights = this.flights.filter((f) => {
+      f.t += dt;
+      if (f.t < 0) return true;
+      const k = Math.min(1, f.t / f.dur);
+      f.obj.position.lerpVectors(f.from, hip, k * k);
+      f.obj.position.y += Math.sin(k * Math.PI) * 0.25;
+      f.obj.scale.setScalar(f.scale * (1 - k * 0.7));
+      if (k >= 1) {
+        this.scene.remove(f.obj);
+        f.done?.();
+        return false;
+      }
+      return true;
+    });
+    this.tags = this.tags.filter((g) => {
+      g.t += dt;
+      g.s.position.y += dt * 0.12;
+      (g.s.material as SpriteMaterial).opacity = 1 - (g.t / 1.6) ** 2;
+      if (g.t < 1.6) return true;
+      this.scene.remove(g.s);
+      (g.s.material as SpriteMaterial).map?.dispose();
+      (g.s.material as SpriteMaterial).dispose();
+      return false;
+    });
+  }
+
+  /* ── painting ────────────────────────────────────────────────────────── */
+
+  /** Tier frames under the chest's fish; the one your hand is over lifts and glows. */
+  private paintTray(time: number): void {
+    const fish = this.save(this.openCamp!).fish;
+    this.syncModels();
+    const tiles: [number, number, number, number][] = [];
+    for (const f of fish) {
+      const over = f === this.hover;
+      for (const [c, r] of cellsOf(f)) tiles.push([c, r, over ? 0x3fd66a : TIER_HEX[f.tier], over ? 0.35 + 0.1 * Math.sin(time * 8) : f.tier > 0 ? 0.22 : 0.08]);
+      const m = this.models.get(f);
+      if (!m) continue;
+      m.u.uTime.value = time;
+      this.tray.slotMatrix(f, m.mesh.matrix, over ? 0.035 + 0.01 * Math.sin(time * 5) : 0.012);
+      m.mesh.matrixWorldNeedsUpdate = true;
+      if (over) m.mat.emissive.setRGB(0.18 + 0.1 * Math.sin(time * 8), 0.14, 0.04);
+      else if (f.tier === 3) m.mat.emissive.setHSL((time * 0.15) % 1, 0.8, 0.18);
+      else m.mat.emissive.setHex(TIER_GLOW[f.tier]);
+    }
+    this.tray.paintTiles(tiles);
+  }
+
+  private paintInfo(): void {
+    const c = this.openCamp!;
+    const e = this.save(c);
+    const [C, R] = CHEST_GRID;
+    const used = e.fish.reduce((a, f) => a + f.shape.length, 0);
+    const total = C * R;
+    const worth = e.fish.reduce((a, f) => a + f.value, 0);
+    const h = this.hover;
+    const key = `${c.site.id}|${used}|${worth}|${e.logs}|${h ? e.fish.indexOf(h) : '-'}|${backpackView.holding}`;
+    if (key === this.infoKey) return;
+    this.infoKey = key;
+    const g = this.info.ctx;
+    this.info.clear();
+    roundRect(g, 4, 4, 632, 192, 18);
+    g.fillStyle = 'rgba(22, 12, 6, 0.9)';
+    g.fill();
+    g.lineWidth = 3;
+    g.strokeStyle = '#c8a26a';
+    g.stroke();
+    g.textBaseline = 'alphabetic';
+    g.textAlign = 'left';
+    g.font = font(700, 30);
+    g.fillStyle = INK.hot;
+    g.fillText(c.site.name.toUpperCase(), 22, 42, 330);
+    g.font = font(600, 22);
+    g.fillStyle = INK.dim;
+    g.fillText(`${used} / ${total}`, 370, 42);
+    g.textAlign = 'right';
+    g.fillStyle = INK.amber;
+    g.fillText(`worth $${worth}`, 618, 42);
+    g.textAlign = 'left';
+    if (h) {
+      g.font = font(700, 20);
+      g.fillStyle = TIER_CSS[h.tier];
+      g.fillText(TIERS[h.tier].toUpperCase(), 22, 82);
+      g.font = font(700, 32);
+      g.fillStyle = INK.hot;
+      g.fillText(FISH[h.species].name, 22, 116, 420);
+      g.font = font(500, 22);
+      g.fillStyle = INK.dim;
+      g.fillText(`${Math.round(h.cm)} cm · ${h.kg.toFixed(2)} kg`, 22, 148);
+      g.font = font(700, 34);
+      g.fillStyle = INK.amber;
+      g.textAlign = 'right';
+      g.fillText(`$${h.value}`, 618, 116);
+      g.font = font(600, 20);
+      g.fillStyle = backpackView.holding ? INK.danger : INK.good;
+      g.fillText(backpackView.holding ? 'your hands are full' : 'click: into your backpack · grip: take it', 618, 180);
+    } else if (!e.fish.length && !e.logs) {
+      g.font = font(500, 24);
+      g.fillStyle = INK.dim;
+      g.fillText(c.site.beach ? 'Empty. More fish and logs for you tomorrow.' : 'Empty. You have all they had to give.', 22, 110);
+    } else {
+      g.font = font(700, 22);
+      g.fillStyle = INK.amber;
+      g.fillText(c.site.beach ? "TODAY'S GIFT FROM THE DANCERS" : 'A GIFT FROM THE DANCERS', 22, 84);
+      g.font = font(500, 22);
+      g.fillStyle = INK.dim;
+      g.fillText('Reach in: click a fish to pack it in your backpack,', 22, 118);
+      g.fillText('grip it to take it in hand, or point at the logs.', 22, 150);
+    }
+    this.info.commit();
+  }
+
+  private paintButtons(): void {
+    const b = this.buttons;
+    const c = b.ctx;
+    const [W, H] = b.px;
+    const e = this.openCamp ? this.save(this.openCamp) : null;
+    const any = !!e && (e.fish.length > 0 || e.logs > 0);
+    b.clear();
+    const list = [
+      { id: 'all', text: 'TAKE ALL', on: any },
+      { id: 'close', text: 'CLOSE', on: true },
+    ];
+    b.buttons = list.map((t, i) => ({ id: t.id, x: 0, y: (i * H) / 2, w: W, h: H / 2, enabled: t.on }));
+    list.forEach((t, i) => {
+      const hot = b.hover === t.id && t.on;
+      roundRect(c, 6, (i * H) / 2 + 6, W - 12, H / 2 - 12, 22);
+      c.fillStyle = t.id === 'all' && t.on ? (hot ? '#ffc640' : INK.amber) : hot ? 'rgba(40, 52, 60, 0.95)' : INK.glass;
+      c.fill();
+      c.lineWidth = 4;
+      c.strokeStyle = t.id === 'all' && t.on ? '#1a1206' : INK.rim;
+      c.stroke();
+      c.textAlign = 'center';
+      c.textBaseline = 'middle';
+      c.font = font(700, 50);
+      c.fillStyle = t.id === 'all' ? (t.on ? '#1a1206' : INK.dim) : INK.hot;
+      c.fillText(t.text, W / 2, (i * H) / 2 + H / 4 + 2, W - 30);
+    });
+    b.commit();
+  }
+
+  private paintLogs(): void {
+    const b = this.logs;
+    const c = b.ctx;
+    const [W, H] = b.px;
+    const n = this.openCamp ? this.save(this.openCamp).logs : 0;
+    b.clear();
+    b.buttons = [{ id: 'logs', x: 0, y: 0, w: W, h: H, enabled: n > 0 }];
+    const hot = b.hover === 'logs' && n > 0;
+    roundRect(c, 6, 6, W - 12, H - 12, 22);
+    c.fillStyle = hot ? 'rgba(90, 60, 32, 0.96)' : 'rgba(46, 30, 18, 0.94)';
+    c.fill();
+    c.lineWidth = 5;
+    c.strokeStyle = n > 0 ? '#c8a26a' : INK.rim;
+    c.stroke();
+    // a stack of log ends
+    for (const [x, y] of [
+      [118, 118],
+      [160, 118],
+      [202, 118],
+      [139, 82],
+      [181, 82],
+      [160, 46],
+    ]) {
+      c.globalAlpha = n > 0 ? 1 : 0.35;
+      c.fillStyle = '#8a6440';
+      c.beginPath();
+      c.arc(x, y, 20, 0, Math.PI * 2);
+      c.fill();
+      c.fillStyle = '#e0c090';
+      c.beginPath();
+      c.arc(x, y, 13, 0, Math.PI * 2);
+      c.fill();
+      c.strokeStyle = '#8a6440';
+      c.lineWidth = 2;
+      c.beginPath();
+      c.arc(x, y, 6, 0, Math.PI * 2);
+      c.stroke();
+    }
+    c.globalAlpha = 1;
+    c.textAlign = 'center';
+    c.textBaseline = 'middle';
+    c.font = font(700, 46);
+    c.fillStyle = n > 0 ? '#ffd89a' : INK.dim;
+    c.fillText(n > 0 ? `TAKE ${n} LOG${n === 1 ? '' : 'S'}` : 'NO LOGS', W / 2, 200, W - 30);
+    b.commit();
+  }
+
+  /** The sign over a shut chest: point and click to open it. */
+  private makeSign(): InteractivePanel {
+    const p = new InteractivePanel([420, 150], [0.36, 0.129]);
+    p.paint = () => {
+      const c = p.ctx;
+      const [W, H] = p.px;
+      p.clear();
+      p.buttons = [{ id: 'open', x: 0, y: 0, w: W, h: H }];
+      roundRect(c, 6, 6, W - 12, H - 12, 26);
+      c.fillStyle = p.hover ? '#ffc640' : 'rgba(46, 30, 18, 0.94)';
+      c.fill();
+      c.lineWidth = 5;
+      c.strokeStyle = p.hover ? '#1a1206' : '#c8a26a';
+      c.stroke();
+      c.textAlign = 'center';
+      c.textBaseline = 'middle';
+      c.font = font(700, 54);
+      c.fillStyle = p.hover ? '#1a1206' : '#ffd89a';
+      c.fillText('OPEN THEIR GIFT', W / 2, H / 2 + 2, W - 40);
+      p.commit();
+    };
+    p.repaintOnFonts(() => p.paint());
+    p.paint();
+    p.mesh.visible = false;
+    register(p);
+    return p;
+  }
+
+  private buzz(hand: Hand, k: number, ms: number): void {
+    pulseHand(this.renderer.xr.getSession() ?? undefined, hand, k, ms);
+  }
+}
+

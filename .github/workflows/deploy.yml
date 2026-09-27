@@ -32,6 +32,7 @@ jobs:
       - run: npm run check:backpack
       - run: npm run check:casino
       - run: npm run check:fish
+      - run: npm run check:camps
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist

@@ -52,6 +52,7 @@ import { cutGates } from './woodworks/gates.ts';
 import { WoodSystem, woodDeps, woodView } from './woodworks/woodSystem.ts';
 import { SkelterSystem, skelterDeps, skelterView } from './skelter/SkelterSystem.ts';
 import { SKELTER } from './skelter/site.ts';
+import { CampSystem, campDeps, campView } from './camps/CampSystem.ts';
 import { onFontsReady } from './ui/fonts.ts';
 import { drawLogo, drawLogoFish, hasLogoFish, setLogoFish } from './ui/logo.ts';
 import { thumbnail } from './ui/thumbnail.ts';
@@ -278,8 +279,9 @@ World.create(container, {
 
   // what bites, and when, follows the island's day
   fishingDeps.hour = () => sky.state.hour;
-  // indoors, with the axe out among the trees, or up the helter skelter, the rod goes over your shoulder
-  fishingDeps.indoors = () => interiorAt(interiors, world.player.position.x, world.player.position.z) !== null || woodView.axeOut || skelterView.onTower;
+  // indoors, with the axe out among the trees, up the helter skelter or at a dancers' open chest,
+  // the rod goes over your shoulder
+  fishingDeps.indoors = () => interiorAt(interiors, world.player.position.x, world.player.position.z) !== null || woodView.axeOut || skelterView.onTower || campView.busy;
 
   // the woodworks: the timber yard, the woodlot and the walks off the pier head
   Object.assign(woodDeps, {
@@ -304,6 +306,16 @@ World.create(container, {
     blink: () => blink.fire(),
   });
   world.registerSystem(SkelterSystem);
+
+  // the fire dancers' camps, hidden out in the wilds, each with a chest to open (camps/)
+  Object.assign(campDeps, {
+    state: game,
+    props: fishingDeps.props,
+    ground: (x: number, z: number) => heightfield.heightAt(x, z),
+    addBox: (b: BoxCollider) => surfaces.addBox(b),
+    hour: () => sky.state.hour,
+  });
+  world.registerSystem(CampSystem);
 
   // the village's people and counters
   const stall = frames.find((b) => b.name === 'stall');
@@ -360,7 +372,7 @@ World.create(container, {
   world.player.rotation.set(0, s.yaw, 0);
 
   // Dev hook: drive the rig without a headset (`__fish.move.to(x, z, yaw)`).
-  (window as unknown as { __fish: unknown }).__fish = { world, surfaces, move: teleportView, json, game, fishing: fishingView, vegetation, backpack: backpackView, interiors, tables, music, shore, sky, homeShops, gearShops, villa, fx, props: fishingDeps.props, wood: woodView, skelter: skelterView, spotFor };
+  (window as unknown as { __fish: unknown }).__fish = { world, surfaces, move: teleportView, json, game, fishing: fishingView, vegetation, backpack: backpackView, interiors, tables, music, shore, sky, homeShops, gearShops, villa, fx, props: fishingDeps.props, wood: woodView, skelter: skelterView, camps: campView, spotFor };
 
   if (import.meta.env.DEV) void import('./dev/harness.ts').then((m) => m.installHarness(world));
 

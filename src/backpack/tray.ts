@@ -20,12 +20,20 @@ import {
   Vector3,
   type Camera,
 } from 'three';
+import { bounds, cellsOf, rotate, type Piece } from './logic.ts';
 
 /** One slot's size (m). A 6×4 backpack is 0.66 × 0.44 m. */
 export const CELL = 0.11;
 const RIM = 0.035;
 const DEPTH = 0.045;
 const TILT = (35 * Math.PI) / 180;
+
+const UP = new Vector3(0, 1, 0);
+/** a fish's snout at each quarter turn: rot 0 toward +X, each turn swinging it toward +Z */
+const HEADS = [new Vector3(1, 0, 0), new Vector3(0, 0, 1), new Vector3(-1, 0, 0), new Vector3(0, 0, -1)];
+const _c = new Vector3();
+const _s = new Vector3();
+const _y = new Vector3();
 
 const WOOD = 0x7a5a3a;
 const WOOD_DARK = 0x4a3422;
@@ -131,6 +139,26 @@ export class Tray {
   /** Tray-local position of a cell's centre. */
   cellCentre(c: number, r: number, out: Vector3, lift = 0): Vector3 {
     return out.set((c + 0.5 - this.cols / 2) * CELL, lift, (r + 0.5 - this.rows / 2) * CELL);
+  }
+
+  /** Where a piece's fish lies in the tray: on its side, along its length, head per rotation. */
+  slotMatrix(p: Pick<Piece, 'x' | 'y' | 'rot' | 'shape'>, out: Matrix4, lift = 0.012): Matrix4 {
+    const cells = cellsOf(p);
+    const minC = Math.min(...cells.map((k) => k[0]));
+    const maxC = Math.max(...cells.map((k) => k[0]));
+    const minR = Math.min(...cells.map((k) => k[1]));
+    const maxR = Math.max(...cells.map((k) => k[1]));
+    const centre = this.cellCentre((minC + maxC) / 2, (minR + maxR) / 2, _c, lift);
+    const b0 = bounds(rotate(p.shape, 0));
+    const len = b0.w * CELL * 0.96;
+    // a two-row piece: the fish drawn a little deeper, so it fills its footprint
+    const deep = b0.h > 1 ? 1.4 : 1;
+    // rot 0: head toward +X (the tail cell is column 0); each quarter turn swings it toward +Z
+    const H = HEADS[p.rot];
+    const Y = _y.crossVectors(H, UP);
+    // fish-local x (its side) faces up out of the tray, y (its back) across, z (its snout) along H
+    out.makeBasis(UP, Y, H).scale(_s.set(len, len * deep, len)).setPosition(centre.x, centre.y + len * 0.05, centre.z);
+    return out;
   }
 
   /** Fractional cell coordinates of a tray-local point. */
