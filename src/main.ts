@@ -144,7 +144,7 @@ World.create(container, {
   scene.add(buildVillage(villageBuf, sky.state.night));
   const lamps = buildLamps((json as unknown as { lamps?: [number, number, number, string][] }).lamps ?? [], sky.state.night);
   scene.add(lamps);
-  const signs = new VillageSigns((json as unknown as { buildings: BuildingFrame[] }).buildings ?? []);
+  const signs = new VillageSigns((json as unknown as { buildings: BuildingFrame[] }).buildings ?? [], (json as unknown as { pierSign?: [number, number, number] | null }).pierSign ?? null);
   scene.add(signs.group);
   const vegetation = new Vegetation(vegBuf);
   scene.add(vegetation.group);

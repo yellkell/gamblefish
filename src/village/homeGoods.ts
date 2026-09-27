@@ -2,7 +2,7 @@
  * YOUR SHACK, CORAL'S VILLA, AND THE SHOPS THAT FURNISH THEM.
  *
  * The hut on the beach with HOME over the door (S1) is yours. Four of the village's shops sell
- * things for it — the BUILDER furniture, the FLORIST plants, the TAXIDERMIST trophy fish on
+ * things for it — the CARPENTER's furniture, the FLORIST plants, the TAXIDERMIST trophy fish on
  * plaques, the PAWN SHOP curios. Each shop has its goods on a counter and a board behind it:
  * point at BUY and it's paid for out of your wallet and delivered — it's standing in its own
  * spot in your shack straight away, and every time you come back (the save's `home` list,

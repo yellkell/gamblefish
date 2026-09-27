@@ -117,11 +117,11 @@ and the vendors.
   each biting only in its window: bonefish at dawn, queen triggerfish at midday,
   permit at sunset, lookdown at night under the pier lamps, and glasseye snapper after
   midnight. `npm run check:fish` checks the windows.
-- **Your shack:** the hut on the beach (HOME) is yours. The Builder, Florist,
+- **Your shack:** the hut on the beach (HOME) is yours. The Carpenter, Florist,
   Taxidermist and Pawn Shop each sell things for it from a counter and a price
   board (`src/village/homeGoods.ts`). What you buy is delivered to its spot in the
   shack and kept in your save.
-  - The Builder: a driftwood bed with a patchwork quilt, a table and two ladder-back
+  - The Carpenter: a driftwood bed with a patchwork quilt, a table and two ladder-back
     chairs, a kilim rug, a bookshelf, and a sea chest for the foot of the bed.
   - The Florist: a kentia palm, a hibiscus in bloom, a Boston fern in a macramé
     hanger, a moth orchid on a bamboo stand, and a monstera in a woven basket.
@@ -165,6 +165,24 @@ and the vendors.
   pier head, so the longer rods matter). The marlin needs everything at the top and a
   charm. Each has its own body, built from a Tidewater anatomy with a bill, a sail or a
   comb added. `npm run check:fish` checks that none bites without its gear.
+- **Signs** (`src/village/signs.ts`): every business has a painted timber board, 5 cm thick,
+  lit by the scene. Each is lettered by hand in a
+  sign-writer's serif, letters a hair off the line with a painted shadow, over wood grain, and has
+  seen some weather: paint chipped back to grey timber at the edges and seams, flecks gone, rain
+  streaks, grime along the foot. A picture of the trade sits beside the name and a line says what's
+  inside: planks painted in the trade's colour with a pinstripe (a rod, a baited hook, a fish, a saw
+  and hammer, the pawnbroker's three balls, a mounted fish, a potted hibiscus); gold leaf on oiled
+  dark hardwood for the jeweller, the boutique and the bank; hand-painted stars for the fortune
+  teller; glass-tube neon on stained timber for the casinos. Your shack, Coral's villa and the
+  boatyard have none.
+- **The pier's sign** (`src/village/pierSign.ts`): no words. A snapper cut from a thick plank, its
+  edges eased, painted coral and gold by hand (scales, fin rays, the gill, a bright eye) and worn
+  back to the grain in places, hanging from the entrance arch on two iron chains and swinging a
+  little in the wind. It replaces Tidewater's plain board (world.json `pierSign` keeps where it hung).
+- **Roofs** (`src/world/village.ts`): the bake keeps Tidewater's roof coordinates, and the village's
+  own draws texture the roofs from them in the fragment stage: thatch streaked down the slope in
+  courses, older and greyer in patches; corrugated metal with its ribs, sheet seams and laps, and
+  rust streaking down from the eave. No textures, no extra draws; the detail fades with distance.
 - **The village:** the Rum Shack (I) and the empty Captain's Table (M) are gone, and
   each spot is now a small garden. The beds' heliconias and birds of paradise are made the way the
   Florist's plants are (`src/world/beds.ts`): leaves on their own stalks, and flower spikes of red
@@ -211,7 +229,7 @@ and the vendors.
   - Its skin is its own pattern: denticles, scars, gill slits, snout pores and teeth.
 - **The woodworks** (`src/woodworks/`): build your own way out to the reef and deep water.
   - **Timber yard:** an open stall on the beach west of the pier foot. It sells the AXE
-    ($120), a bundle of 10 logs ($40) and a cart of 50 ($180) for when you'd rather not chop.
+    ($60), a bundle of 10 logs ($40) and a cart of 50 ($180) for when you'd rather not chop.
   - **Woodlots:** six almond trees behind the yard, and six more on the far side of the village
     past the boatyard, with a log pile and a chopping block but no stall (`src/woodworks/lots.ts`).
     Once you own the axe, walk up to either and it's in your hand. Swing it into a trunk: four good blows and the tree creaks, falls away
