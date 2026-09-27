@@ -23,8 +23,6 @@ import {
   BufferGeometry,
   CanvasTexture,
   Color,
-  CylinderGeometry,
-  DoubleSide,
   Group,
   InstancedMesh,
   LinearMipmapLinearFilter,
@@ -36,8 +34,8 @@ import {
   SRGBColorSpace,
   Vector3,
 } from 'three';
-import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { font, onFontsReady } from '../ui/fonts.ts';
+import { PierSign } from './pierSign.ts';
 import { ROLES, type BuildingRole } from './roles.ts';
 
 export interface BuildingFrame {
@@ -75,38 +73,30 @@ function toWorld(b: BuildingFrame, lx: number, ly: number, lz: number, out: Vect
   return out.set(b.x + lx * c + lz * s, ly, b.z - lx * s + lz * c);
 }
 
-function plankBoard(c: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, tint: string, seed: number): void {
-  const planks = 4;
-  for (let i = 0; i < planks; i++) {
-    const py = y + (i * h) / planks;
-    const k = 0.85 + ((Math.sin(seed * 12.9 + i * 78.2) * 43758.5) % 1) * 0.15;
-    c.fillStyle = tint;
-    c.fillRect(x, py, w, h / planks - 3);
-    c.fillStyle = `rgba(0,0,0,${(0.25 - k * 0.15).toFixed(3)})`;
-    c.fillRect(x, py, w, h / planks - 3);
-    // grain
-    c.strokeStyle = 'rgba(0,0,0,0.12)';
-    c.lineWidth = 1;
-    for (let g = 0; g < 5; g++) {
-      c.beginPath();
-      const gy = py + 4 + g * ((h / planks - 8) / 5);
-      c.moveTo(x, gy);
-      c.bezierCurveTo(x + w * 0.3, gy + 2, x + w * 0.7, gy - 2, x + w, gy + 1);
-      c.stroke();
-    }
-  }
-  // weathered edge
-  c.strokeStyle = 'rgba(40,28,18,0.8)';
-  c.lineWidth = 6;
-  c.strokeRect(x + 3, y + 3, w - 6, h - 6);
-}
-
 /* ── the emblems: a picture of the trade, painted beside the name ────────── */
 
-type Emblem = 'rod' | 'hook' | 'ring' | 'flower' | 'mirror' | 'coin' | 'saw' | 'balls' | 'mount' | 'ball' | 'wheel' | 'cherries' | 'spade';
+type Emblem = 'fish' | 'rod' | 'hook' | 'ring' | 'flower' | 'mirror' | 'coin' | 'saw' | 'balls' | 'mount' | 'ball' | 'wheel' | 'cherries' | 'spade';
 
 /** Each emblem drawn in a box of side `s` centred on (x, y). */
 const EMBLEMS: Record<Emblem, (c: CanvasRenderingContext2D, x: number, y: number, s: number, ink: string, hi: string) => void> = {
+  // a fish, nose up a little, its eye and gill
+  fish: (c, x, y, s, ink, hi) => {
+    fishShape(c, x, y, s * 0.95, -0.2, ink);
+    c.fillStyle = hi;
+    c.globalAlpha = 0.35;
+    c.save();
+    c.translate(x, y);
+    c.rotate(-0.2);
+    c.beginPath();
+    c.ellipse(s * 0.02, s * 0.06, s * 0.28, s * 0.06, 0, 0, Math.PI * 2);
+    c.fill();
+    c.restore();
+    c.globalAlpha = 1;
+    c.fillStyle = '#1a2a38';
+    c.beginPath();
+    c.arc(x + s * 0.3, y - s * 0.1, s * 0.035, 0, Math.PI * 2);
+    c.fill();
+  },
   // a rod bending under a fish's weight, the reel at its butt, the line down to a hook
   rod: (c, x, y, s, ink, hi) => {
     c.lineCap = 'round';
@@ -482,83 +472,233 @@ function star(c: CanvasRenderingContext2D, x: number, y: number, r: number, fill
 /* ── the boards ─────────────────────────────────────────────────────────── */
 
 /**
- * How each business shows itself:
- *   painted  planks painted in the trade's colour, the name in cream, the emblem at the left
- *   fish     the fish market's board cut in the shape of a fish
- *   fine     the jeweller's, the boutique's and the florist's: a lacquered board, gilt border,
- *            gilt lettering (the florist's cream, with the lettering in green)
- *   mystic   the fortune teller's: midnight purple, stars and a moon, gilt lettering
- *   neon     the casinos: dark timber, a bulb border, neon letters with a neon emblem either side
+ * How each business shows itself. Every board is painted timber, lettered by hand, and has seen
+ * a few seasons of sun and salt:
+ *   painted  planks painted in the trade's colour, a pinstripe border, the name in a sign-writer's
+ *            serif with a painted shadow, the emblem at the left
+ *   fine     the jeweller's, the boutique's and the florist's: oiled dark hardwood with a routed
+ *            border, the lettering and emblem in gold leaf
+ *   mystic   the fortune teller's: painted midnight purple, stars and a moon painted on by hand
+ *   neon     the casinos: stained timber with the name in glass tubes, the line under it painted
  */
-type Style = 'painted' | 'fish' | 'fine' | 'mystic' | 'neon';
+type Style = 'painted' | 'fine' | 'mystic' | 'neon';
 interface Look {
   style: Style;
   emblem?: Emblem;
-  /** the board's paint, the lettering, the emblem's ink and its highlight */
+  /** the board's paint (or stain), the lettering, the emblem's ink and its highlight */
   board: string;
   text: string;
   ink: string;
   hi: string;
 }
 
-/** the sign under the pier's entrance arch: not a building's, the pier's own */
-const PIER: BuildingRole = { role: 'shop', title: 'FISHING PIER', sub: 'cast from the head', colour: '#2f8f8c', does: 'the way out to the fishing' };
-
 const LOOKS: Record<string, Look> = {
-  pier: { style: 'fish', board: '#2f7f7c', text: '#f6ecd4', ink: '#f6ecd4', hi: '#f6ecd4' },
-  S3: { style: 'painted', emblem: 'rod', board: '#2e5872', text: '#f6ecd4', ink: '#f6ecd4', hi: '#e8b040' },
-  S2: { style: 'painted', emblem: 'hook', board: '#35603c', text: '#f6ecd4', ink: '#e8e4d8', hi: '#e0826a' },
-  stall: { style: 'fish', board: '#2f6fa8', text: '#f6ecd4', ink: '#f6ecd4', hi: '#f6ecd4' },
-  A: { style: 'fine', emblem: 'ring', board: '#2a1834', text: '#f0cf7a', ink: '#e8c060', hi: '#bfe8ff' },
-  D: { style: 'fine', emblem: 'flower', board: '#f2e8d4', text: '#2f6a34', ink: '#f0d040', hi: '#e8506a' },
-  E: { style: 'fine', emblem: 'mirror', board: '#16383a', text: '#f0cf7a', ink: '#e8c060', hi: '#bcd8e0' },
-  H: { style: 'painted', emblem: 'coin', board: '#4e3e24', text: '#f6e2a4', ink: '#6a4a14', hi: '#f0c850' },
-  F: { style: 'painted', emblem: 'saw', board: '#a07a4a', text: '#fff4dc', ink: '#3a2a1a', hi: '#d8dce0' },
-  J: { style: 'painted', emblem: 'balls', board: '#2e3040', text: '#f6ecd4', ink: '#c8b890', hi: '#e8b830' },
-  K: { style: 'painted', emblem: 'mount', board: '#5a3a24', text: '#f6ecd4', ink: '#8a6040', hi: '#c8d4dc' },
-  N: { style: 'mystic', emblem: 'ball', board: '#24163e', text: '#f0cf7a', ink: '#c8a050', hi: '#a88af0' },
+  S3: { style: 'painted', emblem: 'rod', board: '#2e5872', text: '#f2e6c8', ink: '#f2e6c8', hi: '#d8a040' },
+  S2: { style: 'painted', emblem: 'hook', board: '#34603a', text: '#f2e6c8', ink: '#e8e0cc', hi: '#d0806a' },
+  stall: { style: 'painted', emblem: 'fish', board: '#2c6690', text: '#f2e6c8', ink: '#f2e6c8', hi: '#c8dce4' },
+  A: { style: 'fine', emblem: 'ring', board: '#3a2a22', text: '#d8b058', ink: '#d8b058', hi: '#cfe8f4' },
+  D: { style: 'painted', emblem: 'flower', board: '#e8dcc0', text: '#2f5e30', ink: '#e0c040', hi: '#d84a62' },
+  E: { style: 'fine', emblem: 'mirror', board: '#2e2420', text: '#d8b058', ink: '#d8b058', hi: '#b8d0d8' },
+  H: { style: 'fine', emblem: 'coin', board: '#3a2c20', text: '#d8b058', ink: '#6a4a14', hi: '#e0b848' },
+  F: { style: 'painted', emblem: 'saw', board: '#9a7448', text: '#fbf0d8', ink: '#3a2a1a', hi: '#c8ccd0' },
+  J: { style: 'painted', emblem: 'balls', board: '#2e3040', text: '#f2e6c8', ink: '#b8a880', hi: '#d8a830' },
+  K: { style: 'painted', emblem: 'mount', board: '#5a3a24', text: '#f2e6c8', ink: '#7a5236', hi: '#c0ccd4' },
+  N: { style: 'mystic', emblem: 'ball', board: '#2a1a44', text: '#e0bc60', ink: '#b89048', hi: '#a88af0' },
   C: { style: 'neon', emblem: 'wheel', board: '#2a2019', text: '#ff3fb4', ink: '#ff3fb4', hi: '#ffe08a' },
   B: { style: 'neon', emblem: 'cherries', board: '#2a2019', text: '#3fd6ff', ink: '#ff4a4a', hi: '#7dff5a' },
   G: { style: 'neon', emblem: 'spade', board: '#2a2019', text: '#7dff5a', ink: '#7dff5a', hi: '#7dff5a' },
 };
 
 /** a board for a role without a look of its own: plain painted planks in its colour */
-const lookOf = (name: string, r: BuildingRole): Look => LOOKS[name] ?? { style: r.role === 'casino' ? 'neon' : 'painted', board: r.colour, text: '#f6ecd4', ink: '#f6ecd4', hi: '#f6ecd4' };
+const lookOf = (name: string, r: BuildingRole): Look => LOOKS[name] ?? { style: r.role === 'casino' ? 'neon' : 'painted', board: r.colour, text: '#f2e6c8', ink: '#f2e6c8', hi: '#f2e6c8' };
 
-function roundRectPath(c: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number): void {
-  c.beginPath();
-  c.moveTo(x + r, y);
-  c.arcTo(x + w, y, x + w, y + h, r);
-  c.arcTo(x + w, y + h, x, y + h, r);
-  c.arcTo(x, y + h, x, y, r);
-  c.arcTo(x, y, x + w, y, r);
-  c.closePath();
+/** a sign-writer's serif (Noto Serif on the headset) */
+const serif = (weight: number, px: number): string => `${weight} ${px}px 'Noto Serif', Georgia, 'DejaVu Serif', 'Liberation Serif', serif`;
+
+function rngOf(seed: number): () => number {
+  let a = (seed * 2654435761) >>> 0 || 1;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
 }
 
-/** the name and the line under it, centred in [x0, x1], outlined so they read against any board */
-function lettering(c: CanvasRenderingContext2D, r: BuildingRole, look: Look, x0: number, x1: number, h: number, outline: string | null, size = 64): void {
+/**
+ * Lettering by hand: each letter a hair off the line and off square, a painted shadow down and
+ * to the right, squeezed to fit `maxW` if it must be (the way a sign-writer narrows his letters).
+ */
+function handLetter(c: CanvasRenderingContext2D, text: string, cx: number, cy: number, maxW: number, fnt: string, fill: string, shadow: string | null, seed: number): void {
+  const r = rngOf(seed);
+  c.font = fnt;
+  c.textAlign = 'left';
+  c.textBaseline = 'middle';
+  const ws = [...text].map((ch) => c.measureText(ch).width);
+  const total = ws.reduce((a, b) => a + b, 0);
+  const k = Math.min(1, maxW / total);
+  c.save();
+  c.translate(cx, cy);
+  c.scale(k, 1);
+  let x = -total / 2;
+  [...text].forEach((ch, i) => {
+    const jy = (r() - 0.5) * 2.2;
+    const jr = (r() - 0.5) * 0.035;
+    c.save();
+    c.translate(x + ws[i] / 2, jy);
+    c.rotate(jr);
+    if (shadow) {
+      c.fillStyle = shadow;
+      c.fillText(ch, -ws[i] / 2 + 3, 3);
+    }
+    c.fillStyle = fill;
+    c.fillText(ch, -ws[i] / 2, 0);
+    c.restore();
+    x += ws[i];
+  });
+  c.restore();
+}
+
+/** Planks, their grain, the dark seams between them. */
+function plankBoard(c: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, tint: string, seed: number, planks = 3): void {
+  const r = rngOf(seed + 7);
+  for (let i = 0; i < planks; i++) {
+    const py = y + (i * h) / planks;
+    const ph = h / planks;
+    c.fillStyle = tint;
+    c.fillRect(x, py, w, ph);
+    c.fillStyle = `rgba(${r() < 0.5 ? '0,0,0' : '255,240,210'},${(0.04 + r() * 0.06).toFixed(3)})`;
+    c.fillRect(x, py, w, ph);
+    // grain: long wavering lines, a knot now and then
+    for (let g = 0; g < 9; g++) {
+      c.strokeStyle = `rgba(0,0,0,${(0.05 + r() * 0.08).toFixed(3)})`;
+      c.lineWidth = 0.8 + r() * 1.4;
+      c.beginPath();
+      const gy = py + 3 + r() * (ph - 6);
+      c.moveTo(x, gy);
+      c.bezierCurveTo(x + w * 0.3, gy + (r() - 0.5) * 6, x + w * 0.7, gy + (r() - 0.5) * 6, x + w, gy + (r() - 0.5) * 4);
+      c.stroke();
+    }
+    if (r() < 0.6) {
+      const kx = x + r() * w;
+      const ky = py + ph * (0.3 + r() * 0.4);
+      c.strokeStyle = 'rgba(40,24,12,0.25)';
+      c.lineWidth = 1.2;
+      for (let k = 1; k <= 3; k++) {
+        c.beginPath();
+        c.ellipse(kx, ky, 3 + k * 4, 2 + k * 1.6, 0, 0, Math.PI * 2);
+        c.stroke();
+      }
+    }
+    // the seam
+    c.fillStyle = 'rgba(20,12,6,0.75)';
+    c.fillRect(x, py + ph - 2, w, 2);
+  }
+}
+
+/**
+ * Sun, salt and years: paint chipped off at the edges and along the seams down to grey wood,
+ * flecks of paint gone everywhere, rust-and-rain streaks from the top, grime along the bottom,
+ * and the whole board a little bleached.
+ */
+function weather(c: CanvasRenderingContext2D, w: number, h: number, seed: number, amount = 1): void {
+  const r = rngOf(seed * 31 + 5);
+  const bare = (a: number): string => `rgba(${138 + Math.floor(r() * 20)}, ${122 + Math.floor(r() * 16)}, ${100 + Math.floor(r() * 14)}, ${a.toFixed(2)})`;
+  // chips: mostly at the edges and the seams
+  const chips = Math.round(46 * amount);
+  for (let i = 0; i < chips; i++) {
+    let x: number;
+    let y: number;
+    const where = r();
+    if (where < 0.3) {
+      x = r() * w;
+      y = r() < 0.5 ? r() * 10 : h - r() * 10;
+    } else if (where < 0.5) {
+      x = r() < 0.5 ? r() * 12 : w - r() * 12;
+      y = r() * h;
+    } else if (where < 0.75) {
+      x = r() * w;
+      y = (Math.floor(r() * 3) + 1) * (h / 3) - 2 + (r() - 0.5) * 6;
+    } else {
+      x = r() * w;
+      y = r() * h;
+    }
+    const sz = 1.5 + r() * r() * 7;
+    c.fillStyle = bare(0.55 + r() * 0.35);
+    c.beginPath();
+    const n = 5 + Math.floor(r() * 4);
+    for (let k = 0; k < n; k++) {
+      const a = (k / n) * Math.PI * 2;
+      const rr = sz * (0.5 + r() * 0.8);
+      c.lineTo(x + Math.cos(a) * rr * 1.4, y + Math.sin(a) * rr);
+    }
+    c.closePath();
+    c.fill();
+  }
+  // flecks
+  for (let i = 0; i < 300 * amount; i++) {
+    c.fillStyle = bare(0.18 + r() * 0.25);
+    c.fillRect(r() * w, r() * h, 1 + r() * 1.5, 1 + r() * 1.5);
+  }
+  // streaks from the top (rain off the fixings)
+  for (let i = 0; i < 5 * amount; i++) {
+    const x = 20 + r() * (w - 40);
+    const sw = 3 + r() * 10;
+    const len = h * (0.3 + r() * 0.6);
+    const g = c.createLinearGradient(0, 0, 0, len);
+    g.addColorStop(0, `rgba(70, 44, 22, ${(0.1 + r() * 0.12).toFixed(2)})`);
+    g.addColorStop(1, 'rgba(70, 44, 22, 0)');
+    c.fillStyle = g;
+    c.fillRect(x, 0, sw, len);
+  }
+  // grime at the foot, and the sun
+  const gb = c.createLinearGradient(0, h, 0, h * 0.55);
+  gb.addColorStop(0, `rgba(40, 30, 18, ${(0.28 * amount).toFixed(2)})`);
+  gb.addColorStop(1, 'rgba(40, 30, 18, 0)');
+  c.fillStyle = gb;
+  c.fillRect(0, 0, w, h);
+  c.fillStyle = `rgba(255, 246, 226, ${(0.07 * amount).toFixed(2)})`;
+  c.fillRect(0, 0, w, h);
+}
+
+/** a painted line, not quite straight, round a board */
+function pinstripe(c: CanvasRenderingContext2D, inset: number, w: number, h: number, colour: string, width: number, seed: number): void {
+  const r = rngOf(seed + 3);
+  c.strokeStyle = colour;
+  c.lineWidth = width;
+  c.lineJoin = 'round';
+  c.beginPath();
+  const pts: [number, number][] = [
+    [inset, inset],
+    [w - inset, inset],
+    [w - inset, h - inset],
+    [inset, h - inset],
+  ];
+  pts.forEach(([x, y], i) => {
+    const jx = x + (r() - 0.5) * 1.5;
+    const jy = y + (r() - 0.5) * 1.5;
+    if (i === 0) c.moveTo(jx, jy);
+    else c.lineTo(jx, jy);
+  });
+  c.closePath();
+  c.stroke();
+}
+
+/** the name and the line under it, lettered by hand, centred in [x0, x1] */
+function lettering(c: CanvasRenderingContext2D, r: BuildingRole, fill: string, shadow: string | null, x0: number, x1: number, h: number, seed: number, size = 66): void {
   const cx = (x0 + x1) / 2;
   const w = x1 - x0;
-  c.textAlign = 'center';
-  c.textBaseline = 'middle';
-  c.font = font(700, r.title.length > 11 ? size - 8 : size);
   const ty = r.sub ? h * 0.4 : h * 0.52;
-  if (outline) {
-    c.lineWidth = 9;
-    c.strokeStyle = outline;
-    c.lineJoin = 'round';
-    c.strokeText(r.title, cx, ty, w);
-  }
-  c.fillStyle = look.text;
-  c.fillText(r.title, cx, ty, w);
-  if (r.sub) {
-    c.font = font(600, 28);
-    if (outline) {
-      c.lineWidth = 6;
-      c.strokeText(r.sub, cx, h * 0.77, w - 10);
-    }
-    c.fillText(r.sub, cx, h * 0.77, w - 10);
-  }
+  handLetter(c, r.title, cx, ty, w, serif(700, r.title.length > 11 ? size - 6 : size), fill, shadow, seed);
+  if (r.sub) handLetter(c, r.sub, cx, h * 0.77, w - 10, `italic ${serif(600, 27)}`, fill, shadow, seed + 11);
+}
+
+/** Gold leaf: a darker edge under it, a bright one along the top. */
+function gilt(draw: (fill: string, dx: number, dy: number) => void): void {
+  draw('rgba(40, 24, 8, 0.8)', 2, 2.5);
+  draw('#f6e2a0', -0.8, -1);
+  draw('#c9a048', 0, 0);
 }
 
 function paintSign(c: CanvasRenderingContext2D, ox: number, oy: number, name: string, r: BuildingRole, seed: number): void {
@@ -567,139 +707,66 @@ function paintSign(c: CanvasRenderingContext2D, ox: number, oy: number, name: st
   const look = lookOf(name, r);
   c.save();
   c.translate(ox, oy);
-  c.clearRect(0, 0, w, h);
+  c.beginPath();
+  c.rect(0, 0, w, h);
+  c.clip();
   const emblem = look.emblem ? EMBLEMS[look.emblem] : null;
   switch (look.style) {
     case 'neon': {
-      // dark timber, a bulb border, neon letters with a halo, a neon emblem either side
-      c.fillStyle = '#1a1512';
-      c.fillRect(0, 0, w, h);
+      // stained timber; the name in glass tubes: a coloured glow round a pale core
       plankBoard(c, 0, 0, w, h, look.board, seed);
+      weather(c, w, h, seed, 0.5);
       for (let i = 0; i < 26; i++) {
         const bx = 10 + (i / 25) * (w - 20);
         for (const by of [10, h - 10]) {
+          c.fillStyle = '#2a2420';
+          c.beginPath();
+          c.arc(bx, by, 5, 0, Math.PI * 2);
+          c.fill();
           c.fillStyle = '#fff1c4';
           c.beginPath();
-          c.arc(bx, by, 4, 0, Math.PI * 2);
+          c.arc(bx, by, 3.5, 0, Math.PI * 2);
           c.fill();
         }
       }
-      c.shadowBlur = 16;
+      c.shadowBlur = 12;
       if (emblem)
         for (const ex of [62, w - 62]) {
           c.shadowColor = look.ink;
-          emblem(c, ex, h / 2, 92, look.ink, look.hi);
+          emblem(c, ex, h / 2, 88, look.ink, look.hi);
         }
       c.textAlign = 'center';
       c.textBaseline = 'middle';
       c.font = font(700, r.title.length > 12 ? 50 : 58);
-      c.shadowColor = look.text;
-      c.shadowBlur = 22;
-      c.fillStyle = look.text;
-      c.fillText(r.title, w / 2, h * 0.42, w - 250);
-      c.shadowBlur = 8;
-      c.fillStyle = '#ffffff';
-      c.globalAlpha = 0.55;
-      c.fillText(r.title, w / 2, h * 0.42, w - 250);
-      c.globalAlpha = 1;
-      if (r.sub) {
-        c.font = font(700, 30);
-        c.shadowBlur = 14;
-        c.shadowColor = '#fff1c4';
-        c.fillStyle = '#fff1c4';
-        c.fillText(r.sub, w / 2, h * 0.78, w - 260);
-      }
-      c.shadowBlur = 0;
-      break;
-    }
-    case 'fish': {
-      // the board cut as a plump fish, nose to the right: its back and belly run straight along
-      // the middle so the lettering sits wholly on the board; planks inside, an eye and a gill
-      const fish = (): void => {
-        c.beginPath();
-        c.moveTo(w - 6, h * 0.52);
-        c.bezierCurveTo(w - 14, h * 0.18, w - 60, 8, w - 118, 8);
-        c.lineTo(160, 8);
-        c.bezierCurveTo(118, 8, 96, h * 0.3, 84, h * 0.5);
-        c.lineTo(10, 8);
-        c.lineTo(34, h * 0.5);
-        c.lineTo(10, h - 8);
-        c.lineTo(84, h * 0.5);
-        c.bezierCurveTo(96, h * 0.7, 118, h - 8, 160, h - 8);
-        c.lineTo(w - 118, h - 8);
-        c.bezierCurveTo(w - 60, h - 8, w - 14, h * 0.82, w - 6, h * 0.52);
-        c.closePath();
-      };
-      c.save();
-      fish();
-      c.clip();
-      c.fillStyle = '#10202e';
-      c.fillRect(0, 0, w, h);
-      plankBoard(c, 0, 0, w, h, look.board, seed);
-      c.restore();
-      fish();
       c.lineJoin = 'round';
-      c.lineWidth = 6;
-      c.strokeStyle = '#0c1a28';
-      c.stroke();
-      c.strokeStyle = '#f6ecd4';
-      c.lineWidth = 3;
-      c.beginPath();
-      c.arc(w - 46, h * 0.4, 9, 0, Math.PI * 2);
-      c.stroke();
-      c.fillStyle = '#10202e';
-      c.beginPath();
-      c.arc(w - 46, h * 0.4, 5, 0, Math.PI * 2);
-      c.fill();
-      c.beginPath();
-      c.moveTo(w - 84, h * 0.16);
-      c.quadraticCurveTo(w - 70, h * 0.5, w - 84, h * 0.84);
-      c.stroke();
-      lettering(c, r, look, 128, w - 104, h, 'rgba(10,24,40,0.85)', 56);
+      c.shadowColor = look.text;
+      c.shadowBlur = 16;
+      c.strokeStyle = look.text;
+      c.lineWidth = 7;
+      c.strokeText(r.title, w / 2, h * 0.42, w - 250);
+      c.shadowBlur = 4;
+      c.strokeStyle = 'rgba(255, 255, 255, 0.85)';
+      c.lineWidth = 2.2;
+      c.strokeText(r.title, w / 2, h * 0.42, w - 250);
+      c.shadowBlur = 0;
+      if (r.sub) handLetter(c, r.sub, w / 2, h * 0.78, w - 270, serif(700, 26), '#e8dcc0', 'rgba(0,0,0,0.6)', seed + 5);
       break;
     }
     case 'fine': {
-      // lacquer, a double gilt border, the emblem in a gilt roundel at the left
-      roundRectPath(c, 4, 4, w - 8, h - 8, 26);
-      c.fillStyle = look.board;
-      c.fill();
-      const g = c.createLinearGradient(0, 0, 0, h);
-      g.addColorStop(0, 'rgba(255,255,255,0.12)');
-      g.addColorStop(0.5, 'rgba(255,255,255,0)');
-      g.addColorStop(1, 'rgba(0,0,0,0.12)');
-      c.fillStyle = g;
-      c.fill();
-      c.strokeStyle = '#d8b050';
-      c.lineWidth = 6;
-      c.stroke();
-      roundRectPath(c, 16, 16, w - 32, h - 32, 18);
-      c.lineWidth = 2;
-      c.stroke();
-      c.beginPath();
-      c.arc(86, h / 2, 56, 0, Math.PI * 2);
-      c.lineWidth = 3;
-      c.stroke();
-      if (emblem) emblem(c, 86, h / 2, 96, look.ink, look.hi);
-      lettering(c, r, look, 150, w - 30, h, null, 60);
+      // oiled dark hardwood, a routed border, gold leaf
+      plankBoard(c, 0, 0, w, h, look.board, seed, 2);
+      weather(c, w, h, seed, 0.35);
+      pinstripe(c, 14, w, h, 'rgba(10, 6, 2, 0.75)', 5, seed);
+      pinstripe(c, 16.5, w, h, 'rgba(255, 230, 190, 0.18)', 1.5, seed);
+      if (emblem) gilt((fill, dx, dy) => emblem(c, 86 + dx, h / 2 + dy, 104, fill === '#c9a048' ? look.ink : fill, fill === '#c9a048' ? look.hi : fill));
+      gilt((fill, dx, dy) => lettering(c, r, fill, null, 150 + dx, w - 28 + dx, h + dy * 2, seed));
       break;
     }
     case 'mystic': {
-      roundRectPath(c, 4, 4, w - 8, h - 8, 26);
-      const g = c.createLinearGradient(0, 0, w, h);
-      g.addColorStop(0, '#3a1e5e');
-      g.addColorStop(1, look.board);
-      c.fillStyle = g;
-      c.fill();
-      c.strokeStyle = '#c8a050';
-      c.lineWidth = 5;
-      c.stroke();
-      // a sprinkle of stars and a crescent moon
-      for (let i = 0; i < 26; i++) {
-        const sx = 150 + ((Math.sin(i * 91.7 + seed) * 43758.5) % 1 + 1) % 1 * (w - 180);
-        const sy = 14 + ((Math.sin(i * 17.3 + seed * 3) * 12345.6) % 1 + 1) % 1 * (h - 28);
-        star(c, sx, sy, 2 + (i % 3), 'rgba(255, 240, 200, 0.55)');
-      }
-      c.fillStyle = '#f0dca0';
+      plankBoard(c, 0, 0, w, h, look.board, seed);
+      const r2 = rngOf(seed + 99);
+      for (let i = 0; i < 22; i++) star(c, 150 + r2() * (w - 180), 12 + r2() * (h - 24), 2 + r2() * 3.5, 'rgba(240, 220, 160, 0.7)');
+      c.fillStyle = '#e8d49a';
       c.beginPath();
       c.arc(w - 40, 36, 16, 0, Math.PI * 2);
       c.fill();
@@ -707,20 +774,83 @@ function paintSign(c: CanvasRenderingContext2D, ox: number, oy: number, name: st
       c.beginPath();
       c.arc(w - 33, 31, 14, 0, Math.PI * 2);
       c.fill();
-      if (emblem) emblem(c, 82, h / 2, 110, look.ink, look.hi);
-      lettering(c, r, look, 150, w - 40, h, 'rgba(20,8,40,0.7)', 58);
+      pinstripe(c, 12, w, h, look.ink, 3, seed);
+      if (emblem) emblem(c, 82, h / 2, 108, look.ink, look.hi);
+      lettering(c, r, look.text, 'rgba(10, 4, 20, 0.7)', 150, w - 44, h, seed, 60);
+      weather(c, w, h, seed, 0.8);
       break;
     }
     default: {
-      // planks painted in the trade's colour, the emblem at the left
-      c.fillStyle = '#2a1e14';
-      c.fillRect(0, 0, w, h);
+      // planks painted in the trade's colour, a pinstripe, the emblem, the name by hand
       plankBoard(c, 0, 0, w, h, look.board, seed);
-      if (emblem) emblem(c, 84, h / 2, 118, look.ink, look.hi);
-      lettering(c, r, look, emblem ? 150 : 30, w - 26, h, 'rgba(24,16,10,0.8)', 64);
+      pinstripe(c, 13, w, h, look.text, 3, seed);
+      if (emblem) emblem(c, 84, h / 2, 112, look.ink, look.hi);
+      lettering(c, r, look.text, 'rgba(20, 12, 6, 0.55)', emblem ? 152 : 30, w - 30, h, seed);
+      weather(c, w, h, seed);
     }
   }
   c.restore();
+}
+
+/** the timber the boards are cut from: their edges, backs and the posts that hold them up */
+function paintEdge(c: CanvasRenderingContext2D, ox: number, oy: number): void {
+  c.save();
+  c.translate(ox, oy);
+  plankBoard(c, 0, 0, SW, SH, '#6a5846', 911, 4);
+  weather(c, SW, SH, 911, 0.6);
+  c.restore();
+}
+
+/** how thick the boards are (m) */
+const BOARD_T = 0.05;
+
+/** a tile's rectangle in the atlas: [u0, v0, u1, v1] */
+function tileUV(tile: number): [number, number, number, number] {
+  const u0 = ((tile % COLS) * SW) / ATLAS;
+  const v1 = 1 - (Math.floor(tile / COLS) * SH) / ATLAS;
+  return [u0, v1 - SH / ATLAS, u0 + SW / ATLAS, v1];
+}
+
+const _p = new Vector3();
+const _o = new Vector3();
+/**
+ * A box in a building's frame (centre lx, ly, lz; sizes across, up, out): its front face (+z,
+ * toward the path) takes `front`, the other five `edge`.
+ */
+function slab(a: { pos: number[]; nrm: number[]; uv: number[] }, b: BuildingFrame, lx: number, ly: number, lz: number, sx: number, sy: number, sz: number, front: [number, number, number, number], edge: [number, number, number, number]): void {
+  const hx = sx / 2;
+  const hy = sy / 2;
+  const hz = sz / 2;
+  // each face: its normal in the frame, and its corners (counter-clockwise from outside)
+  const faces: [[number, number, number], [number, number, number][]][] = [
+    [[0, 0, 1], [[-hx, -hy, hz], [hx, -hy, hz], [hx, hy, hz], [-hx, hy, hz]]],
+    [[0, 0, -1], [[hx, -hy, -hz], [-hx, -hy, -hz], [-hx, hy, -hz], [hx, hy, -hz]]],
+    [[1, 0, 0], [[hx, -hy, hz], [hx, -hy, -hz], [hx, hy, -hz], [hx, hy, hz]]],
+    [[-1, 0, 0], [[-hx, -hy, -hz], [-hx, -hy, hz], [-hx, hy, hz], [-hx, hy, -hz]]],
+    [[0, 1, 0], [[-hx, hy, hz], [hx, hy, hz], [hx, hy, -hz], [-hx, hy, -hz]]],
+    [[0, -1, 0], [[-hx, -hy, -hz], [hx, -hy, -hz], [hx, -hy, hz], [-hx, -hy, hz]]],
+  ];
+  toWorld(b, 0, 0, 0, _o);
+  faces.forEach(([nl, corners], f) => {
+    const [u0, v0, u1, v1] = f === 0 ? front : edge;
+    const uvs: [number, number][] = [
+      [u0, v0],
+      [u1, v0],
+      [u1, v1],
+      [u0, v1],
+    ];
+    toWorld(b, nl[0], nl[1], nl[2], _p).sub(_o).normalize();
+    const nx = _p.x;
+    const ny = _p.y;
+    const nz = _p.z;
+    for (const q of [0, 1, 2, 0, 2, 3]) {
+      const [cx, cy, cz] = corners[q];
+      toWorld(b, lx + cx, ly + cy, lz + cz, _p);
+      a.pos.push(_p.x, _p.y, _p.z);
+      a.nrm.push(nx, ny, nz);
+      a.uv.push(uvs[q][0], uvs[q][1]);
+    }
+  });
 }
 
 interface Placed {
@@ -734,6 +864,7 @@ export class VillageSigns {
   private bulbs: InstancedMesh | null = null;
   private readonly bulbPhase: number[] = [];
   private tick = 0;
+  private pier: PierSign | null = null;
 
   /**
    * @param pierSign where the pier's sign hangs under its entrance arch (the tops of its chains:
@@ -751,10 +882,11 @@ export class VillageSigns {
       // (home, and Coral's, and the boatyard everyone knows, go without)
       if (role && role.sign !== false) placed.push({ frame: b, role, tile: placed.length });
     });
-    const pierTile = pierSign ? placed.length : -1;
+    // the last tile: bare timber, for the boards' edges and backs and the posts
+    const edgeTile = placed.length;
     const paint = (): void => {
       placed.forEach((p, i) => paintSign(ctx, (p.tile % COLS) * SW, Math.floor(p.tile / COLS) * SH, p.frame.name, p.role, i + 1));
-      if (pierTile >= 0) paintSign(ctx, (pierTile % COLS) * SW, Math.floor(pierTile / COLS) * SH, 'pier', PIER, pierTile + 1);
+      paintEdge(ctx, (edgeTile % COLS) * SW, Math.floor(edgeTile / COLS) * SH);
     };
     paint();
     const tex = new CanvasTexture(cv);
@@ -769,8 +901,6 @@ export class VillageSigns {
     const boards = { pos: [] as number[], nrm: [] as number[], uv: [] as number[] };
     const neon = { pos: [] as number[], nrm: [] as number[], uv: [] as number[] };
     const bulbs: Vector3[] = [];
-    const v = new Vector3();
-    const n = new Vector3();
 
     for (const p of placed) {
       const b = p.frame;
@@ -832,24 +962,14 @@ export class VillageSigns {
         ly = b.floorY + 3.0;
       }
       const sh = (sw * SH) / SW;
-      const u0 = ((p.tile % COLS) * SW) / ATLAS;
-      const v1 = 1 - (Math.floor(p.tile / COLS) * SH) / ATLAS;
-      const u1 = u0 + SW / ATLAS;
-      const v0 = v1 - SH / ATLAS;
       const target = r.role === 'casino' ? neon : boards;
-      const corners: [number, number, number, number][] = [
-        [-sw / 2, -sh / 2, u0, v0],
-        [sw / 2, -sh / 2, u1, v0],
-        [sw / 2, sh / 2, u1, v1],
-        [-sw / 2, sh / 2, u0, v1],
-      ];
-      toWorld(b, 0, 0, 1, n).sub(toWorld(b, 0, 0, 0, v)).normalize();
-      for (const q of [0, 1, 2, 0, 2, 3]) {
-        const [cx, cy, u, vv] = corners[q];
-        toWorld(b, lx + cx, ly + cy, lz, v);
-        target.pos.push(v.x, v.y, v.z);
-        target.nrm.push(n.x, n.y, n.z);
-        target.uv.push(u, vv);
+      // the board: a 5 cm slab, its painted face out front, bare timber round its edges and back
+      slab(target, b, lx, ly, lz - BOARD_T / 2, sw, sh, BOARD_T, tileUV(p.tile), tileUV(edgeTile));
+      // and what holds it up: two posts behind, down into the roof or the fascia it stands on
+      // (a board on the wall is fixed to it)
+      if (!face) {
+        const drop = b.kind === 'stall' ? 0.5 : 0.35;
+        for (const side of [-1, 1]) slab(boards, b, lx + side * sw * 0.32, ly - sh / 2 - drop / 2 + 0.2, lz - BOARD_T - 0.035, 0.07, sh + drop - 0.2 - 0.15, 0.07, tileUV(edgeTile), tileUV(edgeTile));
       }
       // marquee bulbs along the casino's front eaves (and down the corners of the facade), strung
       // under the roof's front edge where there is one, and never behind the board
@@ -869,45 +989,10 @@ export class VillageSigns {
       }
     }
 
-    // the pier's sign: a board hanging on two chains under the entrance arch, facing the village
-    // and (its back, lettered the right way round) the sea
-    let chains: BufferGeometry | null = null;
-    if (pierSign && pierTile >= 0) {
-      const [px, py, pz] = pierSign;
-      const sw = 1.9;
-      const sh = (sw * SH) / SW;
-      const cy = py - 0.42;
-      const u0 = ((pierTile % COLS) * SW) / ATLAS;
-      const v1 = 1 - (Math.floor(pierTile / COLS) * SH) / ATLAS;
-      const u1 = u0 + SW / ATLAS;
-      const v0 = v1 - SH / ATLAS;
-      for (const side of [-1, 1]) {
-        // side −1 faces the village (−z), +1 the sea; seen from either, the nose points right
-        const zf = pz + side * 0.012;
-        const corners: [number, number, number, number][] = [
-          [-sw / 2, -sh / 2, side < 0 ? u1 : u0, v0],
-          [sw / 2, -sh / 2, side < 0 ? u0 : u1, v0],
-          [sw / 2, sh / 2, side < 0 ? u0 : u1, v1],
-          [-sw / 2, sh / 2, side < 0 ? u1 : u0, v1],
-        ];
-        const order = side < 0 ? [0, 2, 1, 0, 3, 2] : [0, 1, 2, 0, 2, 3];
-        for (const q of order) {
-          const [cx, cyy, u, vv] = corners[q];
-          boards.pos.push(px + cx, cy + cyy, zf);
-          boards.nrm.push(0, 0, side);
-          boards.uv.push(u, vv);
-        }
-      }
-      // its two chains, up to the beam
-      const links: BufferGeometry[] = [];
-      for (const s of [-0.42, 0.42]) {
-        const top = py;
-        const bottom = cy + sh / 2 - 0.02;
-        const g = new CylinderGeometry(0.009, 0.009, top - bottom, 5);
-        g.translate(px + s, (top + bottom) / 2, pz);
-        links.push(g);
-      }
-      chains = mergeGeometries(links, false);
+    // the pier's sign: a carved fish hanging under the entrance arch (village/pierSign.ts)
+    if (pierSign) {
+      this.pier = new PierSign(pierSign);
+      this.group.add(this.pier.group);
     }
 
     const mk = (a: { pos: number[]; nrm: number[]; uv: number[] }): BufferGeometry => {
@@ -918,11 +1003,9 @@ export class VillageSigns {
       g.computeBoundingSphere();
       return g;
     };
-    // painted boards take the light, but glow a little of their own so one facing away from the
-    // sun still reads (in shade the plain lit board went dark brown on the headset)
-    this.group.add(new Mesh(mk(boards), new MeshLambertMaterial({ map: tex, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 0.45, transparent: true, alphaTest: 0.1, side: DoubleSide })));
-    if (chains) this.group.add(new Mesh(chains, new MeshLambertMaterial({ color: 0x2a2826 })));
-    const neonMesh = new Mesh(mk(neon), new MeshBasicMaterial({ map: tex, transparent: true, alphaTest: 0.1, side: DoubleSide, toneMapped: false, fog: true }));
+    // painted timber in the scene's light (a touch of its own, so a board in shade still reads)
+    this.group.add(new Mesh(mk(boards), new MeshLambertMaterial({ map: tex, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 0.12 })));
+    const neonMesh = new Mesh(mk(neon), new MeshBasicMaterial({ map: tex, toneMapped: false, fog: true }));
     this.group.add(neonMesh);
 
     if (bulbs.length) {
@@ -941,6 +1024,7 @@ export class VillageSigns {
 
   /** Marquee chase: every third bulb bright, stepping round ~8 times a second. */
   update(dt: number): void {
+    this.pier?.update(dt);
     const m = this.bulbs;
     if (!m) return;
     this.tick += dt * 8;

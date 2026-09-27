@@ -165,13 +165,20 @@ and the vendors.
   pier head, so the longer rods matter). The marlin needs everything at the top and a
   charm. Each has its own body, built from a Tidewater anatomy with a bill, a sail or a
   comb added. `npm run check:fish` checks that none bites without its gear.
-- **Signs** (`src/village/signs.ts`): every business has a board in a style that suits it, with a
-  picture of its trade and a line saying what's inside: painted planks with a rod, a baited hook,
-  coins, a saw and hammer, the pawnbroker's three balls or a mounted fish; a fish-shaped board on
-  the fish market; lacquer and gilt for the jeweller, the boutique and the florist; stars and a
-  crystal ball for the fortune teller; neon with a wheel, cherries or a spade on the casinos. Your
-  shack, Coral's villa and the boatyard have none. The pier's entrance arch hangs a fish-shaped
-  FISHING PIER board on two chains, lettered on both faces (in place of Tidewater's plain board).
+- **Signs** (`src/village/signs.ts`): every business has a painted timber board, 5 cm thick, on
+  two posts behind it (or fixed to the wall), lit by the scene. Each is lettered by hand in a
+  sign-writer's serif, letters a hair off the line with a painted shadow, over wood grain, and has
+  seen some weather: paint chipped back to grey timber at the edges and seams, flecks gone, rain
+  streaks, grime along the foot. A picture of the trade sits beside the name and a line says what's
+  inside: planks painted in the trade's colour with a pinstripe (a rod, a baited hook, a fish, a saw
+  and hammer, the pawnbroker's three balls, a mounted fish, a potted hibiscus); gold leaf on oiled
+  dark hardwood for the jeweller, the boutique and the bank; hand-painted stars for the fortune
+  teller; glass-tube neon on stained timber for the casinos. Your shack, Coral's villa and the
+  boatyard have none.
+- **The pier's sign** (`src/village/pierSign.ts`): no words. A snapper cut from a thick plank, its
+  edges eased, painted coral and gold by hand (scales, fin rays, the gill, a bright eye) and worn
+  back to the grain in places, hanging from the entrance arch on two iron chains and swinging a
+  little in the wind. It replaces Tidewater's plain board (world.json `pierSign` keeps where it hung).
 - **Roofs** (`src/world/village.ts`): the bake keeps Tidewater's roof coordinates, and the village's
   own draws texture the roofs from them in the fragment stage: thatch streaked down the slope in
   courses, older and greyer in patches; corrugated metal with its ribs, sheet seams and laps, and
