@@ -148,6 +148,13 @@ const _edgeTop = new Vector3();
 const _edgeUnder = new Vector3();
 const LINE_N = 40;
 
+/** A point `t` along the curve from `a` up through a point `rise` m high over `a`, to `b`. */
+function bezier(a: Vector3, rise: number, b: Vector3, t: number, out: Vector3): Vector3 {
+  const u = 1 - t;
+  out.set(u * u * a.x + 2 * u * t * a.x + t * t * b.x, u * u * a.y + 2 * u * t * rise + t * t * b.y, u * u * a.z + 2 * u * t * a.z + t * t * b.z);
+  return out;
+}
+
 const smooth = (e0: number, e1: number, x: number): number => {
   const t = Math.min(1, Math.max(0, (x - e0) / (e1 - e0)));
   return t * t * (3 - 2 * t);
@@ -174,6 +181,9 @@ export class FishingSystem extends createSystem({}) {
   private bite: Bite | null = null;
   private fight: CatchMinigame | null = null;
   private readonly fishPos = new Vector3();
+  /** the fish on the line, from the strike until it's landed (or gone): hooked by the mouth at
+   * `bob`, its head along `yaw` */
+  private hooked: { mesh: Mesh; u: FishUniforms; len: number; yaw: number } | null = null;
   private wander = 0;
   private lastDist = 0;
   private splashed = false;
@@ -181,7 +191,7 @@ export class FishingSystem extends createSystem({}) {
   private hintT = 0;
 
   /** `out`: where it's drawn to first, out from under a deck (for `pre` s), before it's swung in */
-  private landing: { species: string; kg: number; mesh: Mesh; u: FishUniforms; len: number; from: Vector3; lift: number; out: Vector3 | null; pre: number } | null = null;
+  private landing: { species: string; kg: number; mesh: Mesh; u: FishUniforms; len: number; from: Vector3; rise: number; time: number; yaw: number; out: Vector3 | null; pre: number } | null = null;
 
   // the other hand on the crank
   private cranking = false;
@@ -270,6 +280,8 @@ export class FishingSystem extends createSystem({}) {
   private setState(s: RodState): void {
     this.state = s;
     this.t = 0;
+    // off the hook: it's gone (a landing takes it over first)
+    if (this.hooked && s !== 'fighting') this.dropHooked();
   }
 
   /* ── frame ───────────────────────────────────────────────────────────── */
@@ -374,8 +386,10 @@ export class FishingSystem extends createSystem({}) {
     this.updateRod(dt, time);
     this.updateBobber(dt, reelIn);
     this.updateShark(dt, time);
+    this.updateHooked(dt, time);
     this.updateLanding(dt, time);
     this.updateLine();
+    this.placeFloat();
     this.updateSound(dt);
     this.updateGauge();
     this.toast.update(dt, this.camera);
@@ -561,6 +575,7 @@ export class FishingSystem extends createSystem({}) {
     this.fishPos.copy(this.bob);
     this.lastDist = this.fight.distance;
     this.setState('fighting');
+    if (!shark) this.hookFish(b.species!, b.kg!);
     if (shark) {
       this.shark.len = fishLengthCm(SHARK_ID, b.kg!) / 100;
       this.shark.hook(this.bob, this.rod.tip);
@@ -803,13 +818,78 @@ export class FishingSystem extends createSystem({}) {
 
   /* ── landing ─────────────────────────────────────────────────────────── */
 
-  private startLanding(species: string, kg: number): void {
-    const props = fishingDeps.props!;
-    const { mesh, uniforms } = props.makeFish(species);
-    const cm = fishingDeps.state!.lastCatch?.cm ?? 30;
-    const len = cm / 100;
+  /** The fish on the line from the strike: in the water at the end of it, fighting. */
+  private hookFish(species: string, kg: number): void {
+    const { mesh, uniforms } = fishingDeps.props!.makeFish(species);
+    const len = fishLengthCm(species, kg) / 100;
     mesh.scale.setScalar(len);
+    mesh.rotation.order = 'YXZ';
     this.scene.add(mesh);
+    _v.copy(this.rod.tip).sub(this.bob);
+    // struck, it turns away from you
+    this.hooked = { mesh, u: uniforms, len, yaw: Math.atan2(-_v.x, -_v.z) };
+  }
+
+  private dropHooked(): void {
+    const H = this.hooked;
+    if (!H) return;
+    this.scene.remove(H.mesh);
+    (H.mesh.material as { dispose(): void }).dispose();
+    this.hooked = null;
+  }
+
+  /** The hooked fish: its mouth on the hook, its head toward you as you reel it in, away as it runs. */
+  private updateHooked(dt: number, time: number): void {
+    const H = this.hooked;
+    const f = this.fight;
+    if (!H || !f || this.state !== 'fighting') return;
+    const running = this.dragSpeed > 0.05 || f.surge > 0.5;
+    _v.copy(this.rod.tip).sub(this.bob);
+    let want = Math.atan2(_v.x, _v.z);
+    if (running) want += Math.PI + Math.sin(this.wander * 2) * 0.4;
+    const d = Math.atan2(Math.sin(want - H.yaw), Math.cos(want - H.yaw));
+    H.yaw += d * (1 - Math.exp(-dt * (running ? 5 : 3)));
+    H.mesh.rotation.set(0, H.yaw, Math.sin(time * 11) * 0.3 * f.surge);
+    H.mesh.position.set(this.bob.x - Math.sin(H.yaw) * H.len * 0.5, this.bob.y, this.bob.z - Math.cos(H.yaw) * H.len * 0.5);
+    H.u.uSwim.value = 0.1 + 0.2 * f.surge + (running ? 0.08 : 0);
+    H.u.uFreq.value = 3 + 7 * f.surge + (running ? 2 : 0);
+    H.u.uTime.value = time;
+  }
+
+  /** While a fish is on, the float rides the line where it meets the water (up the line, out of it). */
+  private placeFloat(): void {
+    if (this.state !== 'fighting' || !this.hooked) return;
+    const ocean = fishingDeps.ocean!;
+    const B = this.lineBuf;
+    const n = B.length / 3 - 1;
+    let along = 0;
+    for (let i = n; i > 0; i--) {
+      const x = B[i * 3];
+      const y = B[i * 3 + 1];
+      const z = B[i * 3 + 2];
+      along += Math.hypot(B[i * 3 - 3] - x, B[i * 3 - 2] - y, B[i * 3 - 1] - z);
+      const w = ocean.heightAt(x, z);
+      // where the line comes up out of the water, or 0.45 m up it from a fish out of the water
+      if ((y >= w - 0.01 && this.bob.y < w) || (this.bob.y >= w && along >= 0.45)) {
+        this.bobber.position.set(x, Math.max(y, Math.min(w, y + 0.02)), z);
+        return;
+      }
+    }
+  }
+
+  private startLanding(species: string, kg: number): void {
+    // the fish that's been on the line (a fresh one if there wasn't: the shark's is its own)
+    let H = this.hooked;
+    this.hooked = null;
+    if (!H) {
+      const { mesh, uniforms } = fishingDeps.props!.makeFish(species);
+      const len = (fishingDeps.state!.lastCatch?.cm ?? 30) / 100;
+      mesh.scale.setScalar(len);
+      mesh.rotation.order = 'YXZ';
+      this.scene.add(mesh);
+      H = { mesh, u: uniforms, len, yaw: 0 };
+    }
+    const { mesh, u: uniforms, len } = H;
     // under the pier, it's drawn out past the deck's edge through the water before it comes up
     const S = fishingDeps.surfaces;
     let out: Vector3 | null = null;
@@ -820,19 +900,25 @@ export class FishingSystem extends createSystem({}) {
       if (d > 1e-3) out.addScaledVector(_x, (0.25 + len * 0.5) / d);
     }
     const start = out ?? this.bob;
-    // how high it's swung to clear what's between it and you (the sand up the beach, the pier's
-    // edge and rail), over the swing's own 0.8 m
+    // Lifted out, not flung: up out of the water first, then in to hang under the tip (a curve
+    // through a point over where it came out). That point's only as high as it must be for the
+    // fish to clear what's between (the sand up a beach, the pier's edge and rail), and never
+    // more than 0.6 m over where it ends up.
     const hang = _v.copy(this.rod.tip);
     hang.y -= FISHING.landLine;
-    let lift = 0.8;
-    for (let i = 1; S && i < 24; i++) {
-      const s = i / 24;
-      const e = s * s * (3 - 2 * s);
-      _x.lerpVectors(start, hang, e);
-      const need = S.topAt(_x.x, _x.z) + len + 0.12 - _x.y;
-      if (need > 0) lift = Math.max(lift, need / Math.max(0.15, Math.sin(e * Math.PI)));
+    let rise = Math.max(start.y + 0.25, Math.min(hang.y, start.y + 1.2));
+    const cap = Math.max(rise, hang.y + 0.6);
+    for (; S && rise < cap; rise += 0.1) {
+      let clear = true;
+      for (let i = 1; i < 16 && clear; i++) {
+        bezier(start, rise, hang, i / 16, _x);
+        if (_x.y < S.topAt(_x.x, _x.z) + len + 0.15) clear = false;
+      }
+      if (clear) break;
     }
-    this.landing = { species, kg, mesh, u: uniforms, len, from: this.bob.clone(), lift, out, pre: out ? 0.45 : 0 };
+    const span = Math.hypot(hang.x - start.x, hang.z - start.z);
+    const time = Math.min(1.8, Math.max(0.7, 0.55 + Math.abs(hang.y - start.y) * 0.15 + span * 0.1));
+    this.landing = { species, kg, mesh, u: uniforms, len, from: this.bob.clone(), rise: Math.min(rise, cap), time, yaw: H.yaw, out, pre: out ? 0.45 : 0 };
     this.setState('landing');
     this.bobVel.set(0, 0, 0);
     const info = fishingDeps.state!.lastCatch;
@@ -842,9 +928,9 @@ export class FishingSystem extends createSystem({}) {
   private updateLanding(dt: number, time: number): void {
     const L = this.landing;
     if (!L || this.state !== 'landing') return;
-    // (out from under the pier first,) swung in for 0.6 s, then it hangs and swings off the tip on
+    // (out from under the pier first,) lifted out and in, then it hangs and swings off the tip on
     // a short line
-    const k = Math.min(1, Math.max(0, this.t - L.pre) / 0.6);
+    const k = Math.min(1, Math.max(0, this.t - L.pre) / L.time);
     const e = k * k * (3 - 2 * k);
     const hang = _v.copy(this.rod.tip);
     hang.y -= FISHING.landLine;
@@ -853,27 +939,36 @@ export class FishingSystem extends createSystem({}) {
       this.bob.lerpVectors(L.from, L.out, p * (2 - p));
       this.bobVel.set(0, 0, 0);
     } else if (k < 1) {
-      this.bob.lerpVectors(L.out ?? L.from, hang, e);
-      this.bob.y += Math.sin(e * Math.PI) * L.lift;
+      bezier(L.out ?? L.from, L.rise, hang, e, this.bob);
       this.bobVel.set(0, 0, 0);
     } else {
       this.dangle(this.bob, this.bobVel, this.rod.tip, FISHING.landLine, dt);
     }
-    // it hangs a body's length under the hook: never down in the sand, or through a deck it's
-    // come up over (one it's still under, coming out from under the pier, it stays under)
+    // it comes up out of the water head first (level to head-up over the first part of the lift)
+    const up = L.out && this.t < L.pre ? 0 : Math.min(1, k / 0.45);
+    const pitch = (Math.PI / 2) * up * up * (3 - 2 * up);
+    // and hangs from the hook as far as it's tipped up: never down in the sand, or through a deck
+    // it's come up over (one it's still under, coming out from under the pier, it stays under)
     const deck = fishingDeps.surfaces?.deckOver(this.bob.x, this.bob.z) ?? -Infinity;
-    const floor = Math.max(fishingDeps.terrain?.heightAt(this.bob.x, this.bob.z) ?? -Infinity, this.bob.y > deck - 0.5 ? deck : -Infinity) + L.len + 0.03;
+    const tr = fishingDeps.terrain;
+    const reach = Math.cos(pitch) * L.len;
+    const ground = tr ? Math.max(tr.heightAt(this.bob.x, this.bob.z), tr.heightAt(this.bob.x - Math.sin(L.yaw) * reach, this.bob.z - Math.cos(L.yaw) * reach)) : -Infinity;
+    const floor = Math.max(ground, this.bob.y > deck - 0.5 ? deck : -Infinity) + Math.max(L.len * 0.12, Math.sin(pitch) * L.len) + 0.06;
     if (this.bob.y < floor) {
       this.bob.y = floor;
       if (this.bobVel.y < 0) this.bobVel.y = 0;
     }
-    // the fish hangs head-up by the mouth, thrashing, slowly turning so both flanks show
-    L.mesh.position.copy(this.bob).y -= L.len * 0.5;
+    // then hangs head-up by the mouth, thrashing, slowly turning so both flanks show
     this.camera.getWorldPosition(_w);
-    const yaw = Math.atan2(_w.x - this.bob.x, _w.z - this.bob.z) + Math.PI / 2 + Math.sin(this.t * 0.7) * 0.6;
-    L.mesh.rotation.set(-Math.PI / 2, 0, 0);
-    L.mesh.rotation.order = 'YXZ';
-    L.mesh.rotation.y = yaw;
+    const hangYaw = Math.atan2(_w.x - this.bob.x, _w.z - this.bob.z) + Math.PI / 2 + Math.sin(this.t * 0.7) * 0.6;
+    const turn = Math.atan2(Math.sin(hangYaw - L.yaw), Math.cos(hangYaw - L.yaw));
+    const yaw = L.yaw + turn * Math.min(1, k * 1.2);
+    L.mesh.rotation.set(-pitch, yaw, 0);
+    L.mesh.position.set(
+      this.bob.x - Math.sin(yaw) * Math.cos(pitch) * L.len * 0.5,
+      this.bob.y - Math.sin(pitch) * L.len * 0.5,
+      this.bob.z - Math.cos(yaw) * Math.cos(pitch) * L.len * 0.5,
+    );
     const thrash = Math.max(0.03, 0.12 * Math.exp(-this.t * 0.35)) * (1 + 0.5 * Math.sin(time * 1.7));
     L.u.uSwim.value = thrash;
     L.u.uFreq.value = 2.2 + thrash * 10;
@@ -1078,9 +1173,19 @@ export class FishingSystem extends createSystem({}) {
         this.bob.x += (this.fishPos.x - this.bob.x) * k;
         this.bob.z += (this.fishPos.z - this.bob.z) * k;
         const water = ocean.heightAt(this.bob.x, this.bob.z);
-        // in the water; pulled up the beach, over the sand, never through it
-        const sand = terrain.heightAt(this.bob.x, this.bob.z) + 0.04;
-        this.bob.y += (Math.max(water - 0.05 - 0.2 * f.surge, sand) - this.bob.y) * (1 - Math.exp(-dt * 8));
+        // just under the surface where you can see it, breaking it as each run starts and once
+        // it's reeled in close; in the shallows or pulled up the beach it lies on the sand (under
+        // its whole length), never in it
+        const H = this.hooked;
+        const len = H?.len ?? 0.3;
+        const close = Math.min(1, Math.max(0, (6 - f.distance) / 4));
+        const under = water - (0.03 + len * 0.08) * (1 - Math.min(1, f.surge * 1.4 + close));
+        // (the sand under its head, middle and tail: it's dragged up the slope, so it can't lag)
+        const sx = Math.sin(H?.yaw ?? 0) * len;
+        const sz = Math.cos(H?.yaw ?? 0) * len;
+        const sand = Math.max(terrain.heightAt(this.bob.x, this.bob.z), terrain.heightAt(this.bob.x - sx * 0.5, this.bob.z - sz * 0.5), terrain.heightAt(this.bob.x - sx, this.bob.z - sz)) + len * 0.12 + 0.02;
+        this.bob.y += (Math.max(under, sand) - this.bob.y) * (1 - Math.exp(-dt * 8));
+        if (this.bob.y < sand) this.bob.y = sand;
         break;
       }
     }
