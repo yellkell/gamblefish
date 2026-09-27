@@ -13,7 +13,9 @@
  *   CONFIRM   the 18+ and no-cash-value agreement, every purchase.
  *   CHECKOUT  a QR code: screenshot it, bring the screenshot up on your
  *             phone and tap the code there to pay (or OPEN ON THIS HEADSET).
- *             The coins land by themselves within seconds.
+ *             The coins land by themselves within seconds while this face
+ *             is up; step 4 says to refresh the page once paid, since the
+ *             boot claim is the one that always collects them.
  *   PAID      the coins that landed, and (the first time) one tap to save the
  *             purchase to the email you paid with.
  *   LOG IN    on a new headset: type your email, open the link on your phone,
@@ -358,13 +360,15 @@ export class IslandBank {
           drawQr(c, co.short, 90, 160, 500);
           text('Pay on your phone', 680, 200, 54, INK.hot, 'left', 700);
           text(`${priceLabel(co.pack.minor)} for ${co.pack.coins.toLocaleString('en-US')} coins`, 680, 252, 36, INK.dim);
-          text('1.  Take a screenshot of this code.', 680, 314, 32, INK.hot);
-          text('2.  Bring the screenshot up on your phone.', 680, 356, 32, INK.hot);
-          text('3.  Tap the QR code there to pay.', 680, 398, 32, INK.hot);
+          text('1.  Take a screenshot of this code.', 680, 306, 32, INK.hot);
+          text('2.  Bring the screenshot up on your phone.', 680, 346, 32, INK.hot);
+          text('3.  Tap the QR code there to pay.', 680, 386, 32, INK.hot);
+          text('4.  Once paid, refresh the Fish & Chips', 680, 426, 32, BRASS, 'left', 700, W - 724);
+          text('     browser page and enjoy your coins!', 680, 462, 32, BRASS, 'left', 700, W - 724);
           const dots = '.'.repeat(1 + (Math.floor(performance.now() / 500) % 3));
-          text(`waiting for the payment${dots}`, 680, 450, 38, '#3fd6c6', 'left', 700);
-          btn('open', 'OPEN ON THIS HEADSET', 680, 520, 560, 90, 'rgba(255,255,255,0.3)', true, 34);
-          btn('back', 'CANCEL', 680, 630, 560, 90, 'rgba(255,255,255,0.18)', true, 34);
+          text(`waiting for the payment${dots}`, 680, 516, 38, '#3fd6c6', 'left', 700);
+          btn('open', 'OPEN ON THIS HEADSET', 680, 548, 560, 90, 'rgba(255,255,255,0.3)', true, 34);
+          btn('back', 'CANCEL', 680, 652, 560, 90, 'rgba(255,255,255,0.18)', true, 34);
           text(co.short.replace(/^https?:\/\//, ''), 340, 740, 26, INK.dim, 'center');
         }
         break;
