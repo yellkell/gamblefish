@@ -121,6 +121,11 @@ const walkIn = () => house && hasInterior(house.name);
 // caps the post at the end of a run), and the top rails sit level, without the per-bay wobble.
 const { PIER } = await import(url('world/Pier.js'));
 const RAIL = { top: PIER.deck + 0.95 + 0.022, mid: PIER.deck + 0.48 };
+// the life ring and the rods in the deep walk's gateway (Pier.js: south edge), and what they go in
+const DK_PIER = PIER.deck;
+const RAIL_Z = PIER.zEnd - 0.25;
+const DEEP_GEAR = { ring: [55.8, DK_PIER + 0.58, RAIL_Z + 0.12], rods: [56.55, 56.9] };
+let deepGear = null;
 // the gateways the walks you build leave the pier head by (src/woodworks/gates.ts): the head's
 // rails stop either side of each
 const { WALKS } = await import('../src/woodworks/gates.ts');
@@ -178,7 +183,26 @@ const clipRail = (kind, alongX, a0, a1, c, half) => {
     return specs;
   };
   const { Builder } = await import(url('world/village/GeoBuilder.js'));
-  const { pushAt, pop, box, beam, part, lathe, tube } = Builder.prototype;
+  const { pushAt, pop, box, beam, part, lathe, tube, add } = Builder.prototype;
+  deepGear = new Builder();
+  // Tidewater hangs a life ring on the pier head's south rail and leans two rods against it, in
+  // the deep walk's gateway: once the rail's cut there they'd hang in the air across the way out.
+  // The bake leaves them out of the pier and ships them on their own (village class `deepGear`),
+  // so the walk (woodworks/walks.ts) can move them along the rail as its rope drops.
+  Builder.prototype.add = function (key, pt, local, tint, data) {
+    if (this !== deepGear && (key === 'hard' || key === 'rope')) {
+      const m = new E.Matrix4().multiplyMatrices(this.frame, local).elements;
+      const [x, y, z] = [m[12], m[13], m[14]];
+      const ring = near(x, DEEP_GEAR.ring[0]) && near(y, DEEP_GEAR.ring[1]) && near(z, DEEP_GEAR.ring[2]);
+      // each rod from its butt on the deck, and the reel clamped on it
+      const rod = DEEP_GEAR.rods.some((rx) => (near(x, rx) && near(y, DK_PIER + 0.01) && near(z, RAIL_Z - 0.25)) || (near(x, rx + 0.02) && near(y, DK_PIER + 0.35) && near(z, RAIL_Z - 0.18)));
+      if (ring || rod) {
+        deepGear.frame.copy(this.frame);
+        return add.call(deepGear, key, pt, local, tint, data);
+      }
+    }
+    return add.call(this, key, pt, local, tint, data);
+  };
   // Tidewater hangs a string of floats on the pier head's west rail, one of them from z 37.1 to
   // 38.9: straight across the reef walk's gateway, a line strung over the way out. The bake hangs
   // that string on along the rail past the gateway instead, floats and all.
@@ -559,6 +583,12 @@ function glowOf(kind, data) {
 }
 
 const groups = {};
+// the deep walk's life ring and rods: their own class, in world coordinates (see the Builder.add patch)
+for (const [key, b] of Object.entries(deepGear.batches)) {
+  const geometry = b.build();
+  (groups.deepGear ??= []).push({ o: { geometry, matrixWorld: new E.Matrix4(), updateWorldMatrix() {} }, kind: key });
+}
+console.log(`deep walk's gear moved off the pier: ${Object.values(deepGear.batches).reduce((n, b) => n + b.vcount, 0)} vertices`);
 village.group.traverse((o) => {
   if (!o.geometry || o.isInstancedMesh) return;
   const name = o.name;
