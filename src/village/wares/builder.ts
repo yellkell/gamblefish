@@ -355,14 +355,35 @@ export function bookshelf(k: Kit): Object3D {
 
 /* ── the sea chest (new) ─────────────────────────────────────────────── */
 
+/** the sea chest's size: width, depth, and the height of its body (the lid's vault sits on top) */
+export const SEA_CHEST = { W: 0.82, D: 0.46, H: 0.36 };
+
 export function seaChest(k: Kit): Object3D {
   const b = new Batch();
+  seaChestInto(k, b, b, 0, 0);
+  return b.group();
+}
+
+/**
+ * The sea chest in two, for one that opens (the fire dancers' chests, camps/chest.ts): its body,
+ * and its lid built about the hinge along the back top edge (the lid's origin is the hinge, at
+ * y = H, z = −D/2 in the chest's frame).
+ */
+export function seaChestParts(k: Kit): { body: Object3D; lid: Object3D; hinge: Vector3 } {
+  const body = new Batch();
+  const lid = new Batch();
+  const { D, H } = SEA_CHEST;
+  seaChestInto(k, body, lid, H, -D / 2);
+  return { body: body.group(), lid: lid.group(), hinge: new Vector3(0, H, -D / 2) };
+}
+
+/** Build the chest: the body into `b`, the lid into `l` less (0, hy, hz), where its hinge is. */
+function seaChestInto(k: Kit, b: Batch, l: Batch, hy: number, hz: number): void {
   const wood = M.wood(k.renderer, 'teak', 0.55);
   const iron = M.iron(k.renderer);
   const brass = M.brass(k.renderer);
-  const W = 0.82;
-  const D = 0.46;
-  const H = 0.36;
+  const { W, D, H } = SEA_CHEST;
+  const lidAt = (mat: Material, g: Parameters<Batch['at']>[1], x: number, y: number, z: number): void => void l.at(mat, g, x, y - hy, z - hz);
   // the body: planks, each a hair apart, on a plinth
   const planks = 4;
   for (let i = 0; i < planks; i++) {
@@ -374,16 +395,16 @@ export function seaChest(k: Kit): Object3D {
   // the lid: a shallow barrel vault
   const lid = new CylinderGeometry(D / 2 + 0.01, D / 2 + 0.01, W + 0.01, 24, 1, false, 0, Math.PI).rotateZ(Math.PI / 2);
   lid.scale(1, 0.42, 1);
-  b.at(wood, lid, 0, H, 0);
+  lidAt(wood, lid, 0, H, 0);
   // the lid's ends
   const endCap = new CylinderGeometry(D / 2 + 0.012, D / 2 + 0.012, 0.02, 24, 1, false, 0, Math.PI).rotateZ(Math.PI / 2);
   endCap.scale(1, 0.44, 1);
-  for (const sx of [-1, 1]) b.at(wood, endCap, sx * (W / 2 + 0.002), H, 0);
+  for (const sx of [-1, 1]) lidAt(wood, endCap, sx * (W / 2 + 0.002), H, 0);
   // iron bands over the lid and down the front and back
   for (const x of [-0.26, 0.26]) {
     const band = new CylinderGeometry(D / 2 + 0.018, D / 2 + 0.018, 0.04, 24, 1, true, 0, Math.PI).rotateZ(Math.PI / 2);
     band.scale(1, 0.45, 1);
-    b.at(iron, band, x, H, 0);
+    lidAt(iron, band, x, H, 0);
     for (const sz of [-1, 1]) b.at(iron, block(0.04, H, 0.008), x, H / 2, (sz * (D + 0.008)) / 2);
     // rivets
     for (let i = 0; i < 4; i++) for (const sz of [-1, 1]) b.at(iron, turned([[0, 0], [0.006, 0], [0, 0.005]], 6), x, 0.06 + i * 0.09, (sz * (D + 0.016)) / 2, (sz * Math.PI) / 2);
@@ -393,7 +414,7 @@ export function seaChest(k: Kit): Object3D {
   // the brass lock plate and hasp
   b.at(brass, rounded(0.08, 0.1, 0.01, 0.004), 0, H - 0.04, D / 2 + 0.006);
   b.at(M.iron(k.renderer), turned([[0.006, -0.002], [0.006, 0.002], [0, 0.002]], 10), 0, H - 0.05, D / 2 + 0.011, Math.PI / 2);
-  b.at(brass, rounded(0.05, 0.08, 0.008, 0.003), 0, H + 0.02, D / 2 + 0.012);
+  lidAt(brass, rounded(0.05, 0.08, 0.008, 0.003), 0, H + 0.02, D / 2 + 0.012);
   // rope handles at the ends, in wooden cleats
   const rope = M.satin(k.renderer, '#c8a878');
   for (const sx of [-1, 1]) {
@@ -401,5 +422,4 @@ export function seaChest(k: Kit): Object3D {
     b.add(rope, stalk([new Vector3(x - sx * 0.02, 0.24, -0.09), new Vector3(x + sx * 0.02, 0.2, -0.05), new Vector3(x + sx * 0.03, 0.18, 0), new Vector3(x + sx * 0.02, 0.2, 0.05), new Vector3(x - sx * 0.02, 0.24, 0.09)], 0.009, 0.009, 6, 16));
     for (const z of [-0.1, 0.1]) b.at(wood, rounded(0.04, 0.05, 0.05, 0.01), sx * (W / 2 + 0.012), 0.24, z);
   }
-  return b.group();
 }

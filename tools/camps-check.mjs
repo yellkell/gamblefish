@@ -8,16 +8,18 @@
  * Reads the baked island through the same code the headset does (world/surfaces.ts,
  * camps/sites.ts, camps/stock.ts) and checks what a player would notice:
  *
- *   1. HIDDEN. No camp can be seen from the start area: sight lines from the boardwalk, the pier
+ *   1. HIDDEN. None of the eight hidden camps can be seen from the start area: sight lines from the boardwalk, the pier
  *      foot, along the pier to its head and the beach either side all hit the hills before the
  *      tops of the flames, the dancers' raised glowsticks or the chest.
+ *      (The ninth, the beach party, is in plain view on the main beach: it only sets up once the
+ *      eight are found.)
  *   2. THERE TO STAND ON. Each plot is level, dry, clear of rocks, and you can teleport onto it and
  *      up to the chest.
  *   3. REACHABLE. Every camp can be walked to from the start, a hop at a time, without crossing
  *      the sea or a slope too steep to land on.
  *   4. THE CHESTS. The same day fills a chest the same way; the next day, differently; every fish
  *      lies inside the chest's grid without overlapping, would fit the smallest backpack, and is
- *      worth its tier.
+ *      worth its tier. The beach party's holds a couple of nice fish, each a tier up, and no logs.
  */
 
 import { readFileSync } from 'node:fs';
@@ -26,8 +28,8 @@ import { fileURLToPath } from 'node:url';
 import { decodeTerrain } from '../src/world/data.ts';
 import { Heightfield } from '../src/world/heightfield.ts';
 import { Surfaces } from '../src/world/surfaces.ts';
-import { CAMPS, CAMP_PLOT, CHEST_R, chestSpot } from '../src/camps/sites.ts';
-import { CHEST_GRID, CHEST_MAX_LEN, TIER_VALUE, stockFor } from '../src/camps/stock.ts';
+import { ALL_CAMPS, BEACH_CAMP, CAMPS, CAMP_PLOT, CHEST_R, chestSpot } from '../src/camps/sites.ts';
+import { BEACH_FISH, CHEST_GRID, CHEST_MAX_LEN, TIER_VALUE, stockFor } from '../src/camps/stock.ts';
 import { bounds, cellsOf, GRID_SIZES } from '../src/backpack/logic.ts';
 import { fishValue } from '../src/fishing/tidewater.ts';
 
@@ -63,7 +65,10 @@ const EYES = [
 ];
 /** Can an eye see (x, y, z)? The terrain blocks (a 20 cm margin); nothing else is counted. */
 function seen(x, y, z) {
-  for (const [ex, ez, ey] of EYES) {
+  return seenFrom(EYES, x, y, z);
+}
+function seenFrom(eyes, x, y, z) {
+  for (const [ex, ez, ey] of eyes) {
     const d = Math.hypot(x - ex, z - ez);
     const n = Math.ceil(d);
     let blocked = false;
@@ -94,8 +99,10 @@ for (const c of CAMPS) {
 
 /* ── 2. there to stand on ──────────────────────────────────────────────── */
 
+console.log(`       (and the beach party, ${BEACH_CAMP.name}, is in plain view: ${EYES.some(([ex, ez, ey]) => !seenFrom([[ex, ez, ey]], BEACH_CAMP.x, hf.heightAt(BEACH_CAMP.x, BEACH_CAMP.z) + 2, BEACH_CAMP.z)) ? 'from some of the start' : 'from all of the start'})`);
+
 console.log('\n2. level, dry, clear, standable');
-for (const c of CAMPS) {
+for (const c of ALL_CAMPS) {
   let lo = Infinity;
   let hi = -Infinity;
   let standable = 0;
@@ -153,7 +160,7 @@ console.log('\n3. reachable on foot from the start');
       q.push([a, b]);
     }
   }
-  for (const c of CAMPS) {
+  for (const c of ALL_CAMPS) {
     const [i, j] = cell(c.x + 2, c.z);
     check(`${c.name}: a way there`, seenCell[j * N + i] === 1);
   }
@@ -165,7 +172,7 @@ console.log('\n4. the chests');
 const [C, R] = CHEST_GRID;
 const [minC] = GRID_SIZES[0];
 check('tier values follow the merges (×1, ×3, ×10.5, ×42)', JSON.stringify(TIER_VALUE) === '[1,3,10.5,42]', JSON.stringify(TIER_VALUE));
-for (const c of CAMPS) {
+for (const c of ALL_CAMPS) {
   const day = 20000;
   const a = stockFor(c, day);
   const b = stockFor(c, day);
@@ -178,14 +185,14 @@ for (const c of CAMPS) {
   const taken = new Set();
   for (let d = day; d < day + 60; d++) {
     const s = stockFor(c, d);
-    if (s.fish.length < 3 || s.logs < c.logs[0] || s.logs > c.logs[1]) fits = false;
+    if ((c.beach ? s.fish.length !== BEACH_FISH : s.fish.length < 3) || s.logs < c.logs[0] || s.logs > c.logs[1]) fits = false;
     for (const f of s.fish) {
       for (const [x, y] of cellsOf(f)) {
         if (x < 0 || y < 0 || x >= C || y >= R || taken.has(`${d},${x},${y}`)) fits = false;
         taken.add(`${d},${x},${y}`);
       }
       if (bounds(f.shape).w > Math.min(CHEST_MAX_LEN, minC)) backpackable = false;
-      if (f.tier > c.bestTier || f.value !== Math.round(fishValue(f.species, f.kg) * TIER_VALUE[f.tier])) worth = false;
+      if (f.tier > c.bestTier || (c.beach && f.tier < 1) || f.value !== Math.round(fishValue(f.species, f.kg) * TIER_VALUE[f.tier])) worth = false;
     }
   }
   check(`${c.name}: 60 days of chests, every fish in the grid, none overlapping`, fits);

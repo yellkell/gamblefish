@@ -1,11 +1,15 @@
 /**
- * THE FIRE DANCERS' CAMPS: FIRE FIGHT 2's beach party, hidden in little groups out in the wilds of
- * the island (camps/sites.ts), each dancing round its fire with a chest beside it.
+ * THE FIRE DANCERS' CAMPS: FIRE FIGHT 2's beach party, hidden in eight little groups out in the
+ * wilds of the island (camps/sites.ts), each dancing round its fire with a chest beside it.
  *
  *  FINDING ONE   None is on the chart and none can be seen from the start (tools/camps-check.mjs
  *                proves it). Go and look: over the ridges, down the hollows. The drums carry
- *                further than the firelight (camps/sound.ts). Walk into a camp for the first time
- *                and it's yours: "You found Ember Valley, 2 of 4".
+ *                further than the firelight (camps/sound.ts). Walk into a camp and its dancers are
+ *                pleased to see you: they throw their hands in the air, and gift you everything
+ *                in their chest ("You found Ember Valley, 2 of 8").
+ *  THE BEACH     Find all eight and a ninth group comes down to the main beach, west of the timber
+ *                yard, and lights a fire there. Their chest fills with a couple of nice fish every
+ *                day.
  *  THE CHEST     Click the sign over it (or grip its lid) and it swings open: THE CHEST PACK rises
  *                out of it, a tray like your backpack's with the dancers' fish lying in its slots
  *                and their logs stacked beside it.
@@ -15,8 +19,8 @@
  *                    (press A), just like one off the line;
  *                  - point at the LOGS and click: they all go on your stack for the walks;
  *                  - TAKE ALL packs everything that fits.
- *                Walk away (or CLOSE) and the lid comes down. What you take is gone until the
- *                dancers fill it again tomorrow (camps/stock.ts).
+ *                Walk away (or CLOSE) and the lid comes down. A hidden camp's gift is given once;
+ *                the beach party's chest fills again tomorrow (camps/stock.ts).
  *
  * Everything the camps draw shares a handful of draws: every fire's layers (camps/fire.ts), every
  * dancer and every glowstick (camps/dancers.ts); only the chests are their own meshes. All of it
@@ -39,11 +43,11 @@ import { font } from '../ui/fonts.ts';
 import { INK, Panel, roundRect } from '../ui/panel.ts';
 import { InteractivePanel, pointerView, register } from '../ui/pointer.ts';
 import type { BoxCollider } from '../world/data.ts';
-import { Chest } from './chest.ts';
+import { Chest, CHEST_H } from './chest.ts';
 import { buildCrowd, type Crowd } from './dancers.ts';
 import { buildBonfires, type Bonfires, type FireSpot } from './fire.ts';
 import { CampSound } from './sound.ts';
-import { CAMPS, chestSpot, type CampSite } from './sites.ts';
+import { BEACH_CAMP, CAMPS, chestSpot, type CampSite } from './sites.ts';
 import { CHEST_GRID, dayNumber, stockFor, toCaught, type CampSave, type ChestFish } from './stock.ts';
 
 type Hand = 'left' | 'right';
@@ -76,6 +80,8 @@ const FOUND_R = 20;
  *  chest shuts once you're past CLOSE_R (m, from the chest) */
 const SIGN_R = 4.5;
 const CLOSE_R = 6;
+/** how far the beach party's drums carry (the hidden camps' carry further: camps/sound.ts) */
+const BEACH_EARSHOT = 40;
 /** the camps are drawn only within this of the nearest one */
 const DRAW_R = 240;
 /** the chest pack's tray, tipped toward you like the backpack's */
@@ -83,6 +89,11 @@ const TILT = (35 * Math.PI) / 180;
 
 interface Camp {
   site: CampSite;
+  /** its dancers (the hidden camps share one crowd, the beach party has its own), and which of them */
+  crowd: Crowd;
+  party: number;
+  /** how pleased they are to see you, 0..1 */
+  cheer: number;
   fire: FireSpot;
   chest: Chest;
   /** the chest's world position and which way its front faces (unit, xz) */
@@ -117,7 +128,11 @@ export class CampSystem extends createSystem({}) {
   private readonly root = new Group();
   private camps: Camp[] = [];
   private fires!: Bonfires;
-  private crowd!: Crowd;
+  /** the beach party's fire and dancers, and the camp itself: all hidden until the eight are found */
+  private readonly beachGroup = new Group();
+  private beach!: Camp;
+  private beachFires!: Bonfires;
+  private beachUp = false;
   private readonly sound = new CampSound();
   private toast!: Toast;
 
@@ -144,31 +159,41 @@ export class CampSystem extends createSystem({}) {
     this.root.name = 'camps';
     this.root.visible = false;
     this.scene.add(this.root);
-    for (const site of CAMPS) {
+    const kit = { renderer: this.renderer, props: campDeps.props! };
+    const make = (site: CampSite, party: number, crowd: () => Crowd, into: Group): Camp => {
       const fire: FireSpot = { x: site.x, y: ground(site.x, site.z), z: site.z, size: FIRE_SIZE };
       const [cx, cz] = chestSpot(site);
-      const chest = new Chest();
+      const chest = new Chest(kit);
       const at = new Vector3(cx, ground(cx, cz), cz);
       // its front to the outside of the ring, the fire behind it as you open it
       const front = new Vector3(Math.cos(site.chestAt), 0, Math.sin(site.chestAt));
       chest.group.position.copy(at);
       chest.group.rotation.y = Math.atan2(front.x, front.z);
-      this.root.add(chest.group);
+      into.add(chest.group);
       this.wasShut.add(chest);
-      // no landing in the fire or on the chest
-      campDeps.addBox?.({ tag: 'campfire', walkable: false, solid: true, cx: fire.x, cz: fire.z, hx: 1.1, hz: 1.1, rotY: 0, top: fire.y + 1.2, bottom: fire.y - 1 });
-      campDeps.addBox?.({ tag: 'chest', walkable: false, solid: true, cx, cz, hx: 0.5, hz: 0.5, rotY: 0, top: at.y + 0.8, bottom: at.y - 1 });
-      const camp: Camp = { site, fire, chest, at, front, sign: this.makeSign() };
+      const camp: Camp = { site, fire, chest, at, front, sign: this.makeSign(), cheer: 0, party, get crowd() { return crowd(); } };
       camp.sign.onClick = () => this.openChest(camp);
-      this.root.add(camp.sign.mesh);
-      this.camps.push(camp);
-    }
+      into.add(camp.sign.mesh);
+      return camp;
+    };
+    let hidden: Crowd | null = null;
+    let beach: Crowd | null = null;
+    this.camps = CAMPS.map((site, i) => make(site, i, () => hidden!, this.root));
+    for (const c of this.camps) this.colliders(c);
     this.fires = buildBonfires(this.camps.map((c) => c.fire));
-    this.crowd = buildCrowd(
+    hidden = buildCrowd(
       this.camps.map((c) => ({ fire: c.fire, dancers: c.site.dancers, gap: c.site.chestAt })),
       ground,
     );
-    this.root.add(...this.fires.meshes, ...this.crowd.meshes);
+    this.root.add(...this.fires.meshes, ...hidden.meshes);
+    // the ninth, on the beach
+    this.beachGroup.visible = false;
+    this.root.add(this.beachGroup);
+    this.beach = make(BEACH_CAMP, 0, () => beach!, this.beachGroup);
+    this.beachFires = buildBonfires([this.beach.fire]);
+    beach = buildCrowd([{ fire: this.beach.fire, dancers: BEACH_CAMP.dancers, gap: BEACH_CAMP.chestAt }], ground);
+    this.beachGroup.add(...this.beachFires.meshes, ...beach.meshes);
+    this.checkBeach(false);
 
     this.toast = new Toast();
     this.toast.panel.mesh.visible = false;
@@ -212,12 +237,45 @@ export class CampSystem extends createSystem({}) {
     return campDeps.state!;
   }
 
-  /** A camp's save entry, filled afresh if it's a new day (or you've never been). */
+  /** No landing in a camp's fire or on its chest. */
+  private colliders(c: Camp): void {
+    const [cx, cz] = chestSpot(c.site);
+    campDeps.addBox?.({ tag: 'campfire', walkable: false, solid: true, cx: c.fire.x, cz: c.fire.z, hx: 1.1, hz: 1.1, rotY: 0, top: c.fire.y + 1.2, bottom: c.fire.y - 1 });
+    campDeps.addBox?.({ tag: 'chest', walkable: false, solid: true, cx, cz, hx: 0.55, hz: 0.55, rotY: 0, top: c.at.y + CHEST_H, bottom: c.at.y - 1 });
+  }
+
+  /** How many of the eight hidden camps you've found. */
+  private foundCount(): number {
+    return CAMPS.filter((s) => this.state.camps[s.id]?.found).length;
+  }
+
+  /** Once all eight are found, the ninth sets up on the beach (`announce`: tell them so). */
+  private checkBeach(announce: boolean): void {
+    if (this.beachUp || !campDeps.state || this.foundCount() < CAMPS.length) return;
+    this.beachUp = true;
+    this.beachGroup.visible = true;
+    this.colliders(this.beach);
+    if (announce)
+      window.setTimeout(() => {
+        this.toast.show("That's every camp! The dancers are coming down to the main beach, west of the timber yard, to light a fire for you there.", 7, INK.amber);
+        catchSting(true);
+      }, 6500);
+  }
+
+  /** the camps you can go to: the hidden eight, and the beach party once it's there */
+  private get live(): Camp[] {
+    return this.beachUp ? [...this.camps, this.beach] : this.camps;
+  }
+
+  /**
+   * A camp's save entry. A hidden camp's chest is filled once, the day you first come (their gift,
+   * never refilled); the beach party's fills afresh every day.
+   */
   private save(c: Camp): CampSave {
     const s = this.state;
     const today = dayNumber();
     let e = s.camps[c.site.id];
-    if (!e || e.day !== today) {
+    if (!e || (c.site.beach && e.day !== today)) {
       e = { ...stockFor(c.site, today), found: e?.found ?? false };
       s.camps[c.site.id] = e;
     }
@@ -228,7 +286,7 @@ export class CampSystem extends createSystem({}) {
     this.camera.getWorldPosition(_v);
     let best = this.camps[0];
     let bd = Infinity;
-    for (const c of this.camps) {
+    for (const c of this.live) {
       const d = Math.hypot(_v.x - c.fire.x, _v.z - c.fire.z);
       if (d < bd) {
         bd = d;
@@ -243,15 +301,24 @@ export class CampSystem extends createSystem({}) {
   update(delta: number, time: number): void {
     const dt = Math.min(delta, 0.05);
     if (!campDeps.state || introActive()) return;
+    // (the cloud save can come in after we start: it may hold the eighth camp)
+    this.checkBeach(false);
     const { camp, dist } = this.nearest();
     this.root.visible = dist < DRAW_R;
-    this.sound.update(dt, camp.fire, dist);
+    // the beach party's drums stay on the beach, under the village's music
+    this.sound.update(dt, camp.fire, dist, camp.site.beach ? BEACH_EARSHOT : undefined);
     this.toast.update(dt, this.camera);
     this.animate(dt);
     if (!this.root.visible) return;
     this.fires.update(time);
-    this.crowd.update(time);
-    for (const c of this.camps) {
+    this.beachFires.update(time);
+    this.camera.getWorldPosition(_v);
+    for (const c of this.live) {
+      c.crowd.update(time);
+      // they see you coming: the nearer you are, the more pleased
+      const want = Math.hypot(_v.x - c.fire.x, _v.z - c.fire.z) < FOUND_R ? 1 : 0;
+      c.cheer += (want - c.cheer) * (1 - Math.exp(-dt * 2.5));
+      c.crowd.cheer(c.party, c.cheer);
       c.chest.update(dt, time);
       // the lid coming down: a clap of wood
       const shut = c.chest.amount < 0.02;
@@ -266,8 +333,12 @@ export class CampSystem extends createSystem({}) {
       if (!e.found) {
         e.found = true;
         this.state.save();
-        const n = CAMPS.filter((s) => this.state.camps[s.id]?.found).length;
-        this.toast.show(`You found ${camp.site.name}! A fire dancers' camp, ${n} of ${CAMPS.length}. Their chest is yours to open.`, 6, INK.amber);
+        if (camp.site.beach) this.toast.show(`${camp.site.name}! The dancers are so pleased to see you. Every day their chest has a couple of nice fish in it for you.`, 7, INK.amber);
+        else {
+          const n = this.foundCount();
+          this.toast.show(`You found ${camp.site.name}, ${n} of ${CAMPS.length}! The dancers are pleased to see you: everything in their chest is a gift for you.`, 6, INK.amber);
+          this.checkBeach(true);
+        }
         catchSting(true);
       }
     }
@@ -275,13 +346,13 @@ export class CampSystem extends createSystem({}) {
     this.camera.getWorldPosition(_v);
     const eye = _v.clone();
     // the chest's sign, over the nearest chest while it's shut
-    for (const c of this.camps) {
+    for (const c of this.live) {
       const near = Math.hypot(eye.x - c.at.x, eye.z - c.at.z) < SIGN_R;
       const show = near && !c.chest.open && !backpackView.open;
       c.sign.mesh.visible = show;
       if (show) {
-        c.sign.mesh.position.set(c.at.x, c.at.y + 1.25 + 0.02 * Math.sin(time * 2), c.at.z);
-        c.sign.mesh.lookAt(eye.x, c.at.y + 1.25, eye.z);
+        c.sign.mesh.position.set(c.at.x, c.at.y + CHEST_H + 0.75 + 0.02 * Math.sin(time * 2), c.at.z);
+        c.sign.mesh.lookAt(eye.x, c.at.y + CHEST_H + 0.75, eye.z);
       }
     }
     // or grip its lid
@@ -293,7 +364,7 @@ export class CampSystem extends createSystem({}) {
         else if (g < 0.3) this.grip[hand] = false;
         if (!down) continue;
         this.player.gripSpaces[hand].getWorldPosition(_w);
-        if (_w.distanceTo(_v.copy(camp.at).addScaledVector(UP, 0.6)) < 0.5) this.openChest(camp);
+        if (_w.distanceTo(_v.copy(camp.at).addScaledVector(UP, CHEST_H * 0.85)) < 0.5) this.openChest(camp);
       }
     }
 
@@ -331,6 +402,8 @@ export class CampSystem extends createSystem({}) {
     this.infoKey = '';
     this.paintButtons();
     this.paintLogs();
+    // the beach party's chest holds fish, no logs
+    this.logs.mesh.visible = !c.site.beach;
     // triggers already down aren't clicks in here
     for (const h of ['left', 'right'] as const) {
       this.trig[h] = (this.input.xr.gamepads[h]?.getButtonValue(InputComponent.Trigger) ?? 0) > 0.3;
@@ -683,13 +756,15 @@ export class CampSystem extends createSystem({}) {
     } else if (!e.fish.length && !e.logs) {
       g.font = font(500, 24);
       g.fillStyle = INK.dim;
-      g.fillText('Empty. The dancers fill it again tomorrow.', 22, 110);
+      g.fillText(c.site.beach ? 'Empty. A couple more nice fish tomorrow.' : 'Empty. You have all they had to give.', 22, 110);
     } else {
+      g.font = font(700, 22);
+      g.fillStyle = INK.amber;
+      g.fillText(c.site.beach ? "TODAY'S GIFT FROM THE DANCERS" : 'A GIFT FROM THE DANCERS', 22, 84);
       g.font = font(500, 22);
       g.fillStyle = INK.dim;
-      g.fillText('Reach in: click a fish to pack it in your backpack,', 22, 90);
-      g.fillText('or grip it to take it in your hand.', 22, 122);
-      g.fillText('Point at the logs to take them. It refills every day.', 22, 154);
+      g.fillText('Reach in: click a fish to pack it in your backpack,', 22, 118);
+      g.fillText(c.site.beach ? 'or grip it to take it in your hand.' : 'grip it to take it in hand, or point at the logs.', 22, 150);
     }
     this.info.commit();
   }
@@ -788,7 +863,7 @@ export class CampSystem extends createSystem({}) {
       c.textBaseline = 'middle';
       c.font = font(700, 54);
       c.fillStyle = p.hover ? '#1a1206' : '#ffd89a';
-      c.fillText('OPEN THE CHEST', W / 2, H / 2 + 2, W - 40);
+      c.fillText('OPEN THEIR GIFT', W / 2, H / 2 + 2, W - 40);
       p.commit();
     };
     p.repaintOnFonts(() => p.paint());

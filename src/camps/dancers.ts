@@ -105,6 +105,8 @@ interface Dancer {
   mood: number;
   hue: number;
   fire: FireSpot;
+  /** which party (camp) it dances in */
+  party: number;
 }
 
 /** A camp's fire, how many dance round it, and which way the gap in the ring is (toward the chest). */
@@ -117,7 +119,7 @@ export interface Party {
 function place(parties: Party[], groundY: (x: number, z: number) => number): Dancer[] {
   const rng = makeRng(0xda9ce);
   const out: Dancer[] = [];
-  for (const { fire, dancers: n, gap } of parties) {
+  parties.forEach(({ fire, dancers: n, gap }, party) => {
     for (let i = 0; i < n; i++) {
       // round the ring, leaving the way to the chest open
       const a = gap + 0.55 + (i / n) * (Math.PI * 2 - 1.1) + rng() * 0.3;
@@ -137,25 +139,30 @@ function place(parties: Party[], groundY: (x: number, z: number) => number): Dan
         mood: rng() < 0.45 ? 0.7 + rng() * 0.3 : rng() * 0.35,
         hue: rng(),
         fire,
+        party,
       });
     }
-  }
+  });
   return out;
 }
 
-function bodies(dancers: Dancer[]): InstancedMesh {
+function bodies(dancers: Dancer[], cheer: { value: number[] }): InstancedMesh {
   const geo = figureGeometry();
   const fireAt = new Float32Array(dancers.length * 3);
   const mood = new Float32Array(dancers.length);
+  const party = new Float32Array(dancers.length);
   dancers.forEach((d, i) => {
     fireAt.set([d.fire.x, d.fire.y + 0.8 * d.fire.size, d.fire.z], i * 3);
     mood[i] = d.mood;
+    party[i] = d.party;
   });
   geo.setAttribute('aFire', new InstancedBufferAttribute(fireAt, 3));
   geo.setAttribute('aMood', new InstancedBufferAttribute(mood, 1));
+  geo.setAttribute('aParty', new InstancedBufferAttribute(party, 1));
   const mat = new MeshLambertMaterial({ color: 0xffffff });
   mat.onBeforeCompile = (shader) => {
     shader.uniforms.uTime = danceTime;
+    shader.uniforms.uCheer = cheer;
     shader.vertexShader = shader.vertexShader
       .replace(
         '#include <common>',
@@ -163,6 +170,8 @@ function bodies(dancers: Dancer[]): InstancedMesh {
 attribute float aPart;
 attribute vec3 aFire;
 attribute float aMood;
+attribute float aParty;
+uniform float uCheer[${cheer.value.length}];
 varying vec3 vFire;
 varying vec3 vWP;
 ${DANCE}`,
@@ -171,8 +180,10 @@ ${DANCE}`,
         '#include <beginnormal_vertex>',
         `#include <beginnormal_vertex>
   float dSeed = danceSeed(instanceMatrix[3].xz);
+  // pleased to see you: hands in the air
+  float dMood = mix(aMood, 1.0, uCheer[int(aParty + 0.5)]);
   float dSide = aPart < 1.5 ? -1.0 : 1.0;
-  float dUp = aPart > 0.5 ? armUp(dSeed, aMood, dSide) : 0.0;
+  float dUp = aPart > 0.5 ? armUp(dSeed, dMood, dSide) : 0.0;
   if (aPart > 0.5) {
     float an = dSide * dUp;
     objectNormal = vec3(cos(an) * objectNormal.x - sin(an) * objectNormal.y, sin(an) * objectNormal.x + cos(an) * objectNormal.y, objectNormal.z);
@@ -185,9 +196,9 @@ ${DANCE}`,
     vec3 r = transformed - vec3(dSide * ${SHOULDER.x.toFixed(3)}, ${SHOULDER.y.toFixed(3)}, 0.0);
     transformed = armPoint(r, dSide, dUp);
   }
-  transformed.y += danceBob(dSeed, aMood);
+  transformed.y += danceBob(dSeed, dMood);
   // a hip sway, the body swinging over planted feet
-  transformed.x += sin(danceBeat(dSeed) * 0.5) * 0.04 * (0.4 + aMood) * transformed.y;
+  transformed.x += sin(danceBeat(dSeed) * 0.5) * 0.04 * (0.4 + dMood) * transformed.y;
   vFire = aFire;
   vWP = (modelMatrix * instanceMatrix * vec4(transformed, 1.0)).xyz;`,
       );
@@ -213,7 +224,7 @@ varying vec3 vWP;`,
 #include <opaque_fragment>`,
       );
   };
-  mat.customProgramCacheKey = () => 'camp-dancer';
+  mat.customProgramCacheKey = () => `camp-dancer-${cheer.value.length}`;
   const mesh = new InstancedMesh(geo, mat, dancers.length);
   const m = new Matrix4();
   const q = new Quaternion();
@@ -239,11 +250,12 @@ varying vec3 vWP;`,
 }
 
 /** The glowsticks: a neon bar in each fist, following the same dance. */
-function sticks(dancers: Dancer[]): Mesh {
+function sticks(dancers: Dancer[], cheer: { value: number[] }): Mesh {
   const base: number[] = [];
   const dat: number[] = []; // yaw, scale, mood, side
   const hue: number[] = [];
   const corner: number[] = [];
+  const party: number[] = [];
   const idx: number[] = [];
   let v = 0;
   for (const d of dancers) {
@@ -254,6 +266,7 @@ function sticks(dancers: Dancer[]): Mesh {
         dat.push(d.yaw, d.scale, d.mood, side);
         hue.push(c.r, c.g, c.b);
         corner.push(cx, cy);
+        party.push(d.party);
       }
       idx.push(v, v + 1, v + 2, v, v + 2, v + 3);
       v += 4;
@@ -264,18 +277,22 @@ function sticks(dancers: Dancer[]): Mesh {
   g.setAttribute('aDat', new Float32BufferAttribute(dat, 4));
   g.setAttribute('aHue', new Float32BufferAttribute(hue, 3));
   g.setAttribute('aCorner', new Float32BufferAttribute(corner, 2));
+  g.setAttribute('aParty', new Float32BufferAttribute(party, 1));
   g.setIndex(new Uint32BufferAttribute(idx, 1));
   const mat = new ShaderMaterial({
-    uniforms: { uTime: danceTime },
+    uniforms: { uTime: danceTime, uCheer: cheer },
     vertexShader: /* glsl */ `
       attribute vec4 aDat;
+      attribute float aParty;
+      uniform float uCheer[${cheer.value.length}];
       attribute vec3 aHue;
       attribute vec2 aCorner;
       varying vec3 vHue;
       varying vec2 vC;
       ${DANCE}
       void main() {
-        float yaw = aDat.x, sc = aDat.y, mood = aDat.z, side = aDat.w;
+        float yaw = aDat.x, sc = aDat.y, side = aDat.w;
+        float mood = mix(aDat.z, 1.0, uCheer[int(aParty + 0.5)]);
         float seed = danceSeed(position.xz);
         float up = armUp(seed, mood, side);
         // the fist, and the stick running on along the arm
@@ -325,15 +342,21 @@ const danceTime = { value: 0 };
 export interface Crowd {
   meshes: Mesh[];
   update(time: number): void;
+  /** how pleased party `i` is to see you (0 dancing as they were .. 1 hands in the air) */
+  cheer(i: number, k: number): void;
 }
 
 /** A party round each camp's fire, standing on the ground. */
 export function buildCrowd(parties: Party[], groundY: (x: number, z: number) => number): Crowd {
   const dancers = place(parties, groundY);
+  const cheer = { value: parties.map(() => 0) };
   return {
-    meshes: [bodies(dancers), sticks(dancers)],
+    meshes: [bodies(dancers, cheer), sticks(dancers, cheer)],
     update(time) {
       danceTime.value = time;
+    },
+    cheer(i, k) {
+      cheer.value[i] = k;
     },
   };
 }

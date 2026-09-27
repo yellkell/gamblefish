@@ -524,9 +524,10 @@ const { SKELTER } = await import('../src/skelter/site.ts');
 }
 /** on the helter skelter's plot (grown by `pad`) */
 const onPlot = (x, z, pad) => Math.hypot(x - SKELTER.x, z - SKELTER.z) < SKELTER.radius + pad;
-// The fire dancers' camps (src/camps/sites.ts): each plot levelled a little below the ground's
-// mean, a shallow hollow round the fire, so the flames sit down out of sight of the bay.
-const { CAMPS, CAMP_PLOT, CAMP_BLEND, CAMP_SINK } = await import('../src/camps/sites.ts');
+// The fire dancers' camps (src/camps/sites.ts): each hidden plot levelled a little below the
+// ground's mean, a shallow hollow round the fire, so the flames sit down out of sight of the bay
+// (and the beach party's patch of sand just levelled).
+const { ALL_CAMPS: CAMPS, CAMP_PLOT, CAMP_BLEND, campSink } = await import('../src/camps/sites.ts');
 for (const c of CAMPS) {
   let sum = 0;
   let n = 0;
@@ -535,8 +536,8 @@ for (const c of CAMPS) {
       sum += terrain.heightAt(c.x + Math.cos(a) * r, c.z + Math.sin(a) * r);
       n++;
     }
-  terrain.flatten(c.x, c.z, CAMP_PLOT, sum / n - CAMP_SINK, CAMP_BLEND);
-  console.log(`camp ${c.id} levelled at ${(sum / n - CAMP_SINK).toFixed(2)} m`);
+  terrain.flatten(c.x, c.z, CAMP_PLOT, sum / n - campSink(c), CAMP_BLEND);
+  console.log(`camp ${c.id} levelled at ${(sum / n - campSink(c)).toFixed(2)} m`);
 }
 /** on a camp's plot (grown by `pad`) */
 const onCamp = (x, z, pad) => CAMPS.some((c) => Math.hypot(x - c.x, z - c.z) < CAMP_PLOT + pad);

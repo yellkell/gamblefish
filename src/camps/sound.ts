@@ -35,8 +35,8 @@ export class CampSound {
   private crackleT = 0;
   private on = false;
 
-  /** Call once a frame with the nearest camp's fire and how far you are from it. */
-  update(dt: number, camp: CampSpot | null, dist: number): void {
+  /** Call once a frame with the nearest camp's fire, how far you are from it and how far its drums carry. */
+  update(dt: number, camp: CampSpot | null, dist: number, earshot = EARSHOT): void {
     const ctx = audioContext();
     const out = sfxOut();
     if (!ctx || !out || ctx.state !== 'running') return;
@@ -55,7 +55,7 @@ export class CampSound {
       const ch = this.noise.getChannelData(0);
       for (let i = 0; i < ch.length; i++) ch[i] = Math.random() * 2 - 1;
     }
-    const near = camp !== null && dist < EARSHOT;
+    const near = camp !== null && dist < earshot;
     // fade in and out at the edge of earshot rather than cutting (only on a change: rescheduling
     // the ramp every frame makes the gain jump)
     if (near !== this.on) {

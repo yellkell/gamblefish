@@ -9,8 +9,10 @@
  *    A fish a tier up is worth what the merges that made it would have paid (TIER_VALUE).
  *  - LOGS: a stack for your walks (GameState.woodworks.wood).
  *
- * The chests fill again each day (stockFor is seeded by the camp and the date), so what you take
- * is gone until tomorrow.
+ * A hidden camp's chest is its dancers' gift to whoever finds them: filled once, the day you
+ * find them, and never again. The beach party's (the ninth camp, once you've found all eight)
+ * fills every day with a couple of nice fish (NICE), both a tier up or better, no logs. Either
+ * way stockFor is seeded by the camp and the date: the same day fills a chest the same way.
  */
 
 import { fishLengthCm, fishValue, FISH, rollWeight, type CaughtFish } from '../fishing/tidewater.ts';
@@ -27,6 +29,11 @@ export const TIER_VALUE = MERGE_BONUS.reduce<number[]>((acc, b, i) => (acc.push(
 
 /** The fish Tidewater's table has for the dancers to catch (no timed, trophy or shark fish). */
 const CATCH = ['silverside', 'mullet', 'needlefish', 'sergeant', 'grunt', 'yellowtail', 'chromis', 'tang', 'wrasse', 'parrot', 'angel', 'jack', 'barracuda', 'grouper', 'redSnapper', 'tuna', 'mahi'];
+
+/** the beach party's pick: the prized fish of the reef and the deep */
+const NICE = ['wrasse', 'angel', 'yellowtail', 'grouper', 'redSnapper', 'tuna', 'mahi', 'barracuda'];
+/** what the beach party's chest holds each day */
+export const BEACH_FISH = 2;
 
 export interface ChestFish {
   species: string;
@@ -76,7 +83,8 @@ function rng(seed: number): () => number {
 
 /** A species from the camp's waters, weighted as Tidewater weights a bite (habitat × rarity). */
 function pick(site: CampSite, r: () => number): string {
-  const w = CATCH.map((id) => {
+  const from = site.beach ? NICE : CATCH;
+  const w = from.map((id) => {
     const f = FISH[id];
     if (!f) return 0;
     let hw = 0;
@@ -84,15 +92,15 @@ function pick(site: CampSite, r: () => number): string {
     return hw * f.rarity;
   });
   let t = r() * w.reduce((a, b) => a + b, 0);
-  for (let i = 0; i < w.length; i++) if ((t -= w[i]) <= 0) return CATCH[i];
-  return CATCH[0];
+  for (let i = 0; i < w.length; i++) if ((t -= w[i]) <= 0) return from[i];
+  return from[0];
 }
 
 /** The chest at `site` on `day`: the same every time for the same day. */
 export function stockFor(site: CampSite, day: number): ChestStock {
   const r = rng(hash(site.id) ^ Math.imul(day, 2654435761));
   const [C, R] = CHEST_GRID;
-  const want = 4 + Math.floor(r() * 3);
+  const want = site.beach ? BEACH_FISH : 4 + Math.floor(r() * 3);
   const laid: Piece[] = [];
   const fish: ChestFish[] = [];
   for (let tries = 0; fish.length < want && tries < 40; tries++) {
@@ -103,7 +111,8 @@ export function stockFor(site: CampSite, day: number): ChestStock {
     if (bounds(shape).w > CHEST_MAX_LEN) continue;
     // the first is the prize, a tier up (Gold, sometimes, where the camp runs to it); the rest
     // are mostly Common
-    const tier = fish.length === 0 ? (site.bestTier >= 2 && r() < 0.4 ? 2 : Math.min(1, site.bestTier)) : r() < 0.15 ? Math.min(1, site.bestTier) : 0;
+    // (the beach party's are all a tier up: nice fish)
+    const tier = fish.length === 0 || site.beach ? (site.bestTier >= 2 && r() < 0.4 ? 2 : Math.min(1, site.bestTier)) : r() < 0.15 ? Math.min(1, site.bestTier) : 0;
     const piece = { id: fish.length + 1, species, kg, cm, tier, value: 0, placed: true, x: 0, y: 0, rot: 0 as Rot, shape };
     const spot = findSpot(piece, laid, C, R);
     if (!spot) continue;
