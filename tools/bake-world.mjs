@@ -126,6 +126,11 @@ const DK_PIER = PIER.deck;
 const RAIL_Z = PIER.zEnd - 0.25;
 const DEEP_GEAR = { ring: [55.8, DK_PIER + 0.58, RAIL_Z + 0.12], rods: [56.55, 56.9] };
 let deepGear = null;
+/** rowboats whose open bow the bake closed (see the rowboat patch below) */
+let stems = 0;
+let oarsIn = 0;
+/** how far each of the pier head's two rods was set back (see the rods' patch) */
+const rodBackLog = [];
 // the gateways the walks you build leave the pier head by (src/woodworks/gates.ts): the head's
 // rails stop either side of each
 const { WALKS } = await import('../src/woodworks/gates.ts');
@@ -182,20 +187,90 @@ const clipRail = (kind, alongX, a0, a1, c, half) => {
     boathouse = specs.boathouse ?? null;
     return specs;
   };
-  const { Builder } = await import(url('world/village/GeoBuilder.js'));
+  const { Builder, slabPart } = await import(url('world/village/GeoBuilder.js'));
   const { pushAt, pop, box, beam, part, lathe, tube, add } = Builder.prototype;
   deepGear = new Builder();
+  // Tidewater's rowboat() (Props.js) lays its hull in sections from 2 % to 98 % of its length and
+  // closes the stern with a transom, but not the bow: its last section, still a hand wide and a
+  // foot deep, is left open, a hole in the front of every boat on the island. The bake closes it
+  // with a stem plate cut to that section, in the hull's paint, and a stem post up its front in
+  // the trim's. The hull's rails give the section away (its gunwales' ends, then the keel's), and
+  // the transom is laid straight after them, in the boat's frame.
+  let gunwale = null;
+  let stem = null;
+  // Its oars lie from the stern thwart forward, 35 cm off the centre line and low in the bilge,
+  // where the bow has already narrowed to 20-odd cm: both blades came out through its sides. The
+  // bake lays each blade's end inboard and higher up (the loom follows), inside the hull.
+  const OARS = [
+    { p0: [-0.3, 0.55, -1.2], p1: [-0.1, 0.62, 1.2] },
+    { p0: [0.32, 0.55, -1.1], p1: [0.11, 0.64, 1.25] },
+  ];
+  let blade = null;
+  const { rod, cyl } = Builder.prototype;
+  // The two rods on the pier head's south rail (the deep walk's gear, above) stand 25 cm inside
+  // the rail at a lean that ran them straight through its top rail. Each butt is set back so the
+  // rod, at the same lean, rests on the top rail's inner edge; its reel goes with it.
+  const RAIL_IN = RAIL_Z - 0.1;
+  const RAIL_TOP = DK_PIER + 0.995;
+  const rodBack = new Map();
+  Builder.prototype.cyl = function (key, x, y, z, rTop, rBot, h, o) {
+    const back = key === 'hard' && near(y, DK_PIER + 0.35) && near(z, RAIL_Z - 0.18) ? rodBack.get(Math.round((x - 0.02) * 100)) : undefined;
+    return cyl.call(this, key, x, y, z + (back ?? 0), rTop, rBot, h, o);
+  };
+  Builder.prototype.rod = function (key, p0, p1, r0, r1, o) {
+    if (key === 'hard' && r0 === 0.016 && r1 === 0.005 && DEEP_GEAR.rods.some((rx) => near(p0[0], rx, 1e-6)) && near(p0[1], DK_PIER + 0.01) && near(p0[2], RAIL_Z - 0.25)) {
+      // at the top rail's height, the rod's side against the rail's inner edge
+      const lean = (p1[2] - p0[2]) / (p1[1] - p0[1]);
+      const back = RAIL_IN - r0 - 0.004 - (RAIL_TOP + r0 - p0[1]) * lean - p0[2];
+      rodBack.set(Math.round(p0[0] * 100), back);
+      rodBackLog.push(back);
+      return rod.call(this, key, [p0[0], p0[1], p0[2] + back], [p1[0], p1[1], p1[2] + back], r0, r1, o);
+    }
+    // oar(): the loom, from the handle to where the blade starts, 0.55 m short of its end
+    const D = p0[1] / 0.55;
+    const oarAt = key === 'wood' && r0 === 0.022 && r1 === 0.024 && o?.segs === 6 && OARS.find((k) => near(p0[0], k.p0[0], 1e-6) && near(p0[2], k.p0[2], 1e-6) && D > 0.3 && D < 0.8);
+    if (oarAt) {
+      const end = [oarAt.p1[0], oarAt.p1[1] * D, oarAt.p1[2]];
+      const d = end.map((v, i) => v - p0[i]);
+      const L = Math.hypot(...d);
+      const pb = p0.map((v, i) => v + (d[i] / L) * (L - 0.55));
+      blade = { pb, end };
+      oarsIn++;
+      return rod.call(this, key, p0, pb, r0, r1, o);
+    }
+    return rod.call(this, key, p0, p1, r0, r1, o);
+  };
+  /** rowboat()'s section at its bow, `s` across (−1 port .. 1 starboard): hullSection, secPoint */
+  const bowPoint = (st, sv) => {
+    const ang = (Math.abs(sv) * Math.PI) / 2;
+    return new E.Vector3(st.halfB * Math.sign(sv) * Math.pow(Math.sin(ang), 0.85), st.keel + (st.sheer - st.keel) * (1 - Math.pow(Math.cos(ang), 1.25)), st.z);
+  };
+
   // Tidewater hangs a life ring on the pier head's south rail and leans two rods against it, in
   // the deep walk's gateway: once the rail's cut there they'd hang in the air across the way out.
   // The bake leaves them out of the pier and ships them on their own (village class `deepGear`),
   // so the walk (woodworks/walks.ts) can move them along the rail as its rope drops.
   Builder.prototype.add = function (key, pt, local, tint, data) {
+    // the transom, straight after a rowboat's keel: close its bow as well
+    if (stem && stem.B === this && key === 'wood') {
+      const st = stem;
+      stem = null;
+      const out = add.call(this, key, pt, local, tint, data);
+      const sec = [];
+      for (let j = 0; j <= 10; j++) sec.push(bowPoint(st, -1 + (2 * j) / 10));
+      add.call(this, 'wood', slabPart(sec, 0.035, new E.Vector3(1, 0, 0), new E.Vector3(0, 0, 1)), new E.Matrix4(), tint, data);
+      this.rod('wood', [0, st.keel - 0.015, st.z], [0, st.sheer + 0.03, st.z + 0.02], 0.03, 0.03, { segs: 6, tint: st.trim, data });
+      stems++;
+      return out;
+    }
     if (this !== deepGear && (key === 'hard' || key === 'rope')) {
       const m = new E.Matrix4().multiplyMatrices(this.frame, local).elements;
       const [x, y, z] = [m[12], m[13], m[14]];
       const ring = near(x, DEEP_GEAR.ring[0]) && near(y, DEEP_GEAR.ring[1]) && near(z, DEEP_GEAR.ring[2]);
       // each rod from its butt on the deck, and the reel clamped on it
-      const rod = DEEP_GEAR.rods.some((rx) => (near(x, rx) && near(y, DK_PIER + 0.01) && near(z, RAIL_Z - 0.25)) || (near(x, rx + 0.02) && near(y, DK_PIER + 0.35) && near(z, RAIL_Z - 0.18)));
+      // (set back from where Tidewater stood them: see the rods' patch below)
+      const back = z > RAIL_Z - 0.7 && z < RAIL_Z;
+      const rod = DEEP_GEAR.rods.some((rx) => (near(x, rx) && near(y, DK_PIER + 0.01) && back) || (near(x, rx + 0.02) && near(y, DK_PIER + 0.35) && back));
       if (ring || rod) {
         deepGear.frame.copy(this.frame);
         return add.call(deepGear, key, pt, local, tint, data);
@@ -221,7 +296,16 @@ const clipRail = (kind, alongX, a0, a1, c, half) => {
         console.log(`floats moved off the ${w.id} walk's gateway: z ${a.toFixed(2)}–${b.toFixed(2)} → ${floats.a2.toFixed(2)}–${floats.b2.toFixed(2)}`);
       }
     }
-    return tube.call(this, key, points, radius, o);
+    const out = tube.call(this, key, points, radius, o);
+    // a rowboat's rails: 17 points, 2.8 cm, four-sided; the keel's on its centre line
+    if (key === 'wood' && radius === 0.028 && o?.radial === 4 && points.length === 17) {
+      const last = points.at(-1);
+      if (points.every((p) => p.x === 0)) {
+        if (gunwale) stem = { B: this, halfB: gunwale.p.x + 0.012, sheer: gunwale.p.y - 0.01, keel: last.y + 0.015, z: last.z, trim: gunwale.tint };
+        gunwale = null;
+      } else if (last.x > 0) gunwale = { p: last, tint: o.tint };
+    }
+    return out;
   };
   Builder.prototype.pushAt = function (x, y, z, ...r) {
     // the floats on that string, after it
@@ -284,6 +368,10 @@ const clipRail = (kind, alongX, a0, a1, c, half) => {
     }
   };
   Builder.prototype.box = function (key, x, y, z, sx, sy, sz, o) {
+    // A rowboat's thwarts (3.5 × 22 cm, the width of the hull at the gunwale less a little) are
+    // wider than the round bilge a hand under the gunwale, where they sit: the forward one's corner
+    // came out through the side. They're cut a tenth narrower.
+    if (key === 'wood' && sy === 0.035 && sz === 0.22 && o?.grain === 0 && x === 0) sx *= 0.9;
     // the pier's top rails (0.2 wide, 0.045 deep) and the head's mid rails (0.05 thick, 0.14 deep)
     const top = sy === 0.045 && Math.min(sx, sz) === 0.2 && Math.abs(y - RAIL.top) < 0.02;
     const mid = sy === 0.14 && Math.min(sx, sz) === 0.05 && Math.abs(y - RAIL.mid) < 0.01;
@@ -339,6 +427,12 @@ const clipRail = (kind, alongX, a0, a1, c, half) => {
     return lathe.call(this, key, x, y, z, profile, o);
   };
   Builder.prototype.beam = function (key, p0, p1, w, h, o) {
+    // the oar's blade, after its loom (see OARS)
+    if (blade && key === 'wood' && w === 0.14 && h === 0.018) {
+      const b = blade;
+      blade = null;
+      return beam.call(this, key, b.pb, b.end, w, h, o);
+    }
     // A tall stair's handrail (buildHouse stairRun: 6 × 5 cm, from 0.9 m over the porch's front
     // edge down to its newel post) stopped short in the air, 17 cm out from the porch railing's
     // post at the side of the stair gap and 5 cm inside it. Its top end is carried back onto that
@@ -588,6 +682,8 @@ for (const [key, b] of Object.entries(deepGear.batches)) {
   const geometry = b.build();
   (groups.deepGear ??= []).push({ o: { geometry, matrixWorld: new E.Matrix4(), updateWorldMatrix() {} }, kind: key });
 }
+console.log(`rowboats' bows closed: ${stems}, oars laid inside them: ${oarsIn}`);
+console.log(`the deep walk's rods set back off the rail: ${[...rodBackLog].map((b) => b.toFixed(2)).join(', ')} m`);
 console.log(`deep walk's gear moved off the pier: ${Object.values(deepGear.batches).reduce((n, b) => n + b.vcount, 0)} vertices`);
 village.group.traverse((o) => {
   if (!o.geometry || o.isInstancedMesh) return;

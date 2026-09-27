@@ -9,7 +9,7 @@
  * Until the walk is finished a rope with a sign hangs across the gateway and the way is shut;
  * with the last plank down it's unhooked, drops away, and the walk is open. Whatever of the
  * pier's own gear stood in the gateway (the deep walk's: a life ring and two rods on the rail) is
- * moved along the rail out of the way as it drops.
+ * moved along the rail out of the way as it drops, and the crate and its board go with the rope.
  * Only the reef walk is on offer at first: the deep walk's gateway is still closed by the pier's
  * own rail, and its crate and rope aren't there, until the reef walk is finished.
  *
@@ -550,6 +550,8 @@ export class Walks {
         const k = Math.min(1, w.ropeDrop / 0.6);
         w.ropeSwing.rotation.z = -(Math.PI / 2) * (1 - Math.cos(k * Math.PI)) * 0.5 - Math.sin(Math.min(1, w.ropeDrop * 2) * Math.PI * 3) * 0.08 * (1 - k);
         w.ropeSwing.scale.setScalar(w.ropeDrop < 0.75 ? 1 : Math.max(0.001, 1 - (w.ropeDrop - 0.75) / 0.25));
+        // and the crate and its board, not wanted now, shrink away with it
+        w.crate.scale.setScalar(w.ropeDrop < 0.5 ? 1 : Math.max(0.001, 1 - (w.ropeDrop - 0.5) / 0.5));
       }
       w.rope.visible = this.open(w.def) && w.ropeDrop < 1;
       // and the gear that stood in the gateway goes along the rail, out of the way
@@ -576,10 +578,12 @@ export class Walks {
     const d = this.deps;
     for (const w of this.walks) {
       const open = this.open(w.def);
-      w.crate.visible = open;
-      if (open !== w.crateIn) {
-        (open ? d.addBox : d.removeBox)(w.crateBox);
-        w.crateIn = open;
+      // the crate's there from when the walk's open to build until its rope's down
+      const crate = open && w.ropeDrop < 1;
+      w.crate.visible = crate;
+      if (crate !== w.crateIn) {
+        (crate ? d.addBox : d.removeBox)(w.crateBox);
+        w.crateIn = crate;
       }
       const shut = open && w.ropeDrop === 0;
       if (shut !== w.ropeIn) {

@@ -10,7 +10,7 @@
  * showing after dark), and cut out of its canvas so the cords and the tag hang in the open.
  */
 
-import { BoxGeometry, CylinderGeometry, Group, Mesh, MeshLambertMaterial, type MeshBasicMaterial } from 'three';
+import { BoxGeometry, CylinderGeometry, Group, Mesh, MeshBasicMaterial, MeshLambertMaterial, PlaneGeometry } from 'three';
 import { InteractivePanel, register } from '../ui/pointer.ts';
 import { handLetter, plankBoard, rngOf, serif, weather } from '../village/signs.ts';
 
@@ -29,6 +29,9 @@ export interface SignText {
   tag: string;
   can: boolean;
   done: boolean;
+  /** the tag is a way in (the helter skelter's RIDE TO THE TOP), not a crate to fill: painted up
+   * bright like a button, its arrow pointing up */
+  go?: boolean;
 }
 
 /** canvas: the board, the cords, the tag */
@@ -46,6 +49,8 @@ export class BuildSign {
   readonly group = new Group();
   readonly board: InteractivePanel;
   private readonly bg: HTMLCanvasElement;
+  /** the tag again, unlit and pulsing gently, over the lit one when it's a way in (`go`) */
+  private readonly glow: Mesh;
 
   constructor(
     private readonly seed: number,
@@ -59,6 +64,16 @@ export class BuildSign {
     this.board.mesh.renderOrder = 0;
     this.board.mesh.position.set(0, FOOT + H / 2, 0.035);
     this.group.add(this.board.mesh);
+    // cut from the same canvas: the tag's rectangle of it, a hair in front of the board
+    const tag = new PlaneGeometry((TAG.w / PX) * W, (TAG.h / PY) * H);
+    const uv = tag.getAttribute('uv');
+    for (let i = 0; i < uv.count; i++) uv.setXY(i, (TAG.x + uv.getX(i) * TAG.w) / PX, 1 - (TAG.y + (1 - uv.getY(i)) * TAG.h) / PY);
+    const lit = new MeshBasicMaterial({ map: this.board.texture, alphaTest: 0.5, toneMapped: false });
+    this.glow = new Mesh(tag, lit);
+    this.glow.position.set(((TAG.x + TAG.w / 2) / PX - 0.5) * W, FOOT + H / 2 + (0.5 - (TAG.y + TAG.h / 2) / PY) * H, 0.038);
+    this.glow.visible = false;
+    this.glow.onBeforeRender = () => lit.color.setScalar(0.92 + 0.12 * Math.sin(performance.now() / 380));
+    this.group.add(this.glow);
     this.bg = paintBackground(seed);
     this.group.add(this.frame());
     // (the owner paints it first, once its words are ready; after that, on hovers and the fonts)
@@ -137,32 +152,43 @@ export class BuildSign {
     handLetter(c, t.note, PX / 2, 392, PX - 70, `italic ${serif(600, 26)}`, '#f0e2c4', null, this.seed + 7);
     if (t.done) handLetter(c, '✓', PX / 2, 452, 60, serif(700, 50), '#bfe8a0', shadow, this.seed + 9);
 
-    // the tag: brighter paint under your pointer
+    // the tag: brighter paint under your pointer (a way in is painted up bright, like a button)
     const hover = b.hover === 'deposit' && t.can;
+    const go = !!t.go && t.can;
+    this.glow.visible = go;
     c.save();
     c.globalAlpha = t.can ? 1 : 0.8;
-    if (hover) {
+    if (go) {
+      roundTag(c, TAG.x, TAG.y, TAG.w, TAG.h);
+      c.fillStyle = hover ? '#ffe07a' : '#ffc640';
+      c.fill();
+      c.lineWidth = 8;
+      c.strokeStyle = hover ? '#ffffff' : '#fff4c8';
+      c.stroke();
+    } else if (hover) {
       c.fillStyle = 'rgba(255, 214, 120, 0.35)';
       roundTag(c, TAG.x, TAG.y, TAG.w, TAG.h);
       c.fill();
     }
     c.restore();
-    const ink = !t.can ? 'rgba(236, 226, 206, 0.55)' : hover ? '#fff4c8' : '#f4ead2';
-    handLetter(c, t.tag, PX / 2, TAG.y + TAG.h / 2 - (t.can ? 12 : 0), TAG.w - 60, serif(700, t.tag.length > 12 ? 40 : 48), ink, shadow, this.seed + 11);
+    const ink = go ? '#2a1606' : !t.can ? 'rgba(236, 226, 206, 0.55)' : hover ? '#fff4c8' : '#f4ead2';
+    handLetter(c, t.tag, PX / 2, TAG.y + TAG.h / 2 - (t.can ? 12 : 0), TAG.w - 60, serif(700, t.tag.length > 12 ? 40 : 48), ink, go ? null : shadow, this.seed + 11);
     if (t.can) {
-      // a painted arrow, down to the crate
+      // a painted arrow: down to the crate, or up the tower
+      const [a, z] = go ? [TAG.y + 172, TAG.y + 118] : [TAG.y + 118, TAG.y + 172];
+      const s = Math.sign(z - a);
       c.strokeStyle = ink;
       c.fillStyle = ink;
       c.lineWidth = 6;
       c.lineCap = 'round';
       c.beginPath();
-      c.moveTo(PX / 2, TAG.y + 118);
-      c.lineTo(PX / 2, TAG.y + 158);
+      c.moveTo(PX / 2, a);
+      c.lineTo(PX / 2, z - s * 14);
       c.stroke();
       c.beginPath();
-      c.moveTo(PX / 2 - 16, TAG.y + 148);
-      c.lineTo(PX / 2, TAG.y + 172);
-      c.lineTo(PX / 2 + 16, TAG.y + 148);
+      c.moveTo(PX / 2 - 16, z - s * 24);
+      c.lineTo(PX / 2, z);
+      c.lineTo(PX / 2 + 16, z - s * 24);
       c.closePath();
       c.fill();
     }

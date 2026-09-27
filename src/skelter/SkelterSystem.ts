@@ -329,6 +329,7 @@ export class SkelterSystem extends createSystem({}) {
         tag: 'Ride to the top',
         can: !skelterView.onTower,
         done: false,
+        go: true,
       };
     const can = this.open() && ww.wood > 0 && inCrate < total;
     return {

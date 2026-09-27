@@ -58,6 +58,8 @@ interface Wall {
   r: number;
   sill: number;
   bottom: number;
+  /** clutter on the ground you can teleport over, low enough (HOP_OVER) */
+  over: boolean;
   /** bounding circle for the cheap reject */
   bx: number;
   bz: number;
@@ -67,6 +69,12 @@ interface Wall {
 /** Tidewater tags that are walkable in its character controller but not a
  *  place to stand after a teleport. */
 const NOT_A_FLOOR = new Set(['ladder']);
+
+/** Things lying about that the teleport arcs over (up to GROUND.hopOver tall), instead of
+ *  refusing the hop: boats pulled up on the sand, the wreck, crates, traps, barrels, benches,
+ *  tables, log piles, bollards, a bucket, rocks, a build crate. Rails, fences, walls, counters,
+ *  furniture indoors and standing trees still stop you. */
+const HOP_OVER = new Set(['rowboat', 'boat', 'wreck', 'crate', 'crates', 'trap', 'traps', 'barrel', 'bench', 'table', 'woodpile', 'logPile', 'bollard', 'bucket', 'rock', 'buildCrate']);
 
 const _n = { x: 0, y: 1, z: 0 };
 
@@ -79,7 +87,7 @@ export class Surfaces {
     this.terrain = terrain;
     for (const b of colliders.boxes) this.addBox(b);
     for (const c of colliders.cylinders) {
-      this.walls.push({ pts: null, x: c.x, z: c.z, r: c.r, sill: c.top, bottom: c.bottom, bx: c.x, bz: c.z, br: c.r });
+      this.walls.push({ pts: null, x: c.x, z: c.z, r: c.r, sill: c.top, bottom: c.bottom, over: HOP_OVER.has(c.tag), bx: c.x, bz: c.z, br: c.r });
     }
   }
 
@@ -106,7 +114,7 @@ export class Surfaces {
         [b.hx, b.hz],
         [-b.hx, b.hz],
       ].map(([lx, lz]) => [b.cx + lx * cos + lz * sin, b.cz - lx * sin + lz * cos]);
-      const w: Wall = { pts, x: 0, z: 0, r: 0, sill: b.top, bottom: b.bottom, bx: b.cx, bz: b.cz, br: Math.hypot(b.hx, b.hz) };
+      const w: Wall = { pts, x: 0, z: 0, r: 0, sill: b.top, bottom: b.bottom, over: HOP_OVER.has(b.tag), bx: b.cx, bz: b.cz, br: Math.hypot(b.hx, b.hz) };
       this.walls.push(w);
       this.added.set(b, w);
     }
@@ -249,7 +257,8 @@ export class Surfaces {
    * legal over the pier's own under-deck beams without also opening them to
    * anyone standing on the sand beneath. Anything whose underside is above
    * head height is overhead, not in the way. An obstacle you're already
-   * standing inside can't trap you.
+   * standing inside can't trap you. Low clutter on the ground (HOP_OVER) is
+   * hopped over, but you can't land in it.
    */
   crossesWall(x0: number, z0: number, x1: number, z1: number, atY = 0): boolean {
     const minX = Math.min(x0, x1);
@@ -260,6 +269,11 @@ export class Surfaces {
       if (atY >= w.sill - 1e-6) continue;
       if (w.bottom >= atY + GROUND.headroom) continue;
       if (w.bx + w.br < minX || w.bx - w.br > maxX || w.bz + w.br < minZ || w.bz - w.br > maxZ) continue;
+      if (w.over && w.sill <= atY + GROUND.hopOver) {
+        // over it, as long as you don't come down in it
+        if (w.pts ? insidePoly(x1, z1, w.pts) && !insidePoly(x0, z0, w.pts) : Math.hypot(x1 - w.x, z1 - w.z) <= w.r && Math.hypot(x0 - w.x, z0 - w.z) > w.r) return true;
+        continue;
+      }
       if (w.pts) {
         if (insidePoly(x0, z0, w.pts)) continue;
         for (let i = 0; i < 4; i++) {
