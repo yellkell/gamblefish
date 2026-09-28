@@ -24,7 +24,7 @@ import { LOVE_INTEREST } from './roles.ts';
 
 /** a word on where you are now, by how many gifts she has (0: the first time you meet) */
 const HEART = [
-  'Oh — hello. You’re the one who fishes off the pier?',
+  'Oh, hello. You’re the one who fishes off the pier?',
   'You didn’t have to. …But I’m glad you did.',
   'People are starting to talk about us, you know.',
   'Stay for a drink? The sunset’s better from here.',
@@ -39,15 +39,15 @@ const HEART = [
 
 /** her thanks for each thing, the first time she sees it (village/homeGoods.ts ids) */
 const THANKS: Record<string, string> = {
-  chandelier: 'A chandelier? Look at the light — the whole hall’s sparkling!',
+  chandelier: 'A chandelier? Look at the light! The whole hall’s sparkling.',
   vanity: 'A vanity, in mother-of-pearl. I’ll think of you every morning.',
   pearls: 'Pearls from the deep reef… did you dive for these yourself?',
-  ring: '…That’s a ring. Under glass. I— I’ll keep it safe. For now.',
+  ring: '…That’s a ring. Under glass. I… I’ll keep it safe. For now.',
   tiara: 'A mermaid’s tiara! How did you know I always wanted to be one?',
   chaise: 'A chaise by the window. Long afternoons, just like I said.',
   mirror: 'It does flatter the light. And me, apparently.',
   drapes: 'Rose silk! The sunset comes in pink now.',
-  piano: 'A baby grand? Sit down — I’ll play you something.',
+  piano: 'A baby grand? Sit down, I’ll play you something.',
   screen: 'Birds of paradise. It’s like the garden came inside.',
 };
 
