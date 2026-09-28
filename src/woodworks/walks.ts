@@ -16,7 +16,8 @@
  * Built like Tidewater's pier: weathered boards in slightly different tones laid end to end the
  * whole way out, round piles driven into the sea floor, a top and mid rail on posts. At the end,
  * a platform on a regular grid of piles, railed down its sides and open at the far edge to fish
- * off, with a lantern at each corner, and a bucket and a coil of rope made fast to a cleat.
+ * off, with a lantern at each corner, a bucket and a coil of rope made fast to a cleat, and a
+ * life ring on the rail.
  *
  * All of a walk is one draw: every piece carries the step it belongs to, and the vertex stage
  * hides the steps not built yet and drops the newest one into place. Each step's deck and rails
@@ -53,6 +54,8 @@ import { font, onFontsReady } from '../ui/fonts.ts';
 import type { BoxCollider } from '../world/data.ts';
 import { buildLamps } from '../world/lamps.ts';
 import { bucketAndRope } from './bucket.ts';
+import { lifeRing } from './buoy.ts';
+import { outdoors } from '../village/craft.ts';
 import { BuildSign, type SignText } from './buildSign.ts';
 import { CRATES, DECK, HEAD_STEPS, logsFor, stepsOf, WALK_W, WALKS, type WalkDef, type WalkId } from './gates.ts';
 
@@ -441,7 +444,12 @@ export class Walks {
     let corner: Group | null = null;
     const cornerAt = toWorld(hw / 2 - 0.95, L0 + hd - 0.85);
     if (this.deps.renderer) {
-      corner = bucketAndRope(this.deps.renderer, 0.85);
+      // (its studio shine fading with the daylight, so it isn't lit up at night: craft.ts outdoors)
+      corner = outdoors(bucketAndRope(this.deps.renderer, 0.85), this.deps.night);
+      // and a life ring on the rail across the platform from it, facing in
+      const ring = lifeRing(0.99 + 0.025);
+      ring.position.set(-hw + 1.082, 0, -0.9);
+      corner.add(ring);
       corner.position.set(cornerAt[0], DECK, cornerAt[1]);
       corner.rotation.y = yaw;
       corner.visible = false;

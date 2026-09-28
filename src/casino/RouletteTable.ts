@@ -45,8 +45,9 @@ import type { World } from '@iwsdk/core';
 import { ballTick, chipClack, chipRun, RollBed, uiDeny, winFanfare } from '../audio/sfx.ts';
 import type { GameState } from '../fishing/tidewater.ts';
 import { font } from '../ui/fonts.ts';
-import { INK, roundRect } from '../ui/panel.ts';
+import { roundRect } from '../ui/panel.ts';
 import { InteractivePanel, register } from '../ui/pointer.ts';
+import { Lettering, lookFor, mount } from '../ui/boards.ts';
 import type { Interior } from '../village/interiors.ts';
 import { Celebration, type Tier } from './celebrate.ts';
 import { breakdown, CHIP_COLOUR } from './chips.ts';
@@ -131,6 +132,7 @@ export class RouletteTable {
   readonly group = new Group();
   private readonly felt: InteractivePanel;
   private readonly board: InteractivePanel;
+  private readonly letters: Lettering;
   private readonly cells = layoutCells();
   private readonly chips: InstancedMesh;
   private readonly rotor = new Group();
@@ -204,6 +206,9 @@ export class RouletteTable {
 
     // the board behind the table: chips, spin, clear, rebet, the last numbers
     this.board = new InteractivePanel([1000, 420], [1.2, 0.504]);
+    this.letters = new Lettering(this.board, lookFor('C'), 3);
+    // a lacquered board in a gilt frame, standing on two posts behind the table
+    mount(this.board, lookFor('C'), { renderer: world.renderer, stand: 1.55 });
     this.board.mesh.position.set(0.35, 1.55, -0.95);
     g.add(this.board.mesh);
     this.board.paint = () => this.paintBoard();
@@ -630,76 +635,56 @@ export class RouletteTable {
   }
 
   private paintBoard(): void {
-    const c = this.board.ctx;
-    this.board.clear();
-    roundRect(c, 4, 4, 992, 412, 22);
-    c.fillStyle = 'rgba(22, 10, 14, 0.94)';
-    c.fill();
-    c.lineWidth = 4;
-    c.strokeStyle = '#ff3fb4';
-    c.stroke();
-    c.textBaseline = 'alphabetic';
-    c.textAlign = 'left';
-    c.font = font(700, 40);
-    c.fillStyle = '#ff7fcf';
-    c.fillText('ROULETTE', 28, 56);
-    c.font = font(600, 26);
-    c.fillStyle = INK.hot;
-    c.fillText(this.status, 230, 54, 560);
-    c.textAlign = 'right';
-    c.fillStyle = INK.amber;
-    c.fillText(`bet $${this.total}  ·  $${this.state.money}`, 972, 54);
+    // the Lucky Lure's board: black lacquer, gold leaf, pink enamel (ui/boards.ts)
+    const L = this.letters;
+    const c = L.begin();
+    // (in from the gold-leaf fans in the corners)
+    L.title('ROULETTE', 72, 70, 44, 'left', 220);
+    L.text(this.status, 300, 64, 26, 'ink', 'left', 600, 420);
+    L.text(`bet $${this.total}  ·  $${this.state.money}`, 928, 64, 26, 'accent', 'right', 700);
     // the last numbers
     c.textAlign = 'center';
     this.history.forEach((n, i) => {
-      const x = 56 + i * 62;
+      const x = 62 + i * 62;
       const col = colourOf(n);
       c.fillStyle = col === 'red' ? '#b3242c' : col === 'green' ? '#1f7a3a' : '#2a2a30';
       c.beginPath();
-      c.arc(x, 104, 24, 0, TAU);
+      c.arc(x, 110, 24, 0, TAU);
       c.fill();
+      c.strokeStyle = 'rgba(240, 210, 122, 0.6)';
+      c.lineWidth = 2;
+      c.stroke();
       c.fillStyle = '#fff';
       c.font = font(700, 24);
-      c.fillText(String(n), x, 113);
+      c.fillText(String(n), x, 119);
     });
-    // chips
-    const buttons: { id: string; x: number; y: number; w: number; h: number; enabled?: boolean }[] = [];
+    // chips, lying on the board
     this.opts.chips.forEach((v, i) => {
-      const x = 60 + i * 120;
-      const y = 200;
-      buttons.push({ id: `chip${v}`, x: x - 48, y: y - 48, w: 96, h: 96 });
+      const x = 66 + i * 120;
+      const y = 206;
+      L.area(`chip${v}`, x - 48, y - 48, 96, 96);
       const sel = v === this.chip;
       c.fillStyle = `#${(CHIP_COLOUR[v] ?? 0xffffff).toString(16).padStart(6, '0')}`;
       c.beginPath();
       c.arc(x, y, sel ? 46 : 40, 0, TAU);
       c.fill();
       c.lineWidth = sel ? 8 : 4;
-      c.strokeStyle = sel ? INK.amber : this.board.hover === `chip${v}` ? '#ffffff' : 'rgba(255,255,255,0.5)';
+      c.strokeStyle = sel ? '#f0d27a' : this.board.hover === `chip${v}` ? '#ffffff' : 'rgba(255,255,255,0.5)';
       c.setLineDash([10, 8]);
       c.stroke();
       c.setLineDash([]);
       c.fillStyle = v === 1 ? '#222' : '#fff';
       c.font = font(700, 30);
+      c.textAlign = 'center';
       c.fillText(`$${v}`, x, y + 10);
     });
-    // actions
-    const act = (id: string, label: string, x: number, w: number, colour: string, on: boolean): void => {
-      buttons.push({ id, x, y: 300, w, h: 90, enabled: on });
-      roundRect(c, x, 300, w, 90, 16);
-      c.fillStyle = !on ? 'rgba(255,255,255,0.06)' : this.board.hover === id ? '#ffffff' : colour;
-      c.fill();
-      c.fillStyle = on ? '#1a0a10' : INK.dim;
-      c.font = font(700, 36);
-      c.fillText(label, x + w / 2, 358);
-    };
     const betting = this.phase === 'betting';
-    act('spin', 'SPIN', 28, 380, '#ff3fb4', betting && this.total > 0);
-    act('clear', 'CLEAR', 430, 260, '#9aa4ac', betting && this.total > 0);
+    L.button('spin', 'SPIN', 34, 300, 374, 88, betting && this.total > 0 ? 'go' : 'off', 38);
+    L.button('clear', 'CLEAR', 430, 300, 256, 88, betting && this.total > 0 ? 'alt' : 'off', 34);
     let last = 0;
     for (const l of this.lastBets.values()) for (const v of l) last += v;
-    act('rebet', last ? `REBET $${last}` : 'REBET', 712, 260, INK.amber, betting && last > 0);
-    this.board.buttons = buttons;
-    this.board.commit();
+    L.button('rebet', last ? `REBET $${last}` : 'REBET', 708, 300, 258, 88, betting && last > 0 ? 'alt' : 'off', 32);
+    L.end();
   }
 }
 

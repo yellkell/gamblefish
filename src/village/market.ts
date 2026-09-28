@@ -1,5 +1,5 @@
 /**
- * Joe's fish market, on the plaza stall (village role `stall`) — the casinos in sight of it.
+ * The fish market, on the plaza stall (village role `stall`) — the casinos in sight of it.
  *
  * Joe (Tidewater's Rocketbox fish buyer) stands behind the counter. At the counter's end is a
  * hanging-dial scale: hold a fish over its pan — straight from your hand, or lifted out of the
@@ -7,7 +7,8 @@
  * swings to its weight, the price pops, and it's sold — coins in the bowl, ff2's cash chime (up),
  * the wrist counters roll. Then Joe slides it onto the ice.
  *
- * The board above the counter has SELL ALL (everything in the backpack) and Joe's two cents.
+ * The chalkboard by the scale has SELL ALL (everything in the backpack) and his two cents. (He
+ * goes unnamed: nothing in the game calls him anything.)
  */
 
 import {
@@ -21,6 +22,7 @@ import {
   SRGBColorSpace,
   Sprite,
   SpriteMaterial,
+  TorusGeometry,
   Vector3,
   type Camera,
   type Scene,
@@ -31,7 +33,7 @@ import type { Piece } from '../backpack/logic.ts';
 import { TIERS } from '../backpack/logic.ts';
 import type { GameState } from '../fishing/tidewater.ts';
 import { font } from '../ui/fonts.ts';
-import { INK, roundRect } from '../ui/panel.ts';
+import { Lettering, lookFor, mount } from '../ui/boards.ts';
 import { InteractivePanel, register } from '../ui/pointer.ts';
 import { Character } from './characters.ts';
 import type { BuildingFrame } from './signs.ts';
@@ -51,6 +53,7 @@ export class FishMarket {
   readonly group = new Group();
   private readonly joe: Character;
   private readonly panel: InteractivePanel;
+  private readonly letters: Lettering;
   private readonly scalePan = new Group();
   private readonly needle: Mesh;
   private needleAngle = 0;
@@ -101,10 +104,37 @@ export class FishMarket {
     scale.add(post, arm, dial, this.needle, this.scalePan);
     this.group.add(scale);
 
-    // the board: Joe's words, what your backpack's worth, SELL ALL
+    // the board: what he says, what your backpack's worth, SELL ALL
     this.panel = new InteractivePanel([640, 300], [0.9, 0.42]);
-    this.panel.mesh.position.set(-0.6, g0 + 1.85, 1.1);
-    this.panel.mesh.rotation.x = -0.12;
+    // the stall's chalkboard, in a blue-painted frame (ui/boards.ts), hung on two cords from the
+    // front beam over the scale's end of the counter, above head height: clear of the man behind
+    // it. Out in the weather, lit by the day like the stall is
+    this.letters = new Lettering(this.panel, lookFor('stall'), 5);
+    mount(this.panel, lookFor('stall'), { outdoor: true });
+    // (the beam: a pole along the front of the stall at z = BEAM_Z, its underside BEAM_Y up)
+    const BEAM_Z = 1.2;
+    const BEAM_Y = 2.49;
+    const outer = 0.42 / 2 + lookFor('stall').frame.w;
+    // (clear of the corner post, which stands at x = 1.7: its near side at 1.64)
+    const cx = 1.0;
+    const top = BEAM_Y - 0.2;
+    this.panel.mesh.position.set(cx, g0 + top - outer, BEAM_Z);
+    // hanging a touch forward at the top, so it reads from under it
+    this.panel.mesh.rotation.x = 0.08;
+    const cord = new MeshLambertMaterial({ color: 0x8a7a5a });
+    for (const sx of [-1, 1]) {
+      const x = cx + sx * 0.36;
+      // from the frame's top edge (tipped forward with it) up round the beam
+      const zTop = BEAM_Z + Math.sin(0.08) * outer;
+      const len = BEAM_Y + 0.04 - top;
+      const c = new Mesh(new CylinderGeometry(0.008, 0.008, len, 6), cord);
+      c.position.set(x, g0 + top + len / 2, (zTop + BEAM_Z) / 2);
+      c.rotation.x = -Math.atan2(zTop - BEAM_Z, len);
+      this.group.add(c);
+      const eye = new Mesh(new TorusGeometry(0.012, 0.003, 5, 10), new MeshLambertMaterial({ color: 0x3a3a3a }));
+      eye.position.set(x, g0 + top + 0.008, zTop);
+      this.group.add(eye);
+    }
     this.group.add(this.panel.mesh);
     this.panel.paint = () => this.paint();
     this.panel.onClick = (id) => {
@@ -127,43 +157,18 @@ export class FishMarket {
   }
 
   private paint(): void {
-    const c = this.panel.ctx;
+    const L = this.letters;
     const inv = this.state.inventory as unknown as Piece[];
     const placed = inv.filter((f) => f.placed);
     const worth = placed.reduce((a, f) => a + f.value, 0);
-    this.panel.clear();
-    roundRect(c, 4, 4, 632, 292, 22);
-    c.fillStyle = 'rgba(24, 18, 12, 0.92)';
-    c.fill();
-    c.lineWidth = 4;
-    c.strokeStyle = '#b89a72';
-    c.stroke();
-    c.textBaseline = 'alphabetic';
-    c.textAlign = 'left';
-    c.font = font(700, 40);
-    c.fillStyle = '#f6ecd4';
-    c.fillText("JOE'S FISH MARKET", 28, 58);
-    c.font = font(500, 26);
-    c.fillStyle = INK.dim;
-    c.fillText(`“${this.line}”`, 28, 102, 584);
-    c.font = font(600, 24);
-    c.fillStyle = INK.hot;
-    c.fillText(placed.length ? `In your backpack: ${placed.length} fish, worth $${worth}` : 'Your backpack is empty.', 28, 150);
-    c.font = font(500, 20);
-    c.fillStyle = INK.dim;
-    c.fillText('Hold a fish over the scale and click to sell it.', 28, 184);
-    // SELL ALL
+    L.begin();
+    L.title('FISH MARKET', 30, 62, 42, 'left', 580);
+    L.text(`“${this.line}”`, 30, 106, 26, 'dim', 'left', 500, 580);
+    L.text(placed.length ? `In your backpack: ${placed.length} fish, worth $${worth}` : 'Your backpack is empty.', 30, 152, 26, 'ink', 'left', 600, 580);
+    L.text('Hold a fish over the scale and click to sell it.', 30, 186, 21, 'dim', 'left', 500, 580);
     const on = placed.length > 0;
-    const b = { id: 'all', x: 28, y: 206, w: 584, h: 68, enabled: on };
-    this.panel.buttons = [b];
-    roundRect(c, b.x, b.y, b.w, b.h, 14);
-    c.fillStyle = !on ? 'rgba(255,255,255,0.06)' : this.panel.hover === 'all' ? '#ffc640' : INK.amber;
-    c.fill();
-    c.font = font(700, 32);
-    c.textAlign = 'center';
-    c.fillStyle = on ? '#1a1206' : INK.dim;
-    c.fillText(on ? `SELL ALL  ·  $${worth}` : 'SELL ALL', b.x + b.w / 2, b.y + 45);
-    this.panel.commit();
+    L.button('all', on ? `SELL ALL  ·  $${worth}` : 'SELL ALL', 30, 208, 580, 66, on ? 'go' : 'off', 32);
+    L.end();
   }
 
   /** The fish drops on the pan, the dial swings to its weight, the price pops: sold. */

@@ -23,10 +23,9 @@
 import { Box3, CanvasTexture, Group, MeshBasicMaterial, SRGBColorSpace, Vector3, type Mesh, type Object3D } from 'three';
 import { uiDeny, winFanfare } from '../audio/sfx.ts';
 import type { GameState } from '../fishing/tidewater.ts';
-import { font } from '../ui/fonts.ts';
-import { INK, roundRect } from '../ui/panel.ts';
 import { InteractivePanel, register } from '../ui/pointer.ts';
-import { drawThumb, thumbnail } from '../ui/thumbnail.ts';
+import { thumbnail } from '../ui/thumbnail.ts';
+import { Lettering, lookFor, mount, type InkName } from '../ui/boards.ts';
 import type { BoxCollider } from '../world/data.ts';
 import { Batch, M, rounded, stalk, turned, type Kit } from './craft.ts';
 import { HOME_SHOPS as HOME_SHOP_LIST, shopCounter, VILLA_SHOPS, type HomeShop, type Interior } from './interiors.ts';
@@ -244,9 +243,10 @@ function onShow(k: Kit, item: HomeItem, built: Object3D): Group {
 
 export class HomeShopCounter {
   private readonly board: InteractivePanel;
+  private readonly letters: Lettering;
   private readonly goods: HomeItem[];
   private note = '';
-  private noteColour: string = INK.dim;
+  private noteColour: InkName = 'dim';
   /** does this shop deliver to Coral's villa (not your shack)? */
   private villa = false;
   /** a picture of each thing, for its row on the board */
@@ -286,7 +286,11 @@ export class HomeShopCounter {
 
     // the board behind: what they sell, what it costs, BUY
     this.board = new InteractivePanel([BW, BH], [1.6, (1.6 * BH) / BW]);
-    this.board.mesh.position.set(cx, top + 1.05, -room.d / 2 + 0.02);
+    // a board in the shop's own style, framed, hung on the back wall (ui/boards.ts)
+    const look = lookFor(shop);
+    this.letters = new Lettering(this.board, look, shop.charCodeAt(0));
+    mount(this.board, look, { renderer: kit.renderer });
+    this.board.mesh.position.set(cx, top + 1.05, -room.d / 2 + 0.02 + look.frame.d);
     room.contents.add(this.board.mesh);
     this.board.paint = () => this.paint();
     this.board.onClick = (id) => this.click(id);
@@ -302,7 +306,7 @@ export class HomeShopCounter {
     if (this.state.money < item.price) {
       uiDeny();
       this.note = `You need $${Math.ceil(item.price - this.state.money)} more for the ${item.name.toLowerCase()}.`;
-      this.noteColour = INK.danger;
+      this.noteColour = 'bad';
       this.paint();
       return;
     }
@@ -314,72 +318,29 @@ export class HomeShopCounter {
     }
     winFanfare(1);
     this.note = this.villa ? `Sold! The ${item.name.toLowerCase()} is on its way to Coral at Villa Mar.` : `Sold! The ${item.name.toLowerCase()} is on its way to your shack on the beach.`;
-    this.noteColour = INK.good;
+    this.noteColour = 'good';
     this.paint();
   }
 
   private paint(): void {
-    const b = this.board;
-    const c = b.ctx;
+    const L = this.letters;
     const role = ROLES[this.goods[0]?.shop ?? 'F'];
-    b.clear();
-    roundRect(c, 6, 6, BW - 12, BH - 12, 26);
-    c.fillStyle = 'rgba(24, 18, 12, 0.94)';
-    c.fill();
-    c.lineWidth = 6;
-    c.strokeStyle = role?.colour ?? '#b89a72';
-    c.stroke();
-    c.textBaseline = 'alphabetic';
-    c.textAlign = 'left';
-    c.font = font(700, 54);
-    c.fillStyle = '#f6ecd4';
-    c.fillText(role?.title ?? 'SHOP', 40, 76);
-    c.font = font(600, 28);
-    c.fillStyle = INK.dim;
-    c.fillText(this.villa ? 'for Coral’s Villa Mar  ·  delivered with your compliments' : 'for your shack on the beach  ·  delivered straight away', 40, 116);
-    c.textAlign = 'right';
-    c.font = font(700, 36);
-    c.fillStyle = INK.amber;
-    c.fillText(`wallet $${Math.floor(this.state.money).toLocaleString('en-US')}`, BW - 40, 76);
-
-    const buttons: { id: string; x: number; y: number; w: number; h: number; enabled?: boolean }[] = [];
+    L.begin();
+    L.title(role?.title ?? 'SHOP', 44, 82, 56, 'left', 620);
+    L.text(this.villa ? 'for Coral’s Villa Mar  ·  delivered with your compliments' : 'for your shack on the beach  ·  delivered straight away', 44, 122, 28, 'dim', 'left', 600, 760);
+    L.text(`wallet $${Math.floor(this.state.money).toLocaleString('en-US')}`, BW - 44, 80, 34, 'accent', 'right', 700);
     const rowH = 112;
     this.goods.forEach((g, i) => {
-      const y = 140 + i * rowH;
+      const y = 142 + i * rowH;
       const owned = this.state.home.includes(g.id);
-      drawThumb(c, this.pics.get(g.id), 36, y + 4, rowH - 10);
-      c.textAlign = 'left';
-      c.font = font(700, 40);
-      c.fillStyle = owned ? INK.dim : INK.hot;
-      c.fillText(g.name, 160, y + 44, 560);
-      c.font = font(500, 26);
-      c.fillStyle = INK.dim;
-      c.fillText(g.blurb, 160, y + 80, 560);
-      c.textAlign = 'right';
-      c.font = font(700, 40);
-      c.fillStyle = owned ? INK.dim : INK.amber;
-      c.fillText(`$${g.price.toLocaleString('en-US')}`, 890, y + 60);
-      const bx = 910;
-      const bw = 250;
-      const bh = 80;
-      const id = `buy:${g.id}`;
-      if (!owned) buttons.push({ id, x: bx, y: y + 12, w: bw, h: bh });
-      roundRect(c, bx, y + 12, bw, bh, 16);
+      L.thumb(this.pics.get(g.id), 40, y + 4, rowH - 12);
+      L.text(g.name, 164, y + 44, 40, owned ? 'dim' : 'ink', 'left', 700, 560);
+      L.text(g.blurb, 164, y + 80, 26, 'dim', 'left', 500, 560);
+      L.text(`$${g.price.toLocaleString('en-US')}`, 886, y + 60, 40, owned ? 'dim' : 'accent', 'right', 700);
       const afford = this.state.money >= g.price;
-      c.fillStyle = owned ? 'rgba(63, 214, 106, 0.18)' : b.hover === id ? '#ffc640' : afford ? INK.amber : 'rgba(255,255,255,0.1)';
-      c.fill();
-      c.textAlign = 'center';
-      c.font = font(700, 36);
-      c.fillStyle = owned ? INK.good : afford ? '#1a1206' : INK.dim;
-      c.fillText(owned ? (this.villa ? 'CORAL’S ♥' : 'AT HOME ✓') : 'BUY', bx + bw / 2, y + 64);
+      L.button(`buy:${g.id}`, owned ? (this.villa ? 'CORAL’S ♥' : 'AT HOME ✓') : 'BUY', 906, y + 12, 250, 80, owned ? 'done' : afford ? 'go' : 'off', 36);
     });
-    b.buttons = buttons;
-    if (this.note) {
-      c.textAlign = 'left';
-      c.font = font(600, 28);
-      c.fillStyle = this.noteColour;
-      c.fillText(this.note, 40, BH - 32, BW - 80);
-    }
-    b.commit();
+    if (this.note) L.text(this.note, 44, BH - 34, 28, this.noteColour, 'left', 600, BW - 88);
+    L.end();
   }
 }
