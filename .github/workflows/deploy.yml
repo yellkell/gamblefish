@@ -34,6 +34,7 @@ jobs:
       - run: npm run check:fish
       - run: npm run check:camps
       - run: npm run check:line
+      - run: npm run check:mining
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist

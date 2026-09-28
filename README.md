@@ -144,7 +144,8 @@ and the vendors.
     when you can see into them). A fully furnished shack costs about as many draws as
     it did before this polish.
 - **Coral's villa:** Villa Mar (L) is furnished the same way. The Jeweller sells a
-  crystal chandelier, a vanity with a jewellery box, pearls on a velvet bust, a
+  crystal chandelier, a vanity with a jewellery box (a real box, its velvet lining sunk in its well:
+  laid flush with a solid block's top it flickered), pearls on a velvet bust, a
   ring under a glass cloche and a mermaid's tiara. The Boutique sells a velvet chaise
   longue, a gilded cheval mirror, silk drapes, a baby grand and a painted silk screen. Coral is at home (`src/village/villa.ts`), lit like the
   room around her rather than by the sky outside.
@@ -315,6 +316,42 @@ and the vendors.
     timber yard, and lights a fire there (the hidden camps' chests say so once you have). Their chest fills every day with a couple of nice fish
     (Silver or better) and a stack of logs, fresh at midnight. Which camps you've found, and what's left in each chest,
     are saved.
+- **The gem rocks** (`src/mining/`): prospecting, with a pickaxe from the Jeweller.
+  - **The Jeweller's windows** (`src/village/gemWindows.ts`): a second counter down the Jeweller's
+    right-hand wall, a screen of glass and brass bars along it with two windows cut in it, a board
+    over each. The **Prospector's Window** sells the **pickaxe** ($250; one lies on the counter till
+    it's yours) and says what each ground holds, the gems you've found by name. **We Buy Gems**
+    shows every kind in your pouch with a SELL for each, and SELL ALL; one of each kind you've
+    ever found lies on a velvet pad under it.
+  - **The rocks** (`src/mining/sites.ts`, `src/mining/rock.ts`): sixteen big boulders out in the
+    wilds, four on each kind of ground, none on the chart; crystals of what's inside break through
+    their skin and twinkle. The bake clears the plants and Tidewater's own rocks round each. Own the
+    pick and walk up to one and it's in your hand, the rod over your shoulder, as the axe is among
+    the trees. Swing its point into the rock: steel rings on stone, chips and sparks fly, a jolt in
+    your hand, and the cracks open wider with the gems' light shining out through them. Six blows
+    and it bursts apart, the chunks glowing along the cracks as they tumble and sink into rubble.
+    A few minutes later, once you've gone, it grows back with new stones in it.
+  - **The tray:** out of the rubble rises a tray like the dancers' chest pack, lined in black
+    velvet, the rock's stones turning in its slots. Reach in and click one (trigger or grip) and it
+    flies into your pouch; TAKE ALL; CLOSE. What's inside depends on the ground (`src/mining/gems.ts`):
+    peridot and aquamarine on the shore, watermelon tourmaline and emerald in the forest, amethyst
+    and black opal on the high ground, sapphire and ruby on the peaks, the second of each the rare
+    one. Each stone has its carats and is worth them.
+  - **The stones** (`src/mining/gemMesh.ts`): each cut as a lapidary would (an oval, a pear, a
+    trillion, a cushion and a heart as brilliants, crown and pavilion facets interlocking; emerald
+    and baguette step cuts; the opal a cabochon), every facet its own flat normal. Their shader lights
+    each from its own jeweller's studio fixed in the world (a dark room hung with lamps), so they
+    scintillate as you move your head: through each facet the light that went in at the crown and
+    came back off a pavilion facet, split a little for red, green and blue (fire), coloured by its
+    path through the stone, under the surface's own reflection. The black opal's harlequin patches
+    flash their colours as it turns; the tourmaline is pink at the heart and green at the rind; the
+    emerald cut's table shows its hall of mirrors. Little four-pointed stars flash on them.
+  - **The book:** once the pickaxe is yours the field guide gains a last spread after the fish, the
+    eight gems four to a page. One you haven't found is a shadow and the ground it comes from; the
+    first you take fills its entry in (its names, where it's found, how many and your biggest, and a
+    true DID YOU KNOW? fact), and the stone itself lies on the page, turning. The backpack tray shows
+    how many gems are in your pouch. `npm run check:mining` checks that every rock is on its
+    ground, clear, standable and reachable, and that the stones and the pouch behave.
 - **The boards** (`src/ui/boards.ts`): every shop's, table's and counter's point-and-click board is a
   thing in the room, not a pane of dark glass: made of what that place would make it of, lettered
   its way, and set in a real frame. The carpenter's is planed pine with the lettering burnt in; the
@@ -394,6 +431,7 @@ same questions as ff2's `TELEPORT_AREAS`, `floorYAt` and `crossesWall`:
 | `src/fishing/` | the rod, cast, bites, fight, landing, catch card, the line meter clipped to the rod |
 | `src/woodworks/` | the axe, the woodlots and the timber yard; the reef and deep walks, their build crates and boards, and the bucket at the end |
 | `src/skelter/` | the helter skelter: its plot, the tower and slide, the ride (from HELTER SKELTER) |
+| `src/mining/` | the gem rocks: their sites, the boulders and their cracks, the pickaxe, the cut stones and their shader, the tray, the pouch |
 | `src/camps/` | the fire dancers' hidden camps: their sites, fires and dancers (from FIRE FIGHT 2), the chests and what's in them, the drums |
 | `src/ui/` | ff2's Rajdhani type kit and coin symbol, canvas panels, the wrist wallet |
 | `src/dev/harness.ts` | dev-only emulator driver |

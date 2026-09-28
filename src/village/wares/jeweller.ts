@@ -139,14 +139,23 @@ export function vanity(k: Kit): Object3D {
   const velvet = M.cloth(k.renderer, '#7a1030', 'velvet');
   const bx = 0.28;
   const by = 0.793;
-  b.at(box, rounded(0.28, 0.1, 0.18, 0.01), bx, by + 0.05, 0.02);
-  b.at(velvet, rounded(0.25, 0.01, 0.15, 0.004), bx, by + 0.095, 0.02);
+  // a real box: a base and four walls round an open well, the velvet lining the floor of it 2 cm
+  // down (a lining laid flush with a solid block's top face fought it and flickered)
+  const BW = 0.28;
+  const BD = 0.18;
+  const BH = 0.1;
+  const T = 0.014;
+  b.at(box, rounded(BW, 0.03, BD, 0.008), bx, by + 0.015, 0.02);
+  for (const sz of [-1, 1]) b.at(box, rounded(BW, BH, T, 0.005), bx, by + BH / 2, 0.02 + sz * (BD / 2 - T / 2));
+  for (const sx of [-1, 1]) b.at(box, rounded(T, BH, BD - T * 2 + 0.004, 0.005), bx + sx * (BW / 2 - T / 2), by + BH / 2, 0.02);
+  b.at(velvet, rounded(BW - T * 2 - 0.002, 0.012, BD - T * 2 - 0.002, 0.004), bx, by + 0.036, 0.02);
   // the lid, hinged at the back edge, open and leaning back a little
-  b.at(box, rounded(0.28, 0.02, 0.18, 0.008), bx, by + 0.1 + 0.97 * 0.09, 0.02 - 0.09 - 0.25 * 0.09, -Math.PI / 2 - 0.25, 0, 0);
-  b.at(gold, rounded(0.285, 0.008, 0.185, 0.003), bx, by + 0.06, 0.02);
+  b.at(box, rounded(BW, 0.02, BD, 0.008), bx, by + BH + 0.97 * 0.09, 0.02 - 0.09 - 0.25 * 0.09, -Math.PI / 2 - 0.25, 0, 0);
+  // a gilt band round it, standing well proud of the walls
+  b.at(gold, rounded(BW + 0.012, 0.008, BD + 0.012, 0.004), bx, by + 0.06, 0.02);
   const pearl = M.gloss(k.renderer, '#fbf4ee');
   beads(b, pearl, swag(new Vector3(bx - 0.08, by + 0.1, 0.05), new Vector3(bx - 0.2, by + 0.01, 0.12), -0.02, 10).concat([new Vector3(bx - 0.25, by + 0.006, 0.08)]), 0.009);
-  b.at(M.crystal(k.renderer, '#ff6a9a'), brilliant(0.014), bx + 0.05, by + 0.115, 0.03);
+  b.at(M.crystal(k.renderer, '#ff6a9a'), brilliant(0.014), bx + 0.05, by + 0.058, 0.03);
   // perfume bottles on a little silver tray
   b.at(M.silver(k.renderer), turned([[0, 0], [0.12, 0], [0.125, 0.008], [0.118, 0.01], [0, 0.006]], 24), -0.3, by, 0.02);
   for (const [x, z, tint, h] of [[-0.35, 0.0, '#ffb8c8', 0.1], [-0.26, 0.05, '#ffd89a', 0.08], [-0.25, -0.04, '#c8e0ff', 0.12]] as const) {

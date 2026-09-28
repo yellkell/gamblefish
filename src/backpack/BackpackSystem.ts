@@ -223,6 +223,8 @@ export class BackpackSystem extends createSystem({}) {
   private dayButton!: InteractivePanel;
   /** the logs you're carrying (woodworks/), off the tray's right rim */
   private woodTag!: InteractivePanel;
+  /** the gems in your pouch (mining/), under the logs, once the pickaxe is yours */
+  private gemTag!: InteractivePanel;
   /** the tabs off the left rim, and the book the second one opens */
   private tabs!: InteractivePanel;
   private guide!: FieldGuide;
@@ -291,6 +293,13 @@ export class BackpackSystem extends createSystem({}) {
     this.paintWoodTag();
     this.tray.group.add(this.woodTag.mesh);
     backpackDeps.state!.onChange(() => this.paintWoodTag());
+    this.gemTag = new InteractivePanel([320, 128], [0.17, 0.068]);
+    this.gemTag.mesh.rotation.x = -Math.PI / 2;
+    this.gemTag.paint = () => this.paintGemTag();
+    this.gemTag.repaintOnFonts(() => this.paintGemTag());
+    this.paintGemTag();
+    this.tray.group.add(this.gemTag.mesh);
+    backpackDeps.state!.onChange(() => this.paintGemTag());
     // the tabs: BACKPACK over FIELD GUIDE, lying off the tray's left rim (on its far edge they
     // were under the box's wall and behind the fish readout that stands there)
     this.tabs = new InteractivePanel([320, 272], [0.17, 0.1445]);
@@ -439,6 +448,56 @@ export class BackpackSystem extends createSystem({}) {
     h.model.u.uSwim.value = 0.015 + 0.07 * (1 - k) * (0.6 + 0.4 * Math.sin(time * 1.3));
   }
 
+  /** The stones in your pouch: a little cut gem and the count. */
+  private paintGemTag(): void {
+    const b = this.gemTag;
+    const c = b.ctx;
+    const [W, H] = b.px;
+    const n = backpackDeps.state?.gems.pouch.length ?? 0;
+    b.mesh.visible = !!backpackDeps.state?.gems.pick;
+    b.clear();
+    b.buttons = [];
+    roundRect(c, 6, 6, W - 12, H - 12, 22);
+    c.fillStyle = 'rgba(28, 12, 34, 0.94)';
+    c.fill();
+    c.lineWidth = 5;
+    c.strokeStyle = '#d8b460';
+    c.stroke();
+    // a brilliant seen side on: crown over pavilion, its facets picked out
+    const x = 75;
+    const y = 58;
+    c.beginPath();
+    c.moveTo(x - 34, y);
+    c.lineTo(x - 20, y - 18);
+    c.lineTo(x + 20, y - 18);
+    c.lineTo(x + 34, y);
+    c.lineTo(x, y + 36);
+    c.closePath();
+    const g = c.createLinearGradient(x - 34, y - 18, x + 34, y + 36);
+    g.addColorStop(0, '#c8f4ff');
+    g.addColorStop(0.5, '#a347ff');
+    g.addColorStop(1, '#ff1040');
+    c.fillStyle = g;
+    c.fill();
+    c.strokeStyle = 'rgba(255, 255, 255, 0.7)';
+    c.lineWidth = 2;
+    c.beginPath();
+    c.moveTo(x - 34, y);
+    c.lineTo(x + 34, y);
+    c.moveTo(x - 10, y - 18);
+    c.lineTo(x - 18, y);
+    c.lineTo(x, y + 36);
+    c.lineTo(x + 18, y);
+    c.lineTo(x + 10, y - 18);
+    c.stroke();
+    c.textAlign = 'left';
+    c.textBaseline = 'middle';
+    c.font = font(700, 48);
+    c.fillStyle = '#f0d27a';
+    c.fillText(`${n} GEM${n === 1 ? '' : 'S'}`, 128, H / 2 + 2, W - 140);
+    b.commit();
+  }
+
   private paintWoodTag(): void {
     const b = this.woodTag;
     const c = b.ctx;
@@ -580,6 +639,8 @@ export class BackpackSystem extends createSystem({}) {
     this.musicButton.mesh.position.set(-this.tray.width / 2 - 0.13, 0.012, this.tray.height / 2 - 0.08);
     this.dayButton.mesh.position.set(-this.tray.width / 2 - 0.13, 0.012, this.tray.height / 2 - 0.08 + 0.078);
     this.woodTag.mesh.position.set(this.tray.width / 2 + 0.13, 0.012, -this.tray.height / 2 + 0.078);
+    this.gemTag.mesh.position.set(this.tray.width / 2 + 0.13, 0.012, -this.tray.height / 2 + 0.156);
+    this.gemTag.mesh.visible = !!backpackDeps.state?.gems.pick;
     this.tabs.mesh.position.set(-this.tray.width / 2 - 0.13, 0.012, -this.tray.height / 2 + 0.078);
     // face your eyes, level (the tray itself is tipped 35° toward you: parented as-is, the text
     // leaned away and read skewed)

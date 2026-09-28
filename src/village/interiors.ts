@@ -110,6 +110,14 @@ export function shopCounter(innerD: number): [number, number, number, number, nu
   return [0, -innerD / 2 + 0.75, 1.2, 0.3, 0.95];
 }
 
+/** the Jeweller's, whose second counter (its two windows: village/gemWindows.ts) runs down the right wall */
+export const JEWELLER = 'A';
+
+/** the Jeweller's window counter in its room's frame, from the room's inner size: [x, z, half-w, half-d, height] */
+export function gemCounter(innerW: number, innerD: number): [number, number, number, number, number] {
+  return [innerW / 2 - 0.3, Math.min(0.15, innerD / 2 - 1.35), 0.27, 1.2, 1.0];
+}
+
 /** Roles you go inside. */
 export function hasInterior(name: string): boolean {
   const r = ROLES[name];
@@ -158,6 +166,7 @@ export function openColliders(boxes: BoxCollider[], frames: BuildingFrame[]): Bo
     const f = frameToWorld(b, 0, 0, 0);
     const furniture = [...(FURNITURE[b.name] ?? [])];
     if (COUNTER_SHOPS.includes(b.name)) furniture.push(shopCounter(b.d - INSET * 2));
+    if (b.name === JEWELLER) furniture.push(gemCounter(b.w - INSET * 2, b.d - INSET * 2));
     for (const [x, z, hx, hz, top] of furniture) {
       const p = frameToWorld(b, x, 0, z);
       out.push({ tag: 'furniture', walkable: false, solid: true, cx: p.x, cz: p.z, hx, hz, rotY: b.yaw, top: b.floorY + top, bottom: b.floorY - 0.2 });
