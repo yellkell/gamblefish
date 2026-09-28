@@ -12,7 +12,7 @@
  *   node tools/fish-check.mjs
  */
 
-import { FISH, FISH_IDS, UPGRADES, createGameState, fishValue, fishLengthCm, pickSpecies } from '../src/fishing/tidewater.ts';
+import { DEEP_FROM, DEEP_FULL, FISH, FISH_IDS, UPGRADES, createGameState, fishValue, fishLengthCm, habitatAt, pickSpecies } from '../src/fishing/tidewater.ts';
 import { shownLevel } from '../src/fishing/gear.ts';
 import { TIMED, biting } from '../src/fishing/timedFish.ts';
 import { TROPHY } from '../src/fishing/trophyFish.ts';
@@ -89,6 +89,24 @@ console.log('\nthe trophy fish (2,000 bites at each spot)');
       const off = count(id, where, 12, { depth: deep, gear: top });
       check(`${FISH[id].name}: only at night`, off === 0, `${off} at noon`);
     }
+  }
+}
+
+console.log('\nthe deep water (off the deep walk: 13–16 m by day, starter gear)');
+{
+  const none = Object.fromEntries(Object.keys(UPGRADES).map((k) => [k, 0]));
+  const count = (id, depth) => {
+    const h = habitatAt({ depth, reefDist: 80, pierDist: 50 });
+    let n = 0;
+    for (let i = 0; i < 4000; i++) if (pickSpecies(h, 12, rng, { depth, gear: none }) === id) n++;
+    return n;
+  };
+  check(`it's deep water past the drop-off (${DEEP_FROM}–${DEEP_FULL} m), not only past 16 m`, habitatAt({ depth: 5, reefDist: 80, pierDist: 50 }).deep === 0 && habitatAt({ depth: 14, reefDist: 80, pierDist: 50 }).deep > 0.8);
+  for (const id of ['mahi', 'tuna']) {
+    const off = [13, 14.5, 16].map((d) => count(id, d));
+    check(`${FISH[id].name} bites off the deep walk`, off.every((n) => n > 100), `${off.join(' / ')} of 4,000`);
+    const pier = count(id, 5);
+    check(`${FISH[id].name} never off the pier head`, pier === 0, `${pier} of 4,000`);
   }
 }
 

@@ -88,7 +88,10 @@ and the vendors.
 - **Game logic:** `src/fishing/tidewater.ts` imports Tidewater's fishing code
   as-is. That covers the 18 species with their prices, the habitats and bite
   timing, the line-tension fight, the gear tracks and the save, which lives
-  under its own key.
+  under its own key. One change: "deep water" starts at this island's drop-off
+  (9 m, all deep by 15 m) rather than Tidewater's 16–28 m, which no cast here
+  reaches. Without it the mahi-mahi and blackfin tuna, which live only in the
+  deep, never bit. Off the end of the deep walk they now do.
 - **Props:** `tools/bake-props.mjs` bakes Tidewater's own rod and reel, bobber
   and all 18 fish, colouring the fish the way its skin shader does. The rod's
   vertex animation (blank bend, rotor, bail, crank, spool) is ported from WGSL
