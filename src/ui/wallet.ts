@@ -136,7 +136,8 @@ export class WristWallet {
       wrist.add(w.group);
       this.watches.push(w);
     }
-    state.onChange((s) => {
+    // at once, not in turn with the boards: the quiet flag is for this change, not the next
+    state.onChangeNow((s) => {
       if (s.money === this.target) return;
       const quiet = walletQuiet.next;
       walletQuiet.next = false;
