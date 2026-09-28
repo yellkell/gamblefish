@@ -31,7 +31,8 @@ whole.
 npm install
 npm run dev          # bakes the island on first run, then http://localhost:5180
 npm run build        # bake + typecheck + static build in dist/
-npm run check:teleport
+npm run check:teleport   # and check:backpack, check:casino, check:fish, check:camps,
+                         # check:line, check:mining, check:statue
 ```
 
 In dev, IWSDK's plugin injects the IWER Quest 3 emulator, so **ENTER VR** works on a
@@ -369,6 +370,27 @@ and the vendors.
     ends, your three most valuable kinds of stone sparkling in its open mouth, and a black velvet
     tag with how many you have: take these to the Jeweller (no prices till you're at his window). `npm run check:mining` checks that every rock is on its
     ground, clear, standable and reachable, and that the stones and the pouch behave.
+- **The golden statue** (`src/statue/`): the island's thanks, once you've had everything it has to
+  give. `src/statue/journey.ts` keeps the tally, five legs:
+  - **the book:** every fish in the field guide, the great white too;
+  - **the dancers:** all twelve hidden camps found;
+  - **the gems:** every kind of stone the rocks hold;
+  - **the shops:** everything they sell that stays yours: all 28 pieces for your shack and Coral's
+    villa, every level of rod, reel, line, hooks, bait and charm, the axe and the pickaxe;
+  - **the helter skelter:** one full descent, all three tiers to the bottom (the ride's win counts it,
+    `journey.rides` in the save; rides from before it was counted don't, so ride it once more).
+
+  Finish the last and (once you're off the tower and have no fish on) a big golden statue of the
+  sailfish off the logo rises out of the sand where you come down onto the beach, west of the pier
+  foot, to a fanfare, a QUITE THE JOURNEY! banner and a word wherever you are. The fish is the game's
+  own sailfish, 5.5 m bill to tail, bent into a leap, its markings kept as shading in the gold, its sail's
+  rays standing out, leaping from a golden splash; little stars glint over it, and after dark it keeps a
+  warm glow of its own. On the plinth's face an engraved bronze plaque: *Quite the journey! Thanks for
+  Playing! Created by yellkell. Music by IBWildcat1998, poopoodoodoo689, JakeThePro & Crystalzach.*
+  Once up it's saved (`journey.unveiled`), stands there every visit, and is a gold star on the field
+  guide's chart (point at it to stand before the plaque). About five draws, built only once it's
+  earned. `npm run check:statue` checks the plot (dry, clear, in sight from the start, solid) and that
+  only all five legs together earn it.
 - **The boards** (`src/ui/boards.ts`): every shop's, table's and counter's point-and-click board is a
   thing in the room, not a pane of dark glass: made of what that place would make it of, lettered
   its way, and set in a real frame. The carpenter's is planed pine with the lettering burnt in; the

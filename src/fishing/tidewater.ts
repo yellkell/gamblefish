@@ -16,6 +16,7 @@ import { registerTrophyFish, trophyOdds, type Rig } from './trophyFish.ts';
 import type { CampSave, ChestFish } from '../camps/stock.ts';
 import { registerSharkFish, sharkOdds, sharkUnlocked } from './shark.ts';
 import { freshGems, readGems, type GemSave } from '../mining/gems.ts';
+import { freshJourney, readJourney, type JourneySave } from '../statue/save.ts';
 
 export interface FishInfo {
   name: string;
@@ -161,6 +162,8 @@ export interface GameState {
   coral: CoralSave;
   /** the gems (mining/): the pickaxe, the stones in your pouch, and every kind you've found */
   gems: GemSave;
+  /** the journey (statue/): full helter skelter descents, and whether the golden statue is up */
+  journey: JourneySave;
   readonly stats: GearStats;
   readonly holdKg: number;
   readonly holdValue: number;
@@ -257,11 +260,12 @@ export function createGameState(): GameState {
   s.camps = {};
   s.coral = { thanked: [], visits: 0 };
   s.gems = freshGems();
+  s.journey = freshJourney();
   const toJSON = s.toJSON.bind(s);
   const fromJSON = s.fromJSON.bind(s);
   const reset = s.reset.bind(s);
   // (baitGoop: this save's bait levels count goop bait: fishing/gear.ts baitShift)
-  s.toJSON = () => ({ ...(toJSON() as object), home: s.home, woodworks: s.woodworks, camps: s.camps, coral: s.coral, gems: s.gems, baitGoop: true });
+  s.toJSON = () => ({ ...(toJSON() as object), home: s.home, woodworks: s.woodworks, camps: s.camps, coral: s.coral, gems: s.gems, journey: s.journey, baitGoop: true });
   s.fromJSON = (d: unknown) => {
     if (!fromJSON(d)) return false;
     s.upgrades.bait = (s.upgrades.bait | 0) + baitShift(d as Parameters<typeof baitShift>[0]);
@@ -271,6 +275,7 @@ export function createGameState(): GameState {
     s.camps = readCamps(d);
     s.coral = readCoral(d, s.home);
     s.gems = readGems(d);
+    s.journey = readJourney(d);
     return true;
   };
   s.reset = () => {
@@ -279,6 +284,7 @@ export function createGameState(): GameState {
     s.camps = {};
     s.coral = { thanked: [], visits: 0 };
     s.gems = freshGems();
+    s.journey = freshJourney();
     reset();
   };
   s.load();

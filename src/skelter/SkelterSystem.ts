@@ -784,7 +784,11 @@ export class SkelterSystem extends createSystem({}) {
     game.phase = 'WIN';
     game.arrival = 1;
     this.landAt();
+    // all the way down: a leg of the journey (statue/journey.ts), saved with the pay-in
+    this.state.journey.rides += 1;
     this.payIn();
+    this.state.save();
+    this.state.emit();
     skelterAudio.play('welldone');
     this.player.head.getWorldPosition(this.head);
     this.confetti.start(this.head.clone());
