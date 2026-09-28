@@ -115,7 +115,8 @@ export class FishMarket {
     const BEAM_Z = 1.2;
     const BEAM_Y = 2.49;
     const outer = 0.42 / 2 + lookFor('stall').frame.w;
-    const cx = 1.15;
+    // (clear of the corner post, which stands at x = 1.7: its near side at 1.64)
+    const cx = 1.0;
     const top = BEAM_Y - 0.2;
     this.panel.mesh.position.set(cx, g0 + top - outer, BEAM_Z);
     // hanging a touch forward at the top, so it reads from under it
