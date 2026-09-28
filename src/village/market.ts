@@ -22,6 +22,7 @@ import {
   SRGBColorSpace,
   Sprite,
   SpriteMaterial,
+  TorusGeometry,
   Vector3,
   type Camera,
   type Scene,
@@ -105,13 +106,34 @@ export class FishMarket {
 
     // the board: what he says, what your backpack's worth, SELL ALL
     this.panel = new InteractivePanel([640, 300], [0.9, 0.42]);
-    // the stall's chalkboard, in a blue-painted frame (ui/boards.ts), standing on its own two legs
-    // just past the scale where you sell, turned toward you: clear of the man behind the counter.
-    // Out in the weather, lit by the day like the stall is
+    // the stall's chalkboard, in a blue-painted frame (ui/boards.ts), hung on two cords from the
+    // front beam over the scale's end of the counter, above head height: clear of the man behind
+    // it. Out in the weather, lit by the day like the stall is
     this.letters = new Lettering(this.panel, lookFor('stall'), 5);
-    mount(this.panel, lookFor('stall'), { outdoor: true, stand: 1.2 });
-    this.panel.mesh.position.set(2.8, g0 + 1.2, 0.5);
-    this.panel.mesh.rotation.set(-0.08, -0.4, 0, 'YXZ');
+    mount(this.panel, lookFor('stall'), { outdoor: true });
+    // (the beam: a pole along the front of the stall at z = BEAM_Z, its underside BEAM_Y up)
+    const BEAM_Z = 1.2;
+    const BEAM_Y = 2.49;
+    const outer = 0.42 / 2 + lookFor('stall').frame.w;
+    const cx = 1.15;
+    const top = BEAM_Y - 0.2;
+    this.panel.mesh.position.set(cx, g0 + top - outer, BEAM_Z);
+    // hanging a touch forward at the top, so it reads from under it
+    this.panel.mesh.rotation.x = 0.08;
+    const cord = new MeshLambertMaterial({ color: 0x8a7a5a });
+    for (const sx of [-1, 1]) {
+      const x = cx + sx * 0.36;
+      // from the frame's top edge (tipped forward with it) up round the beam
+      const zTop = BEAM_Z + Math.sin(0.08) * outer;
+      const len = BEAM_Y + 0.04 - top;
+      const c = new Mesh(new CylinderGeometry(0.008, 0.008, len, 6), cord);
+      c.position.set(x, g0 + top + len / 2, (zTop + BEAM_Z) / 2);
+      c.rotation.x = -Math.atan2(zTop - BEAM_Z, len);
+      this.group.add(c);
+      const eye = new Mesh(new TorusGeometry(0.012, 0.003, 5, 10), new MeshLambertMaterial({ color: 0x3a3a3a }));
+      eye.position.set(x, g0 + top + 0.008, zTop);
+      this.group.add(eye);
+    }
     this.group.add(this.panel.mesh);
     this.panel.paint = () => this.paint();
     this.panel.onClick = (id) => {
