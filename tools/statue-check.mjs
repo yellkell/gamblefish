@@ -13,8 +13,9 @@
  *      you can stand in front of it to read the plaque.
  *   2. THE JOURNEY. A new save has none of it; each leg (the book, the dancers, the gems, the
  *      shops, the helter skelter) counts on its own, and only all five together earn the statue.
- *   3. THE SAVE. The rides and the unveiling survive a save and a load; a save from before them
- *      loads with none; a reset takes the statue down again.
+ *   3. THE SAVE. The rides, the unveiling and the game clock survive a save and a load; a save
+ *      from before them loads with none; a reset takes the statue down and the clock back to 0.
+ *      The clock reads the way a speedrunner reads it.
  */
 
 import { readFileSync } from 'node:fs';
@@ -25,6 +26,7 @@ import { Heightfield } from '../src/world/heightfield.ts';
 import { Surfaces } from '../src/world/surfaces.ts';
 import { STATUE, STATUE_STAND } from '../src/statue/site.ts';
 import { journeyDone, journeyLegs } from '../src/statue/journey.ts';
+import { clock } from '../src/statue/save.ts';
 import { createGameState, FISH_IDS, UPGRADES } from '../src/fishing/tidewater.ts';
 import { GEAR_SHOPS } from '../src/fishing/gear.ts';
 import { CAMPS } from '../src/camps/sites.ts';
@@ -165,16 +167,27 @@ console.log('\n3. the save');
   const s = fresh();
   s.journey.rides = 3;
   s.journey.unveiled = true;
+  s.journey.played = 7654.3;
+  s.journey.time = 7530.25;
   const back = fresh();
   back.fromJSON(JSON.parse(JSON.stringify(s.toJSON())));
-  check('rides and the unveiling survive a save', back.journey.rides === 3 && back.journey.unveiled === true, JSON.stringify(back.journey));
+  check('rides, the unveiling and the clock survive a save', back.journey.rides === 3 && back.journey.unveiled === true && back.journey.played === 7654.3 && back.journey.time === 7530.25, JSON.stringify(back.journey));
   const old = s.toJSON();
   delete old.journey;
   const older = fresh();
   older.fromJSON(JSON.parse(JSON.stringify(old)));
-  check('a save from before it: nothing ridden, nothing unveiled', older.journey.rides === 0 && older.journey.unveiled === false);
+  check('a save from before it: nothing ridden, nothing unveiled, no time', older.journey.rides === 0 && older.journey.unveiled === false && older.journey.played === 0 && older.journey.time === null);
+  const noClock = s.toJSON();
+  delete noClock.journey.played;
+  delete noClock.journey.time;
+  const early = fresh();
+  early.fromJSON(JSON.parse(JSON.stringify(noClock)));
+  check('unveiled before the clock: still up, no time to show', early.journey.unveiled === true && early.journey.played === 0 && early.journey.time === null);
   back.reset();
-  check('a reset takes it down again', back.journey.rides === 0 && back.journey.unveiled === false);
+  check('a reset takes it down again, the clock back to 0', back.journey.rides === 0 && back.journey.unveiled === false && back.journey.played === 0 && back.journey.time === null);
+  const reads = [[0, '0:00.0'], [59.96, '0:59.9'], [83.45, '1:23.4'], [3599.99, '59:59.9'], [7530.25, '2:05:30.2'], [36000, '10:00:00.0']];
+  const bad = reads.filter(([t, want]) => clock(t) !== want);
+  check('the clock reads m:ss.t, h:mm:ss.t past the hour', bad.length === 0, bad.map(([t, want]) => `${t} → ${clock(t)} (want ${want})`).join(', ') || undefined);
 }
 
 const failed = results.filter((r) => !r).length;
