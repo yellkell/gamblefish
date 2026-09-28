@@ -47,7 +47,26 @@ export const FISH_IDS = Table.FISH_IDS as string[];
 export const fishValue = Table.fishValue as (id: string, kg: number) => number;
 export const fishLengthCm = Table.fishLengthCm as (id: string, kg: number) => number;
 
-export const habitatAt = BitesJs.habitatAt as (w: { depth: number; reefDist: number; pierDist: number }) => Habitat;
+const tidewaterHabitatAt = BitesJs.habitatAt as (w: { depth: number; reefDist: number; pierDist: number }) => Habitat;
+/**
+ * Tidewater's water types at the bobber (Bites.js habitatAt), with "deep" moved to this island's
+ * drop-off. Tidewater's deep starts at 16 m and is only full at 28 m, and no cast from our pier
+ * or walks reaches that (the deep walk's platform stands over 14 m): the mahi-mahi and blackfin
+ * tuna live nowhere else, so they never bit at all. Here the deep fades in from 9 m, past the
+ * drop-off, and is full by 15 m, off the end of the deep walk.
+ */
+export function habitatAt(w: { depth: number; reefDist: number; pierDist: number }): Habitat {
+  const h = tidewaterHabitatAt(w);
+  if (w.depth >= 0.25) h.deep = smooth(DEEP_FROM, DEEP_FULL, w.depth);
+  return h;
+}
+/** metres of water where the deep starts, and where it's all deep */
+export const DEEP_FROM = 9;
+export const DEEP_FULL = 15;
+function smooth(e0: number, e1: number, x: number): number {
+  const t = Math.min(1, Math.max(0, (x - e0) / (e1 - e0)));
+  return t * t * (3 - 2 * t);
+}
 const activity = BitesJs.activity as (pref: string, hour: number) => number;
 /**
  * Tidewater's weighted pick of what bites here (Bites.js pickSpecies), with the timed fish kept
