@@ -165,6 +165,17 @@ export function uiHover(): void {
   tone({ freq: 110, type: 'sine', dur: 0.035, gain: 0.038 });
 }
 
+/** Someone starts to speak: a soft rising blip as their speech bubble pops up. */
+export function speechPop(): void {
+  tone({ freq: 520, to: 820, type: 'sine', dur: 0.09, gain: 0.05 });
+}
+
+/** A heart filled in: two soft bell notes, a fourth apart. */
+export function heartChime(): void {
+  tone({ freq: 1318.5, type: 'sine', dur: 0.35, gain: 0.06 });
+  tone({ freq: 1760, type: 'sine', dur: 0.5, gain: 0.05, delay: 0.11 });
+}
+
 /**
  * The catch: a bright rising chime over a low thump, in the kit's struck-steel voice — longer
  * and higher when it's a new species or a record.
