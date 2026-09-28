@@ -193,7 +193,8 @@ export class Walks {
   readonly group = new Group();
   private readonly walks: Built[] = [];
   private readonly logGeo = new CylinderGeometry(0.07, 0.08, 0.55, 8).rotateZ(Math.PI / 2);
-  private readonly logMat = new MeshLambertMaterial({ color: 0x8a6440 });
+  /** bark round it, the sawn end grain at its ends */
+  private readonly logMat = [new MeshLambertMaterial({ color: 0x6e4e32 }), new MeshLambertMaterial({ color: 0xc8a070 }), new MeshLambertMaterial({ color: 0xc8a070 })];
 
   constructor(private readonly deps: WalkDeps) {
     for (const def of WALKS) this.walks.push(this.build(def));
@@ -431,13 +432,18 @@ export class Walks {
     const crate = new Group();
     const [cx, cz] = CRATES[def.id];
     crate.position.set(cx, DECK, cz);
-    const slat = new MeshLambertMaterial({ color: 0x9a7a52 });
-    const dark = new MeshLambertMaterial({ color: 0x5a4432 });
-    crate.add(mesh3(new BoxGeometry(0.78, 0.62, 0.78), dark, 0, 0.31, 0));
-    for (const y of [0.1, 0.31, 0.52]) for (const [x, z, rot] of [[0, 0.395, 0], [0, -0.395, 0], [0.395, 0, 1], [-0.395, 0, 1]] as const) crate.add(mesh3(new BoxGeometry(0.8, 0.14, 0.03), slat, x, y, z, rot * Math.PI / 2));
-    // the logs in it, rising as it fills
-    const fill = mesh3(new BoxGeometry(0.72, 0.1, 0.72), new MeshLambertMaterial({ color: 0x7a5636 }), 0, 0.1, 0);
+    crate.add(openCrate());
+    // the logs in it, one for each log that's in and not yet laid, stacked as they land
+    const fill = new Group();
     fill.name = 'fill';
+    const lr = rand(def.id.length * 131 + 7);
+    for (const [x, y, z] of CRATE_LOGS) {
+      const log = new Mesh(this.logGeo, this.logMat);
+      log.position.set(x + (lr() - 0.5) * 0.05, y, z);
+      log.rotation.set((lr() - 0.5) * 0.6, (lr() - 0.5) * 0.12, 0);
+      log.visible = false;
+      fill.add(log);
+    }
     crate.add(fill);
     // faces the middle of the pier head; its notice board is on two stakes driven into its back
     crate.rotation.y = Math.atan2(55 - cx, 36.5 - cz);
@@ -578,8 +584,7 @@ export class Walks {
       }
       const fill = w.crate.getObjectByName('fill')!;
       const left = this.logsIn(w.def) - w.shown * w.def.cost;
-      fill.position.y = 0.06 + Math.min(0.5, left * 0.05);
-      fill.visible = left > 0;
+      fill.children.forEach((log, i) => (log.visible = i < left));
       const lit = w.shown >= stepsOf(w.def);
       for (const l of w.lanterns) l.visible = lit;
       w.halo.visible = lit && this.deps.night.value > 0.01;
@@ -688,7 +693,37 @@ export class Walks {
   }
 }
 
-function mesh3(g: BufferGeometry, m: MeshLambertMaterial, x: number, y: number, z: number, ry = 0): Object3D {
+/** the crate's floor top, inside, and where each log goes in it: laid across, four in a layer and
+ * three in the next nestled in the grooves, up to the rim */
+const CRATE_FLOOR = 0.045;
+const CRATE_LOGS: [number, number, number][] = [];
+for (let k = 0; k < 4; k++) {
+  const zs = k % 2 === 0 ? [-0.27, -0.09, 0.09, 0.27] : [-0.18, 0, 0.18];
+  for (const z of zs) CRATE_LOGS.push([0, CRATE_FLOOR + 0.08 + k * 0.135, z]);
+}
+
+/**
+ * The build crate: open-topped, of rough boards on a floor, three slats a side with gaps between
+ * them, nailed to a post at each corner, standing on two skids. You can see in, and down to the
+ * floor when it's empty.
+ */
+function openCrate(): Group {
+  const o = new Group();
+  const board = new MeshLambertMaterial({ color: 0x9a7a52 });
+  const post = new MeshLambertMaterial({ color: 0x6e5840 });
+  const floor = new MeshLambertMaterial({ color: 0x7e6446 });
+  // the skids, and the floor on them
+  for (const x of [-0.28, 0.28]) o.add(mesh3(new BoxGeometry(0.07, 0.03, 0.78), post, x, 0.015, 0));
+  for (let i = 0; i < 5; i++) o.add(mesh3(new BoxGeometry(0.76, 0.015, 0.145), floor, 0, CRATE_FLOOR - 0.0075, -0.304 + i * 0.152));
+  // the corner posts, inside the slats
+  for (const x of [-0.355, 0.355]) for (const z of [-0.355, 0.355]) o.add(mesh3(new BoxGeometry(0.05, 0.6, 0.05), post, x, 0.32, z));
+  // the slats: three a side, gaps between (the ends lap at the corners)
+  for (const y of [0.12, 0.33, 0.54])
+    for (const [x, z, rot] of [[0, 0.395, 0], [0, -0.395, 0], [0.395, 0, 1], [-0.395, 0, 1]] as const) o.add(mesh3(new BoxGeometry(0.82, 0.13, 0.025), board, x, y, z, (rot * Math.PI) / 2));
+  return o;
+}
+
+function mesh3(g: BufferGeometry, m: MeshLambertMaterial | MeshLambertMaterial[], x: number, y: number, z: number, ry = 0): Object3D {
   const o = new Mesh(g, m);
   o.position.set(x, y, z);
   o.rotation.y = ry;
