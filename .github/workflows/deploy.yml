@@ -33,6 +33,7 @@ jobs:
       - run: npm run check:casino
       - run: npm run check:fish
       - run: npm run check:camps
+      - run: npm run check:line
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist

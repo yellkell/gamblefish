@@ -15,7 +15,8 @@
     "check:backpack": "node tools/backpack-check.mjs",
     "check:casino": "node tools/casino-check.mjs",
     "check:fish": "node tools/fish-check.mjs",
-    "check:camps": "node tools/camps-check.mjs"
+    "check:camps": "node tools/camps-check.mjs",
+    "check:line": "node tools/line-check.mjs"
   },
   "dependencies": {
     "@iwsdk/core": "0.4.2",

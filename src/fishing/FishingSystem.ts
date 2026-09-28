@@ -141,9 +141,8 @@ const _h = new Vector3();
 const _up = new Vector3(0, 1, 0);
 const _q = new Quaternion();
 /** where the line rests on its way down (updateLine) */
-const _rest0 = new Vector3();
-const _rest1 = new Vector3();
-/** and where it bends round a deck's edge, to a fish under it */
+const _rests = Array.from({ length: 16 }, () => new Vector3());
+/** and where it comes down outside the pier and in under it, to a fish under it */
 const _edgeTop = new Vector3();
 const _edgeUnder = new Vector3();
 const LINE_N = 40;
@@ -1273,27 +1272,27 @@ export class FishingSystem extends createSystem({}) {
     const taut = this.state === 'fighting' ? Math.min(1, (f ? f.tension : 0) * 1.5) : this.state === 'retrieving' ? 0.6 : 0;
     const slack = this.state === 'idle' || this.state === 'windup' || this.state === 'landing' ? 0 : 1;
     const sag = (this.lineOut * (this.state === 'flying' ? 0.03 : 0.07) * (1 - taut) + 0.02) * slack;
-    // It lies over whatever's between the tip and the fish (a rail, the deck's edge, the sand),
-    // rather than through it: where it rests, and where it rests on the tip's side of that. A fish
-    // that's gone in under the pier has the line over the deck's edge, down its face and in under
-    // it, as a real line bends round the timber.
+    // It lies over whatever's between the tip and the fish (a rail, a post, the deck's edge, the
+    // sand), rather than through it: pulled taut over all of it, from corner to corner. A fish
+    // that's gone in under the pier has the line down outside the posts and in under the beams to
+    // it, as a real line bends round the timber. The same in flight: a cast coming down past the
+    // rail pulls the line over it, not through it.
     const pts = this.linePts;
     pts.length = 0;
     pts.push(a);
     const S = fishingDeps.surfaces;
-    if (S && this.state !== 'flying') {
+    if (S) {
       let end: Vector3 = b;
       if (S.lineUnder(a, b, _edgeTop, _edgeUnder)) end = _edgeTop;
-      if (S.lineRest(a, end, _rest1)) {
-        if (S.lineRest(a, _rest1, _rest0)) pts.push(_rest0);
-        pts.push(_rest1);
-      }
+      const n = S.lineRests(a, end, _rests);
+      for (let k = 0; k < n; k++) pts.push(_rests[k]);
       if (end !== b) pts.push(_edgeTop, _edgeUnder);
     }
     pts.push(b);
     // the points shared out over the spans by their length (each span at least one); a line
-    // straight to the float or the fish droops, one that rests on something on its way the fish
-    // holds taut (drooping, it would come up to where it rests from under it, through the timber)
+    // straight to the float or the fish droops (no further than onto what it passes over), one
+    // that rests on something on its way the fish holds taut (drooping, it would come up to where
+    // it rests from under it, through the timber)
     const spans = pts.length - 1;
     let total = 0;
     for (let k = 1; k <= spans; k++) total += pts[k].distanceTo(pts[k - 1]);
@@ -1309,7 +1308,7 @@ export class FishingSystem extends createSystem({}) {
       const n = k === spans ? left : Math.max(1, Math.min(left - (spans - k), Math.round((LINE_N * len) / Math.max(total, 1e-6))));
       left -= n;
       _v.copy(p).lerp(q, 0.5);
-      if (spans === 1) _v.y -= sag;
+      if (spans === 1) _v.y -= S ? S.lineDroop(p, q, sag) : sag;
       for (let j = 1; j <= n; j++) {
         const t = j / n;
         const u = 1 - t;
