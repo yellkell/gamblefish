@@ -10,8 +10,7 @@
  *  THE BEACH     Find all eight and a ninth group comes down to the main beach, west of the timber
  *                yard, and lights a fire there. Their chest fills with a couple of nice fish and a
  *                stack of logs every day.
- *  THE CHEST     Click the sign over it (or grip its lid) and it swings open: THE CHEST PACK rises
- *                out of it, a tray like your backpack's with the dancers' fish lying in its slots
+ *  THE CHEST     Walk up to it and it swings open by itself: THE CHEST PACK rises out of it, a tray like your backpack's with the dancers' fish lying in its slots
  *                and their logs stacked beside it.
  *                  - reach in and CLICK a fish (trigger): it goes into your backpack, wherever
  *                    there's room;
@@ -19,8 +18,9 @@
  *                    (press A), just like one off the line;
  *                  - point at the LOGS and click: they all go on your stack for the walks;
  *                  - TAKE ALL packs everything that fits.
- *                Walk away (or CLOSE) and the lid comes down. A hidden camp's gift is given once;
- *                the beach party's chest fills again tomorrow (camps/stock.ts).
+ *                Walk away (or CLOSE) and the lid comes down. Shut with CLOSE, it stays shut till
+ *                you've stepped away and come back (or grip its lid). A hidden camp's gift is given
+ *                once; the beach party's chest fills again tomorrow (camps/stock.ts).
  *
  * Everything the camps draw shares a handful of draws: every fire's layers (camps/fire.ts), every
  * dancer and every glowstick (camps/dancers.ts); only the chests are their own meshes. All of it
@@ -76,10 +76,12 @@ export const campView: {
 const FIRE_SIZE = 0.85;
 /** within this of a camp's fire it counts as found */
 const FOUND_R = 20;
-/** the chest's sign shows within this (close enough to reach in once it's open), and an open
- *  chest shuts once you're past CLOSE_R (m, from the chest) */
-const SIGN_R = 4.5;
+/** a chest opens as you come within OPEN_R (the lid's up by the time you're there to reach in),
+ *  shuts once you're past CLOSE_R, and one you shut yourself opens again only once you've been
+ *  past REARM_R (m, from the chest) */
+const OPEN_R = 3;
 const CLOSE_R = 6;
+const REARM_R = 4.5;
 /** how far the beach party's drums carry (the hidden camps' carry further: camps/sound.ts) */
 const BEACH_EARSHOT = 40;
 /** the camps are drawn only within this of the nearest one */
@@ -101,7 +103,6 @@ interface Camp {
   /** the chest's world position and which way its front faces (unit, xz) */
   at: Vector3;
   front: Vector3;
-  sign: InteractivePanel;
 }
 
 interface FishModel {
@@ -159,6 +160,8 @@ export class CampSystem extends createSystem({}) {
   private flights: Flight[] = [];
   private tags: { s: Sprite; t: number }[] = [];
   private wasShut = new Set<Chest>();
+  /** the chest you shut with CLOSE: it stays shut till you've stepped away from it */
+  private dismissed: Camp | null = null;
   /** where you stood when the chest pack was last stood up for you */
   private readonly placedFrom = new Vector3();
 
@@ -179,10 +182,7 @@ export class CampSystem extends createSystem({}) {
       chest.group.rotation.y = Math.atan2(front.x, front.z);
       into.add(chest.group);
       this.wasShut.add(chest);
-      const camp: Camp = { site, fire, chest, at, front, sign: this.makeSign(), cheer: 0, party, get crowd() { return crowd(); } };
-      camp.sign.onClick = () => this.openChest(camp);
-      into.add(camp.sign.mesh);
-      return camp;
+      return { site, fire, chest, at, front, cheer: 0, party, get crowd() { return crowd(); } };
     };
     let hidden: Crowd | null = null;
     let beach: Crowd | null = null;
@@ -222,7 +222,11 @@ export class CampSystem extends createSystem({}) {
     this.buttonLetters = new Lettering(this.buttons, LOOKS.tapa, 5);
     mount(this.buttons, LOOKS.tapa, { outdoor: true, frame: false });
     this.buttons.paint = () => this.paintButtons();
-    this.buttons.onClick = (id) => (id === 'all' ? this.takeAll() : this.closeChest());
+    this.buttons.onClick = (id) => {
+      if (id === 'all') return this.takeAll();
+      this.dismissed = this.openCamp;
+      this.closeChest();
+    };
     this.buttons.repaintOnFonts(() => this.paintButtons());
     this.tray.group.add(this.buttons.mesh);
     register(this.buttons);
@@ -353,15 +357,11 @@ export class CampSystem extends createSystem({}) {
 
     this.camera.getWorldPosition(_v);
     const eye = _v.clone();
-    // the chest's sign, over the nearest chest while it's shut
-    for (const c of this.live) {
-      const near = Math.hypot(eye.x - c.at.x, eye.z - c.at.z) < SIGN_R;
-      const show = near && !c.chest.open && !backpackView.open;
-      c.sign.mesh.visible = show;
-      if (show) {
-        c.sign.mesh.position.set(c.at.x, c.at.y + CHEST_H + 0.75 + 0.02 * Math.sin(time * 2), c.at.z);
-        c.sign.mesh.lookAt(eye.x, c.at.y + CHEST_H + 0.75, eye.z);
-      }
+    // walking up to a chest opens it (not one you've just shut, till you've stepped away)
+    const d = this.dismissed;
+    if (d && Math.hypot(eye.x - d.at.x, eye.z - d.at.z) > REARM_R) this.dismissed = null;
+    if (!this.openCamp && !backpackView.open) {
+      for (const c of this.live) if (c !== this.dismissed && Math.hypot(eye.x - c.at.x, eye.z - c.at.z) < OPEN_R) this.openChest(c);
     }
     // or grip its lid
     if (!this.openCamp && camp && !backpackView.open && !backpackView.holding) {
@@ -418,7 +418,6 @@ export class CampSystem extends createSystem({}) {
     // the hasp, then the lid going up
     shot('bail_click', MIX.bail + 6, { rate: 0.5, at: c.at });
     shot('bail_click', MIX.bail + 2, { rate: 0.42, at: c.at, delay: 0.12 });
-    uiClick();
   }
 
   private closeChest(): void {
@@ -796,25 +795,6 @@ export class CampSystem extends createSystem({}) {
     c.globalAlpha = 1;
     L.text(n > 0 ? `TAKE ${n} LOG${n === 1 ? '' : 'S'}` : 'NO LOGS', W / 2, 214, 44, n > 0 ? '#fbeed6' : 'rgba(251, 238, 214, 0.5)', 'center', 700, W - 40);
     L.end();
-  }
-
-  /** The sign over a shut chest: point and click to open it. */
-  private makeSign(): InteractivePanel {
-    const p = new InteractivePanel([420, 150], [0.36, 0.129]);
-    const letters = new Lettering(p, LOOKS.tapa, 3);
-    mount(p, LOOKS.tapa, { outdoor: true, frame: false });
-    p.paint = () => {
-      // a carved tag, cut out, lit by the firelight's evening like everything round it
-      const [W, H] = p.px;
-      letters.begin(false);
-      letters.button('open', 'OPEN THEIR GIFT', 8, 8, W - 16, H - 16, 'go', 52);
-      letters.end();
-    };
-    p.repaintOnFonts(() => p.paint());
-    p.paint();
-    p.mesh.visible = false;
-    register(p);
-    return p;
   }
 
   private buzz(hand: Hand, k: number, ms: number): void {
