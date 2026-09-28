@@ -39,7 +39,7 @@ import { casinoEnv } from './casino/look.ts';
 import { BlackjackTable } from './casino/BlackjackTable.ts';
 import { PointerSystem } from './ui/pointer.ts';
 import { buildInteriors, interiorAt, openColliders, type Interior } from './village/interiors.ts';
-import { HOME, HOME_SHOPS, HomeShopCounter, Shack, VILLA, VILLA_SHOPS } from './village/homeGoods.ts';
+import { GOODS, HOME, HOME_SHOPS, HomeShopCounter, Shack, VILLA, VILLA_SHOPS } from './village/homeGoods.ts';
 import { GearShopCounter } from './village/gearShop.ts';
 import { GEAR_COUNTERS, JEWELLER } from './village/interiors.ts';
 import { GemWindows } from './village/gemWindows.ts';
@@ -55,6 +55,7 @@ import { SkelterSystem, skelterDeps, skelterView } from './skelter/SkelterSystem
 import { SKELTER } from './skelter/site.ts';
 import { CampSystem, campDeps, campView } from './camps/CampSystem.ts';
 import { MiningSystem, mineDeps, mineView } from './mining/MiningSystem.ts';
+import { Statue } from './statue/statue.ts';
 import { onFontsReady } from './ui/fonts.ts';
 import { drawLogo, drawLogoFish, hasLogoFish, setLogoFish } from './ui/logo.ts';
 import { thumbnail } from './ui/thumbnail.ts';
@@ -261,8 +262,8 @@ World.create(container, {
   backpackDeps.props = fishingDeps.props;
   backpackDeps.chart = { heightAt: (x, z) => heightfield.heightAt(x, z), layout: json.layout, buildings: frames };
   backpackDeps.where = () => world.camera.getWorldPosition(new Vector3());
-  // (and the helter skelter, once it's up)
-  backpackDeps.walks = () => ({ ...(woodView.walks?.() ?? {}), skelter: skelterView.progress() });
+  // (and the helter skelter, once it's up, and the golden statue once it's unveiled)
+  backpackDeps.walks = () => ({ ...(woodView.walks?.() ?? {}), skelter: skelterView.progress(), statue: game.journey.unveiled ? 1 : 0 });
   backpackDeps.skelter = () => skelterView.gate;
   // no backpack up the helter skelter
   backpackDeps.blocked = () => skelterView.onTower;
@@ -423,12 +424,25 @@ World.create(container, {
   await built(0.95);
   const villaRoom = room(VILLA);
   const villa = villaRoom ? new Villa(villaRoom, game, kit, (b) => surfaces.addBox(b), () => sky.state.night.value) : null;
+  // the golden statue on the beach, once you've had everything the island has to give (statue/)
+  const statue = new Statue(scene, {
+    state: game,
+    kit,
+    ground: (x, z) => heightfield.heightAt(x, z),
+    addBox: (b) => surfaces.addBox(b),
+    removeBox: (b) => surfaces.removeBox(b),
+    night: sky.state.night,
+    goods: GOODS.map((g) => g.id),
+    // not while you're up the helter skelter or have a fish on: it waits for you
+    hold: () => skelterView.onTower || ['fighting', 'landing'].includes(fishingView.state?.() ?? ''),
+  });
   villageTick = (dt) => {
     // a room is drawn only when you could see into it: from inside, or through its doorway
     // (from across the village, its dozens of little draws were most of the frame)
     const eye = world.camera.matrixWorld.elements;
     for (const i of interiors) i.group.visible = i.seenFrom(eye[12], eye[14]);
     villa?.update(dt, world.camera);
+    statue.update(dt, world.camera);
     music.update(world.camera);
     shore.update(ocean.time, dt, world.camera);
     market?.update(dt, world.camera);
@@ -437,7 +451,7 @@ World.create(container, {
   };
 
   // Dev hook: drive the rig without a headset (`__fish.move.to(x, z, yaw)`).
-  (window as unknown as { __fish: unknown }).__fish = { world, surfaces, move: teleportView, json, game, fishing: fishingView, vegetation, backpack: backpackView, interiors, tables, music, shore, sky, homeShops, gearShops, villa, fx, props: fishingDeps.props, wood: woodView, skelter: skelterView, camps: campView, mining: mineView, gemWindows, spotFor };
+  (window as unknown as { __fish: unknown }).__fish = { world, surfaces, move: teleportView, json, game, fishing: fishingView, vegetation, backpack: backpackView, interiors, tables, music, shore, sky, homeShops, gearShops, villa, fx, props: fishingDeps.props, wood: woodView, skelter: skelterView, camps: campView, mining: mineView, gemWindows, statue, spotFor };
 
   if (import.meta.env.DEV) void import('./dev/harness.ts').then((m) => m.installHarness(world));
 

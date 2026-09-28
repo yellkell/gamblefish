@@ -36,6 +36,7 @@ import { drawChart, KEY, CHART, type ChartSource, type Place } from './chart.ts'
 import { WALKS } from '../woodworks/gates.ts';
 import { PLINTH_RADIUS, TOWER_RADIUS } from '../skelter/constants.ts';
 import { SKELTER } from '../skelter/site.ts';
+import { STATUE, STATUE_STAND } from '../statue/site.ts';
 import { gemMesh, twinkles } from '../mining/gemMesh.ts';
 import { GEM_IDS, GEMS, GROUNDS } from '../mining/gems.ts';
 
@@ -708,6 +709,39 @@ export class FieldGuide {
       c.fillText('HELTER SKELTER', sx, sy + rp + 16);
       this.places.set(id, { text: 'Helter skelter', at: gate.at, face: gate.face });
       buttons.push({ id, x: sx - rp - 4, y: sy - rp - 4, w: rp * 2 + 8, h: rp * 2 + 8 });
+    }
+    // the golden statue, once it's unveiled: a gold star on the sand by the pier foot (point at it
+    // to stand before its plaque)
+    if ((built.statue ?? 0) >= 1) {
+      const [sx, sy] = px(STATUE.x, STATUE.z);
+      const id = 'statue';
+      const on = hover === id;
+      const star = (r: number): void => {
+        c.beginPath();
+        for (let k = 0; k < 10; k++) {
+          const a = -Math.PI / 2 + (k * Math.PI) / 5;
+          const rr = k % 2 ? r * 0.45 : r;
+          c.lineTo(sx + Math.cos(a) * rr, sy + Math.sin(a) * rr);
+        }
+        c.closePath();
+      };
+      star(on ? 17 : 13);
+      c.fillStyle = '#f4c542';
+      c.fill();
+      c.lineWidth = on ? 3 : 2;
+      c.strokeStyle = on ? '#c0301c' : '#7a5a12';
+      c.stroke();
+      c.font = font(700, 18);
+      c.textAlign = 'center';
+      c.textBaseline = 'middle';
+      c.lineWidth = 4;
+      c.strokeStyle = 'rgba(246, 236, 212, 0.9)';
+      // named below it, over the shallows (the village's markers crowd the sand above)
+      c.strokeText('THE STATUE', sx, sy + 26);
+      c.fillStyle = '#7a5a12';
+      c.fillText('THE STATUE', sx, sy + 26);
+      this.places.set(id, { text: 'The golden statue', at: [STATUE.x, STATUE.z], stand: STATUE_STAND, face: [STATUE.x, STATUE.z] });
+      buttons.push({ id, x: sx - 20, y: sy - 20, w: 40, h: 40 });
     }
     // you are here
     const me = this.where?.();

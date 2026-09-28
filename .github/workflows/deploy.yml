@@ -35,6 +35,7 @@ jobs:
       - run: npm run check:camps
       - run: npm run check:line
       - run: npm run check:mining
+      - run: npm run check:statue
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist

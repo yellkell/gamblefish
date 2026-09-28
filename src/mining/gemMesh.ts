@@ -511,12 +511,20 @@ const twinkleMats = new Set<ShaderMaterial>();
 export function twinkles(n: number, r: number, tint: string, seed = 1, scale = 1): Points {
   const rr = rnd(seed + 3);
   const pos: number[] = [];
-  const phase: number[] = [];
-  const size: number[] = [];
   for (let i = 0; i < n; i++) {
     const a = rr() * Math.PI * 2;
     const d = Math.sqrt(rr()) * r;
     pos.push(Math.cos(a) * d, r * (0.1 + rr() * 0.3), Math.sin(a) * d);
+  }
+  return twinklesAt(pos, tint, seed, scale);
+}
+
+/** Twinkles at the points given (x, y, z, … in the holder's frame): over anything that shines. */
+export function twinklesAt(pos: number[], tint: string, seed = 1, scale = 1): Points {
+  const rr = rnd(seed + 7);
+  const phase: number[] = [];
+  const size: number[] = [];
+  for (let i = 0; i < pos.length / 3; i++) {
     phase.push(rr());
     size.push(0.6 + rr() * 0.8);
   }

@@ -17,7 +17,8 @@
     "check:fish": "node tools/fish-check.mjs",
     "check:camps": "node tools/camps-check.mjs",
     "check:line": "node tools/line-check.mjs",
-    "check:mining": "node tools/mining-check.mjs"
+    "check:mining": "node tools/mining-check.mjs",
+    "check:statue": "node tools/statue-check.mjs"
   },
   "dependencies": {
     "@iwsdk/core": "0.4.2",

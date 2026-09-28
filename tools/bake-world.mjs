@@ -545,28 +545,34 @@ const onCamp = (x, z, pad) => CAMPS.some((c) => Math.hypot(x - c.x, z - c.z) < C
 const { ROCK_SITES, ROCK_R, ROCK_CLEAR, ROCK_CLEAR_TREES } = await import('../src/mining/sites.ts');
 /** near a gem rock (its footprint grown by `pad`) */
 const onGemRock = (x, z, pad) => ROCK_SITES.some((r) => Math.hypot(x - r.x, z - r.z) < ROCK_R * r.size + pad);
+// The golden statue's plot (src/statue/site.ts): open sand, nothing growing or lying on it
+const { STATUE } = await import('../src/statue/site.ts');
+/** on the statue's plot (grown by `pad`) */
+const onStatue = (x, z, pad) => Math.hypot(x - STATUE.x, z - STATUE.z) < STATUE.radius + pad;
 // Where everything grows (Tidewater's own land-cover scatter, clear of the houses and paths)
 const vegSite = new VegSite(terrain, { footprints: village.getFootprints() });
 const veg = scatterVegetation(vegSite);
 // where the grass grows (Tidewater's grass mask: R dune grass, G meadow, B sea oats, A creeper)
 const grassMask = buildGrassMask(vegSite);
-// no grass up through the camps' fires and chests: trodden bare, feathering back in at the plot's edge
+// no grass up through the camps' fires and chests (trodden bare, feathering back in at the plot's
+// edge), nor through the statue's plinth
 {
   const res = grassMask.res;
   const texel = terrain.size / res;
-  for (const c of CAMPS) {
-    const r = CAMP_PLOT + 2;
+  for (const c of [...CAMPS, { x: STATUE.x, z: STATUE.z, plot: STATUE.radius }]) {
+    const plot = c.plot ?? CAMP_PLOT;
+    const r = plot + 2;
     for (let j = Math.floor((c.z - r - terrain.origin) / texel); j <= Math.ceil((c.z + r - terrain.origin) / texel); j++)
       for (let i = Math.floor((c.x - r - terrain.origin) / texel); i <= Math.ceil((c.x + r - terrain.origin) / texel); i++) {
         if (i < 0 || j < 0 || i >= res || j >= res) continue;
         const d = Math.hypot(terrain.origin + (i + 0.5) * texel - c.x, terrain.origin + (j + 0.5) * texel - c.z);
-        const keep = Math.min(1, Math.max(0, (d - (CAMP_PLOT - 2)) / 4));
+        const keep = Math.min(1, Math.max(0, (d - (plot - 2)) / 4));
         for (let ch = 0; ch < 4; ch++) grassMask.data[(j * res + i) * 4 + ch] = Math.round(grassMask.data[(j * res + i) * 4 + ch] * keep);
       }
   }
 }
 // Rocks: Tidewater's placement; the emergent ones join the collision world as it does
-const rocks = Rocks.prototype._place.call({ terrainData: terrain, village }, mulberry32(4242)).filter((r) => !onPlot(r.x, r.z, 4) && !onCamp(r.x, r.z, 3) && !onGemRock(r.x, r.z, 3 + r.size));
+const rocks = Rocks.prototype._place.call({ terrainData: terrain, village }, mulberry32(4242)).filter((r) => !onPlot(r.x, r.z, 4) && !onCamp(r.x, r.z, 3) && !onGemRock(r.x, r.z, 3 + r.size) && !onStatue(r.x, r.z, 2 + r.size));
 for (const r of rocks) {
   const top = r.y + r.size * r.sy * 0.8;
   if (r.size < 0.9 || top < -0.3) continue;
@@ -891,11 +897,12 @@ const cylinders = colliders.cylinders.map((c) => ({
     cleared += list.length - keep.length;
     veg[type] = keep;
   }
-  // the helter skelter's plot is cleared to the edge of the levelling
+  // the helter skelter's plot is cleared to the edge of the levelling, the statue's to a few
+  // paces round its plinth (no palm's crown over the fish)
   for (const type of Object.keys(veg)) {
     const list = veg[type];
     if (!Array.isArray(list)) continue;
-    const keep = list.filter((p) => !onPlot(p.x, p.z, type === 'trees' || type === 'palms' ? 10 : 6));
+    const keep = list.filter((p) => !onPlot(p.x, p.z, type === 'trees' || type === 'palms' ? 10 : 6) && !onStatue(p.x, p.z, type === 'trees' || type === 'palms' ? 4 : 0));
     cleared += list.length - keep.length;
     veg[type] = keep;
   }
