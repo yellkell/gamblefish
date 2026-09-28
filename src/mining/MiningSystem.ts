@@ -4,7 +4,7 @@
  *  THE PICKAXE   bought at the Jeweller's first window (village/gemWindows.ts). Once it's yours,
  *                walk up to a gem rock and it's in your hand (the rod goes over your shoulder), as
  *                the axe is among the trees.
- *  THE ROCKS     sixteen, four on each kind of ground (mining/sites.ts), veined with lines of
+ *  THE ROCKS     twenty-four, six on each kind of ground (mining/sites.ts), veined with lines of
  *                light in the colour of what's inside. Swing the pick's point into one: steel rings on
  *                stone, chips and sparks fly, a jolt in your hand, and the veins open wider and
  *                blaze. Six good blows and it bursts apart.
@@ -15,12 +15,13 @@
  *                eyes, and the Jeweller might want to look at them. Reach in and click one (trigger or grip)
  *                and it's in your pouch; TAKE ALL; CLOSE. Walk away and it sinks back; come back
  *                and it rises again, until you've taken everything.
- *  REGROWING     a few minutes after it breaks, once you're away from it, the rock grows back out
- *                of the ground with new stones inside.
+ *  ONCE ONLY     like a dancers' chest, a rock is a find: once it's broken it stays broken (rubble
+ *                where it stood, and nothing in the way of a hop), and never grows back. Stones
+ *                you leave in its tray wait there for you.
  *
  * Every stone you take goes into your pouch and into the field guide's gem pages. The Jeweller's
- * second window buys them (village/gemWindows.ts). Your pouch, the pickaxe and the book ride in the
- * save (GameState.gems); the rocks themselves are only in the world, like the woodlots' trees.
+ * second window buys them (village/gemWindows.ts). Your pouch, the pickaxe, the book, and which
+ * rocks you've broken (with what's still in each) ride in the save (GameState.gems).
  */
 
 import { createSystem, InputComponent } from '@iwsdk/core';
@@ -93,9 +94,6 @@ const PICK_R = 6;
 const OPEN_R = 3.4;
 const CLOSE_R = 6.5;
 const REARM_R = 4.5;
-/** seconds after breaking before it can grow back (and only once you're this far off) */
-const REGROW_S = 240;
-const REGROW_AWAY = 25;
 /** the rocks are drawn within this */
 const DRAW_R = 260;
 /** the tray: black velvet, lit from within */
@@ -200,6 +198,7 @@ export class MiningSystem extends createSystem({}) {
       d.addBox!(box);
       this.rocks.push({ site, base, group, model, box, state: 'whole', t: 0, blows: 0, shake: 0, cooldown: 0, stock: [], chunks: null, flying: [], rubble: null });
     });
+    this.reconcile();
     this.pick = buildPickaxe(d.env);
     this.pick.visible = false;
     this.pick.matrixAutoUpdate = false;
@@ -254,9 +253,10 @@ export class MiningSystem extends createSystem({}) {
     tickGems(time);
     ROCK_TIME.value = time;
     const eye = this.camera.getWorldPosition(_v).clone();
+    this.reconcile();
     for (const r of this.rocks) {
       r.group.visible = Math.hypot(r.base.x - eye.x, r.base.z - eye.z) < DRAW_R;
-      this.updateRock(r, dt, eye);
+      this.updateRock(r, dt);
     }
     // the pick comes out by a whole rock (if it's yours), and the rod goes away (fishingDeps.indoors)
     const near = this.nearest(eye, (r) => r.state === 'whole');
@@ -338,11 +338,62 @@ export class MiningSystem extends createSystem({}) {
     if (r.blows >= BLOWS) this.breakRock(r, quiet);
   }
 
+  /**
+   * The world as the save has it: a rock the save says you've broken lies in rubble with what's
+   * left of its stones (it may have been broken before this session, or the save arrived after the
+   * world was built), and one it doesn't know (a fresh save) stands whole again.
+   */
+  private reconcile(): void {
+    const mined = this.state.gems.mined;
+    for (const r of this.rocks) {
+      const left = mined[r.site.id];
+      if (left) {
+        if (r.state === 'whole' || r.state === 'growing') this.lieBroken(r);
+        if (r.stock !== left) r.stock = left;
+      } else if (r.state === 'broken') {
+        if (this.openRock === r) this.closeTray();
+        this.regrow(r);
+      }
+    }
+  }
+
+  /** Straight to rubble, no show: a rock broken on another day. */
+  private lieBroken(r: Rock): void {
+    r.state = 'broken';
+    r.t = 0;
+    r.blows = BLOWS;
+    r.model.crack.value = 1;
+    r.model.stone.visible = false;
+    r.model.stone.scale.setScalar(1);
+    mineDeps.removeBox?.(r.box);
+    if (!r.rubble) {
+      r.rubble = this.rubble(r);
+      r.group.add(r.rubble);
+    }
+  }
+
+  /** Whole again, up out of the ground (only when the save forgets it: a new game). */
+  private regrow(r: Rock): void {
+    r.state = 'growing';
+    r.t = 0;
+    r.stock = [];
+    r.blows = 0;
+    r.model.crack.value = 0;
+    if (r.rubble) r.group.remove(r.rubble);
+    r.rubble = null;
+    r.model.stone.visible = true;
+    mineDeps.addBox?.(r.box);
+  }
+
   /** It goes: the chunks fly apart, and the stones inside are yours. */
   private breakRock(r: Rock, quiet: boolean): void {
     r.state = 'breaking';
     r.t = 0;
     r.stock = rockStock(r.site.ground, Math.random);
+    // broken for good: the save remembers it, and what's in it
+    this.state.gems.mined[r.site.id] = r.stock;
+    this.state.save();
+    this.state.emit();
     r.model.stone.visible = false;
     mineDeps.removeBox?.(r.box);
     const g = new Group();
@@ -378,7 +429,7 @@ export class MiningSystem extends createSystem({}) {
     }
   }
 
-  private updateRock(r: Rock, dt: number, eye: Vector3): void {
+  private updateRock(r: Rock, dt: number): void {
     r.t += dt;
     const m = r.model;
     if (r.state === 'whole') {
@@ -421,22 +472,8 @@ export class MiningSystem extends createSystem({}) {
       }
       return;
     }
-    if (r.state === 'broken') {
-      // it grows back once you've left it be a while
-      const away = Math.hypot(r.base.x - eye.x, r.base.z - eye.z) > REGROW_AWAY;
-      if (r.t > REGROW_S && away && this.openRock !== r) {
-        r.state = 'growing';
-        r.t = 0;
-        r.stock = [];
-        r.blows = 0;
-        m.crack.value = 0;
-        if (r.rubble) r.group.remove(r.rubble);
-        r.rubble = null;
-        m.stone.visible = true;
-        mineDeps.addBox?.(r.box);
-      }
-      return;
-    }
+    // broken stays broken (reconcile only brings one back for a new game)
+    if (r.state === 'broken') return;
     // growing: up out of the ground
     const k = Math.min(1, r.t / 3);
     const e = k * k * (3 - 2 * k);
@@ -634,6 +671,7 @@ export class MiningSystem extends createSystem({}) {
     if (!r) return;
     const s = this.state;
     r.stock = r.stock.filter((k) => k !== gem);
+    s.gems.mined[r.site.id] = r.stock;
     pocket(s.gems, gem);
     s.save();
     s.emit();
@@ -735,7 +773,7 @@ export class MiningSystem extends createSystem({}) {
       L.text('The Jeweller might want to look at these.', 28, 188, 19, 'accent', 'left', 500, 584);
     } else {
       L.text('Nothing left but rubble.', 28, 120, 26, 'ink', 'left', 600, 584);
-      L.text('It grows back in a few minutes, once you’ve gone.', 28, 156, 21, 'dim', 'left', 500, 584);
+      L.text('It won’t grow back: there are other rocks out there.', 28, 156, 21, 'dim', 'left', 500, 584);
       L.text('Take them to the Jeweller.', 28, 188, 19, 'accent', 'left', 600, 584);
     }
     L.end();

@@ -15,8 +15,9 @@
  *
  * Landing spots are the island's floor areas (world/surfaces.ts): the pier,
  * boardwalks, stairs, porches — each at its own height, and the rig lands at
- * it — plus dry, walkable ground. Anywhere else (the sea, the swash, a cliff
- * face) the marker burns hazard-red and release does nothing. Arcs can't cut
+ * it — plus dry, walkable ground (steeper going down a hill than up it).
+ * Anywhere else (the sea, the swash, a cliff face) the marker burns
+ * hazard-red and release does nothing. Arcs can't cut
  * through walls, rails or posts, until you're standing at or above their top.
  *
  * Active while `locomotion.enabled` (the game will close it while you're at
@@ -269,13 +270,14 @@ export class TeleportSystem extends createSystem({}) {
 
     // Valid only on a standable floor, with no wall between you and it. The
     // hop is judged at the higher of the two ends: stepping UP onto the pier
-    // and stepping back DOWN off it are both hops made at deck height.
+    // and stepping back DOWN off it are both hops made at deck height. (Hops
+    // down a hillside may land on steeper ground than hops up it.)
     this.player.head.getWorldPosition(_head);
     const fromY = surfaces.floorYAt(_head.x, _head.z, this.player.position.y);
     const hopY = Math.max(fromY, this.landingArea?.y ?? 0);
     this.valid =
       landed &&
-      surfaces.standable(this.landingArea, this.landing.x, this.landing.z) &&
+      surfaces.standable(this.landingArea, this.landing.x, this.landing.z, fromY) &&
       !surfaces.crossesWall(_head.x, _head.z, this.landing.x, this.landing.z, hopY);
 
     // Facing: thumbstick angle relative to where the controller points.

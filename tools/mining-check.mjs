@@ -16,6 +16,8 @@
  *   4. THE STONES. A rock holds a handful of stones from its own ground, each in its own slot of
  *      the tray, each worth what its carats say; the pouch and the book fill, the Jeweller's
  *      window empties the pouch, and a save round-trips.
+ *   5. ONCE ONLY. A broken rock is in the save, with the stones still lying in it, so it stays
+ *      broken (nothing grows back); a save from before that has every rock whole.
  */
 
 import { readFileSync } from 'node:fs';
@@ -61,7 +63,7 @@ for (const r of ROCK_SITES) {
     check(`${r.id}: by the sea`, sea < 30, `${sea} m from the water`);
   }
 }
-for (const g of GROUND_IDS) check(`four rocks on ${g} ground`, ROCK_SITES.filter((r) => r.ground === g).length === 4);
+for (const g of GROUND_IDS) check(`six rocks on ${g} ground`, ROCK_SITES.filter((r) => r.ground === g).length === 6);
 {
   let close = Infinity;
   for (const a of ROCK_SITES) for (const b of ROCK_SITES) if (a !== b) close = Math.min(close, Math.hypot(a.x - b.x, a.z - b.z));
@@ -180,6 +182,8 @@ check('every gem has a fact and a cut', GEM_IDS.every((id) => GEMS[id].fact.leng
   pocket(save, { id: 'peridot', ct: 3, value: gemValue('peridot', 3) });
   check('the first of a kind is new to the book, a bigger one a record', a.first && !a.best && !b.first && b.best && save.log.ruby.count === 2 && save.log.ruby.bestCt === 2.5);
   save.pick = true;
+  save.mined['forest-glen'] = rockStock('forest', Math.random);
+  save.mined['peak-crown'] = [];
   const back = readGems(JSON.parse(JSON.stringify({ gems: save })));
   check('the save round-trips', JSON.stringify(back) === JSON.stringify(save));
   check('a save from before the gems has none', JSON.stringify(readGems({})) === JSON.stringify(freshGems()));
@@ -187,6 +191,22 @@ check('every gem has a fact and a cut', GEM_IDS.every((id) => GEMS[id].fact.leng
   check('the Jeweller buys one kind', rubies.count === 2 && rubies.total === gemValue('ruby', 1.2) + gemValue('ruby', 2.5) && save.pouch.length === 1);
   const rest = sellGems(save, null);
   check('…and then the rest', rest.count === 1 && save.pouch.length === 0 && save.log.ruby.count === 2);
+}
+
+console.log('\n5. once only');
+{
+  const save = freshGems();
+  check('a new game has every rock whole', Object.keys(save.mined).length === 0);
+  const left = rockStock('high', Math.random);
+  save.mined['high-glade'] = left.slice(1);
+  save.mined['shore-west'] = [];
+  const back = readGems(JSON.parse(JSON.stringify({ gems: save })));
+  check('a broken rock stays broken, with what you left in it', back.mined['high-glade']?.length === left.length - 1 && JSON.stringify(back.mined['high-glade']) === JSON.stringify(left.slice(1)));
+  check('an emptied rock stays broken (and empty)', Array.isArray(back.mined['shore-west']) && back.mined['shore-west'].length === 0);
+  check('a whole rock is not in the save', !('forest-glen' in back.mined));
+  const junk = readGems({ gems: { mined: { a: 'x', b: [{ id: 'nope', ct: 1, value: 1, c: 0, r: 0 }, { id: 'ruby', ct: 1, value: 9, c: 99, r: 0 }, null] } } });
+  check('junk in the save is dropped', !('a' in junk.mined) && junk.mined.b.length === 0);
+  check('every rock has its own id', new Set(ROCK_SITES.map((r) => r.id)).size === ROCK_SITES.length);
 }
 
 const failed = results.filter((r) => !r).length;

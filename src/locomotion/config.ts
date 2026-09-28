@@ -71,8 +71,15 @@ export const GROUND = {
   waterY: 0,
   /** Sand this close to the tide line is swash: waves run over it. Refused. */
   dryMargin: 0.25,
-  /** Steepest natural ground you may land on (cos of the angle from up). */
-  minNormalY: Math.cos((38 * Math.PI) / 180),
+  /** Steepest natural ground you may land on (cos of the angle from up). At 38° nearly a third of
+   *  the island's hills burned red, and out on them you could find yourself on a ledge with nowhere
+   *  to go. */
+  minNormalY: Math.cos((45 * Math.PI) / 180),
+  /** …unless you're going DOWN: a landing at least `downhillDrop` below where you stand may be
+   *  as steep as this (you scramble down what you couldn't climb), so there's always a way off a
+   *  hillside. */
+  downhillNormalY: Math.cos((62 * Math.PI) / 180),
+  downhillDrop: 0.5,
   /** Stepping back on natural ground: how much the terrain may rise or fall
    *  under a half-metre shuffle and still count as "your level". Decks keep
    *  the club's own 5 cm (see TeleportSystem.stepBack). */
