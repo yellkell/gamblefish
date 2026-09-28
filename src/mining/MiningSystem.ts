@@ -773,8 +773,7 @@ export class MiningSystem extends createSystem({}) {
       L.text('The Jeweller might want to look at these.', 28, 188, 19, 'accent', 'left', 500, 584);
     } else {
       L.text('Nothing left but rubble.', 28, 120, 26, 'ink', 'left', 600, 584);
-      L.text('It won’t grow back: there are other rocks out there.', 28, 156, 21, 'dim', 'left', 500, 584);
-      L.text('Take them to the Jeweller.', 28, 188, 19, 'accent', 'left', 600, 584);
+      L.text('Take them to the Jeweller.', 28, 156, 19, 'accent', 'left', 600, 584);
     }
     L.end();
   }
