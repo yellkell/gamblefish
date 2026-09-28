@@ -901,10 +901,50 @@ const cylinders = colliders.cylinders.map((c) => ({
     for (const c of colliders.cylinders) if (Math.hypot(x - c.x, z - c.z) < c.radius + r) return false;
     return true;
   };
+  // how far each planted kind's leaves spread from its stem (m, at scale 1: world/vegetation.ts,
+  // world/beds.ts). A plant stands at least that far off every house, or its leaves go through
+  // the wall.
+  const REACH = { bananas: 1.75, youngPalms: 1.85, elephantEars: 1.35, heliconias: 1.1, monsteras: 0.95, strelitzias: 0.85 };
+  // a house's solid parts in its own frame, [x0, x1, z0, z1]: the house, its annex behind, its porch
+  const blocks = (h) => {
+    const out = [[-h.w / 2, h.w / 2, -h.d / 2, h.d / 2]];
+    if (h.annex) {
+      const ax = h.annex.x ?? 0;
+      out.push([ax - h.annex.w / 2, ax + h.annex.w / 2, -h.d / 2 - (h.annex.d ?? 2.2), -h.d / 2]);
+    }
+    if (h.porch) {
+      const pw = Math.min(h.w, h.porch.width || h.w);
+      const pcx = h.porch.offset ?? 0;
+      out.push([pcx - pw / 2, pcx + pw / 2, h.d / 2, h.d / 2 + (h.porch.depth ?? 0)]);
+    }
+    return out;
+  };
+  /** (x, z), moved straight out from any wall its leaves (`reach`) would go through */
+  const offWalls = (x, z, reach) => {
+    for (let pass = 0; pass < 3; pass++) {
+      let moved = false;
+      for (const h of village) {
+        const { toL, toW } = frame(h);
+        for (const [x0, x1, z0, z1] of blocks(h)) {
+          const { lx, lz } = toL(x, z);
+          const cx = Math.min(x1, Math.max(x0, lx));
+          const cz = Math.min(z1, Math.max(z0, lz));
+          const d = Math.hypot(lx - cx, lz - cz);
+          // (one standing inside is left to free() to turn away)
+          if (d >= reach - 1e-3 || d < 1e-6) continue;
+          ({ x, z } = toW(cx + ((lx - cx) * reach) / d, cz + ((lz - cz) * reach) / d));
+          moved = true;
+        }
+      }
+      if (!moved) break;
+    }
+    return { x, z };
+  };
   let seed = 0.123;
   const rnd = () => (seed = (seed * 9301 + 49297) % 233280) / 233280;
   let planted = 0;
   const plant = (type, x, z, r, o = {}) => {
+    if (REACH[type]) ({ x, z } = offWalls(x, z, REACH[type] * (o.s ?? 1)));
     if (!free(x, z, r)) return false;
     (veg[type] ??= []).push({ x, y: terrain.heightAt(x, z), z, s: 1, sy: 1, yaw: rnd() * Math.PI * 2, la: 0, l: 0, H: 0, ...o });
     planted++;
