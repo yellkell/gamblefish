@@ -625,7 +625,7 @@ const chalk: Look = {
   frame: { kind: 'wood', wood: 'oak', w: 0.05, d: 0.04 },
 };
 
-/** THE FISH MARKET: Joe's chalkboard on the stall, in a blue-painted frame */
+/** THE FISH MARKET: the stall's chalkboard, in a blue-painted frame */
 const market: Look = { ...chalk, frame: { kind: 'paint', colour: '#2f6fa8', w: 0.05, d: 0.04 }, glow: 0.2 };
 
 /** a star, `n` points */
@@ -1110,7 +1110,7 @@ function standFor(f: Frame, w: number, h: number, stand: number, renderer?: WebG
   const z = -f.d / 2;
   if (renderer) {
     const b = new Batch();
-    const post = f.kind === 'wood' ? M.wood(renderer, f.wood ?? 'walnut', 0.4) : M.metal(renderer, metal, 0.3);
+    const post = f.kind === 'wood' ? M.wood(renderer, f.wood ?? 'walnut', 0.4) : f.kind === 'paint' ? M.satin(renderer, f.colour ?? '#e8e4dc') : M.metal(renderer, metal, 0.3);
     for (const sx of [-1, 1]) {
       const x = sx * (w / 2 - 0.12);
       b.at(post, rounded(0.035, len, 0.035, 0.01), x, top - len / 2, z);
@@ -1119,7 +1119,7 @@ function standFor(f: Frame, w: number, h: number, stand: number, renderer?: WebG
     g.add(b.group());
     return g;
   }
-  const m = new MeshLambertMaterial({ color: f.kind === 'wood' ? WOOD_HEX[f.wood ?? 'walnut'] : metal });
+  const m = new MeshLambertMaterial({ color: f.kind === 'wood' ? WOOD_HEX[f.wood ?? 'walnut'] : f.kind === 'paint' ? f.colour ?? '#8a7a62' : metal });
   for (const sx of [-1, 1]) {
     const p = new Mesh(new BoxGeometry(0.035, len, 0.035), m);
     p.position.set(sx * (w / 2 - 0.12), top - len / 2, z);

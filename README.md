@@ -306,7 +306,7 @@ and the vendors.
   florist's sage-green boards with flowers painted round; the pawn shop prices things on manila
   tickets on string; the taxidermist uses engraved brass plaques; the jeweller black velvet and
   gold leaf in a gilt frame; the boutique cream linen and teal ribbons; the tackle shop navy boards
-  with a painted rope and life-ring buttons; the bait shop and Joe's stall a chalkboard; the fortune
+  with a painted rope and life-ring buttons; the bait shop and the fish market a chalkboard; the fortune
   teller starry cloth and tarot cards; the bank green leather tooled in gold with brass plates; the
   Lucky Lure black lacquer with art-deco gold leaf and pink enamel; the Card Shark green baize with
   ivory plaques on a mahogany stand; Coral's is a cross-stitch sampler; the dancers' chest bark

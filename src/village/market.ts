@@ -1,5 +1,5 @@
 /**
- * Joe's fish market, on the plaza stall (village role `stall`) — the casinos in sight of it.
+ * The fish market, on the plaza stall (village role `stall`) — the casinos in sight of it.
  *
  * Joe (Tidewater's Rocketbox fish buyer) stands behind the counter. At the counter's end is a
  * hanging-dial scale: hold a fish over its pan — straight from your hand, or lifted out of the
@@ -7,7 +7,8 @@
  * swings to its weight, the price pops, and it's sold — coins in the bowl, ff2's cash chime (up),
  * the wrist counters roll. Then Joe slides it onto the ice.
  *
- * The board above the counter has SELL ALL (everything in the backpack) and Joe's two cents.
+ * The chalkboard by the scale has SELL ALL (everything in the backpack) and his two cents. (He
+ * goes unnamed: nothing in the game calls him anything.)
  */
 
 import {
@@ -102,14 +103,15 @@ export class FishMarket {
     scale.add(post, arm, dial, this.needle, this.scalePan);
     this.group.add(scale);
 
-    // the board: Joe's words, what your backpack's worth, SELL ALL
+    // the board: what he says, what your backpack's worth, SELL ALL
     this.panel = new InteractivePanel([640, 300], [0.9, 0.42]);
-    // Joe's chalkboard, in a blue-painted frame on the stall (ui/boards.ts): out in the weather,
-    // lit by the day like the stall is
+    // the stall's chalkboard, in a blue-painted frame (ui/boards.ts), standing on its own two legs
+    // just past the scale where you sell, turned toward you: clear of the man behind the counter.
+    // Out in the weather, lit by the day like the stall is
     this.letters = new Lettering(this.panel, lookFor('stall'), 5);
-    mount(this.panel, lookFor('stall'), { outdoor: true });
-    this.panel.mesh.position.set(-0.6, g0 + 1.85, 1.1);
-    this.panel.mesh.rotation.x = -0.12;
+    mount(this.panel, lookFor('stall'), { outdoor: true, stand: 1.2 });
+    this.panel.mesh.position.set(2.8, g0 + 1.2, 0.5);
+    this.panel.mesh.rotation.set(-0.08, -0.4, 0, 'YXZ');
     this.group.add(this.panel.mesh);
     this.panel.paint = () => this.paint();
     this.panel.onClick = (id) => {
@@ -137,7 +139,7 @@ export class FishMarket {
     const placed = inv.filter((f) => f.placed);
     const worth = placed.reduce((a, f) => a + f.value, 0);
     L.begin();
-    L.title("JOE'S FISH MARKET", 30, 62, 42, 'left', 580);
+    L.title('FISH MARKET', 30, 62, 42, 'left', 580);
     L.text(`“${this.line}”`, 30, 106, 26, 'dim', 'left', 500, 580);
     L.text(placed.length ? `In your backpack: ${placed.length} fish, worth $${worth}` : 'Your backpack is empty.', 30, 152, 26, 'ink', 'left', 600, 580);
     L.text('Hold a fish over the scale and click to sell it.', 30, 186, 21, 'dim', 'left', 500, 580);
