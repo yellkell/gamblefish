@@ -77,6 +77,8 @@ and the vendors.
   splash: the FISH & CHIPS mark (`src/ui/logo.ts`: a chip for the ampersand) breathing in its
   glow. The leaping fish over the chip is the game's own sailfish, photographed once its
   model loads and faded in. The loader, a neon ENTER VR, and a thumbstick icon sit under it.
+- **In the browser tab:** the mark's chip with the sailfish leaping across its face
+  (`public/favicon.svg`), plus the .ico, home-screen and manifest icons made from it.
 - **In the headset:** the first session of a page load opens on ff2's boot intro
   (`src/experience/bootIntro.ts`): the publisher card, then the same mark, then the curtain
   drops. While it's up the controls wait and the first song decodes, starting as it drops.
@@ -491,6 +493,7 @@ same questions as ff2's `TELEPORT_AREAS`, `floorYAt` and `crossesWall`:
 | `src/dev/harness.ts` | dev-only emulator driver |
 | `tools/bake-world.mjs` | Tidewater → `public/world/` |
 | `tools/bake-props.mjs` | Tidewater's rod, bobber and fish → `public/props/` |
+| `tools/make-icons.mjs` | `public/favicon.svg` → the .ico and PNG icons beside it (run after editing the SVG) |
 | `tools/teleport-check.mjs` | headless teleport rules check, including no landing under a house floor |
 | `tools/fish-check.mjs` | headless check that the timed fish keep their hours and the trophy fish need their gear |
 | `tools/camps-check.mjs` | headless check that the camps are hidden from the start, level, reachable, and their chests fill properly |
