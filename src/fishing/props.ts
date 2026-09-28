@@ -59,8 +59,21 @@ export interface FishUniforms {
   uTime: IUniform<number>;
   uSwim: IUniform<number>; // body-wave amplitude (fraction of length)
   uFreq: IUniform<number>; // tail beats per second
+  uPhase: IUniform<number>; // tail beats run on so far, on top of uTime·uFreq (a live fish's: see swim())
   /** how far the lower jaw hangs open (rad; only the shark has a jaw that opens) */
   uJaw: IUniform<number>;
+}
+
+/**
+ * A live fish's tail, beating `freq` times a second at `amp`. The phase is run on here a frame at a
+ * time, so the rate can change as it fights without the wave jumping: uTime·uFreq with a changing
+ * uFreq leaps a whole world-clock's worth of beats at once, and the fish shudders. (uTime still
+ * drives the fins' flutter.)
+ */
+export function swim(u: FishUniforms, amp: number, freq: number, dt: number): void {
+  u.uSwim.value = amp;
+  u.uFreq.value = 0;
+  u.uPhase.value = (u.uPhase.value + freq * dt) % 1;
 }
 
 export interface Props {
@@ -144,7 +157,7 @@ const FISH_VERTEX = /* glsl */ `
   // body wave: grows toward the tail, travelling backward; fins flutter on top
   float u = along;
   float env = 0.12 + u * u;
-  float ph = u * 5.2 - uTime * uFreq * 6.2831853;
+  float ph = u * 5.2 - (uTime * uFreq + uPhase) * 6.2831853;
   float side = uSwim * env * sin(ph) + fin * 0.012 * sin(uTime * 23.0 + u * 30.0);
   vec3 fishP = P0 + vec3(side, 0.0, 0.0);
   // x' = x + side(z), with u running 0 (snout, z = +0.5) .. 1 (tail): normals by the inverse
@@ -237,7 +250,7 @@ export function loadProps(buf: ArrayBuffer): Props {
         g = geometry(arrays, `fish.${species}`, { along: [1, true], data: [4, false], ...(arrays[`fish.${species}.jaw`] ? { jaw: [1, true] as [number, boolean] } : {}) });
         fishGeo.set(species, g);
       }
-      const uniforms: FishUniforms = { uTime: { value: 0 }, uSwim: { value: 0.06 }, uFreq: { value: 2 }, uJaw: { value: 0 } };
+      const uniforms: FishUniforms = { uTime: { value: 0 }, uSwim: { value: 0.06 }, uFreq: { value: 2 }, uPhase: { value: 0 }, uJaw: { value: 0 } };
       const fm = fishMeta[species];
       const rows = Array.from({ length: 8 }, (_, i) => new Vector4().fromArray(fm?.rows ?? [], i * 4));
       const skin = { uRows: { value: rows }, uPattern: { value: fm?.pattern ?? 0 }, uSeed: { value: Math.random() }, uHinge: { value: new Vector2(sharkHinge[0], sharkHinge[1]) } };
@@ -247,7 +260,7 @@ export function loadProps(buf: ArrayBuffer): Props {
         shader.vertexShader = shader.vertexShader
           .replace(
             '#include <common>',
-            '#include <common>\nattribute float along;\nattribute float fin;\nattribute vec4 data;\nattribute float jaw;\nuniform float uTime;\nuniform float uSwim;\nuniform float uFreq;\nuniform float uJaw;\nuniform vec2 uHinge;\nvarying vec4 vFishData;\nvarying vec3 vFishLocal;\nvarying float vFishL;',
+            '#include <common>\nattribute float along;\nattribute float fin;\nattribute vec4 data;\nattribute float jaw;\nuniform float uTime;\nuniform float uSwim;\nuniform float uFreq;\nuniform float uPhase;\nuniform float uJaw;\nuniform vec2 uHinge;\nvarying vec4 vFishData;\nvarying vec3 vFishLocal;\nvarying float vFishL;',
           )
           .replace('#include <beginnormal_vertex>', FISH_VERTEX)
           .replace('#include <begin_vertex>', 'vec3 transformed = fishP;');

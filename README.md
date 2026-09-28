@@ -387,6 +387,7 @@ same questions as ff2's `TELEPORT_AREAS`, `floorYAt` and `crossesWall`:
 | `tools/teleport-check.mjs` | headless teleport rules check, including no landing under a house floor |
 | `tools/fish-check.mjs` | headless check that the timed fish keep their hours and the trophy fish need their gear |
 | `tools/camps-check.mjs` | headless check that the camps are hidden from the start, level, reachable, and their chests fill properly |
+| `tools/line-check.mjs` | headless check that the fishing line lies over the pier's rails, posts and deck as drawn, not through them |
 
 Dev hook: `__fish.move.to(x, z, yaw)`, `__fish.move.snapTurn(±1)` and
 `__fish.move.stepBack()`.
