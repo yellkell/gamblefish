@@ -246,9 +246,12 @@ export interface GemSave {
   pouch: Gem[];
   /** every kind you've found: how many, and your biggest */
   log: Record<string, { count: number; bestCt: number }>;
+  /** the rocks you've broken (by site id), and the stones still lying in each: a rock breaks
+   *  once, for good (none grows back), and what you leave in it waits for you */
+  mined: Record<string, RockGem[]>;
 }
 
-export const freshGems = (): GemSave => ({ pick: false, pouch: [], log: {} });
+export const freshGems = (): GemSave => ({ pick: false, pouch: [], log: {}, mined: {} });
 
 /** Read the gems back from a save (anything malformed dropped). */
 export function readGems(d: unknown): GemSave {
@@ -265,6 +268,14 @@ export function readGems(d: unknown): GemSave {
       if (!GEMS[id] || !e || typeof e !== 'object') continue;
       const count = Math.max(0, Math.floor(Number(e.count) || 0));
       if (count > 0) out.log[id] = { count, bestCt: Math.max(0, Number(e.bestCt) || 0) };
+    }
+  if (g.mined && typeof g.mined === 'object')
+    for (const [site, left] of Object.entries(g.mined)) {
+      if (!Array.isArray(left)) continue;
+      const [C, R] = ROCK_GRID;
+      out.mined[site] = left
+        .filter((s): s is RockGem => !!s && typeof s.id === 'string' && !!GEMS[s.id] && Number.isFinite(s.ct) && Number.isFinite(s.value) && Number.isInteger(s.c) && Number.isInteger(s.r) && s.c >= 0 && s.c < C && s.r >= 0 && s.r < R)
+        .map((s) => ({ id: s.id, ct: s.ct, value: Math.max(0, Math.round(s.value)), c: s.c, r: s.r }));
     }
   return out;
 }

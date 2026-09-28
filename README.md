@@ -291,19 +291,24 @@ and the vendors.
     gate and you're off the ride, but you keep what you caught. At the bottom: back up to the top,
     or step off into the village.
   - The painted tower is lit by the island's sun, so it goes gold at sunset and dark at night.
+    After dark its lanterns come on like the pier's (`src/skelter/lights.ts`): a little iron
+    lantern on the slide's outer rail every 5 m, with a festoon of bulbs strung between them,
+    so the whole tower is wound in a spiral of warm light you can see from the beach.
 - **The fire dancers' camps** (`src/camps/`): FIRE FIGHT 2's beach-party dancers (the glowstick
-  crowd round its bonfires, ff2's `src/arena/cove/`) have gone off into the wilds in **eight** little
+  crowd round its bonfires, ff2's `src/arena/cove/`) have gone off into the wilds in **twelve** little
   groups, each dancing round its own fire in a clearing with a chest beside it (the carpenter's
   sea chest, built so its lid opens: hollow inside, lined in red velvet, its logs lying in the
   bottom). None of them is on the chart and none can be seen from the
-  start: they're over the ridges, down the hollows and round the far coasts, a long walk out.
+  start: they're over the ridges, down the hollows and round the far coasts, a long walk out
+  (two of them in the big forest behind the village, off to the left as you look up from the pier,
+  and two out on the far right, up the island's east coast).
   Listen for the drums, which carry further than the firelight: a little West African ensemble
   in 12/8 (bell, shaker, two bass drums and a djembe with a fill every fourth bar), each camp at
   its own tempo. `npm run check:camps` proves every
   one is hidden from the boardwalk, the pier and the beach, is level and standable, and can be
   reached on foot.
   - **Pleased to see you:** walk into a camp and its dancers throw their hands in the air, and gift
-    you everything in their chest (no pop-up: the chest's readout keeps the count, "2 of 8 camps
+    you everything in their chest (no pop-up: the chest's readout keeps the count, "2 of 12 camps
     found"). A hidden camp's gift is given once.
   - **The chest:** walk up to it and it opens by itself (or grip its lid). The lid swings up and the
     **chest pack** rises out of it: a tray like your backpack's, lined in the chest's red velvet and
@@ -315,10 +320,11 @@ and the vendors.
     Point at the logs to add them to your stack, or TAKE ALL. There's always a prize fish a tier up
     (the harder camps can hold a Gold). Walk away and the lid comes down; shut it with CLOSE and it stays shut till you've stepped away
     and come back.
-  - **The beach party:** find all eight and a ninth group comes down to the main beach, west of the
+  - **The beach party:** find all twelve and a thirteenth group comes down to the main beach, west of the
     timber yard, and lights a fire there (the hidden camps' chests say so once you have). Their chest fills every day with a couple of nice fish
     (Silver or better) and a stack of logs, fresh at midnight. Which camps you've found, and what's left in each chest,
-    are saved.
+    are saved. (A save that already had the beach party, from when there were fewer to find,
+    keeps it.)
 - **The gem rocks** (`src/mining/`): prospecting, with a pickaxe from the Jeweller.
   - **The Jeweller's windows** (`src/village/gemWindows.ts`): a second counter down the Jeweller's
     right-hand wall, a screen of glass and brass bars along it with two windows cut in it, a board
@@ -326,13 +332,16 @@ and the vendors.
     it's yours) and nothing else: where the rocks are is yours to find out. **We Buy Gems**
     shows every kind in your pouch with a SELL for each, and SELL ALL; one of each kind you've
     ever found lies on a velvet pad under it.
-  - **The rocks** (`src/mining/sites.ts`, `src/mining/rock.ts`): sixteen big boulders out in the
-    wilds, four on each kind of ground, none on the chart, veined with glowing lines in the colour of
+  - **The rocks** (`src/mining/sites.ts`, `src/mining/rock.ts`): thirty-two big boulders out in the
+    wilds, eight on each kind of ground (a good few in the forest behind the village and out on the
+    east side), none on the chart, veined with glowing lines in the colour of
     what's inside, breathing softly day and night. The bake clears the plants and Tidewater's own rocks round each. Own the
     pick and walk up to one and it's in your hand, the rod over your shoulder, as the axe is among
     the trees. Swing its point into the rock: steel rings on stone, chips and sparks fly, a jolt in
     your hand, and the veins open wider and blaze. Six blows and it bursts apart, the chunks glowing along the cracks as they tumble and sink into rubble.
-    A few minutes later, once you've gone, it grows back with new stones in it.
+    Like a dancers' chest, a rock is a one-time find: once broken it stays broken (rubble where it
+    stood, and nothing left in the way of a teleport), and never grows back. Stones you leave in its
+    tray wait there for you. Which rocks you've broken, and what's still in each, are saved.
   - **The tray:** out of the rubble rises a tray like the dancers' chest pack, lined in black
     velvet, the rock's stones turning in its slots; its board opens on "The sparkle blinds your
     eyes!", never where you are or what the stones are worth (the Jeweller might want to look at
@@ -418,7 +427,10 @@ same questions as ff2's `TELEPORT_AREAS`, `floorYAt` and `crossesWall`:
 - **Floor areas** are Tidewater's walkable colliders (pier, pier steps,
   boardwalks, stairs, porches, stoops) plus dry ground.
 - **Refused landings:** the sea, the swash line (below 0.25 m) and slopes
-  steeper than 38°.
+  steeper than 45°, or 62° when the landing is at least half a metre below you:
+  you can scramble down what you couldn't climb, so no hillside leaves you stuck
+  with every aim burning red (`npm run check:teleport` proves every spot you can
+  stand on out on the hills has a way off).
 - **Walls** are Tidewater's solid colliders. As with the club's bar counter,
   each one's **top is its sill**, so a hop at deck height passes over the pier's
   under-deck beams, but the rails stop it.

@@ -24,6 +24,9 @@
  *   9. OVER THE CLUTTER. The rowboats pulled up on the sand by the west woodlot
  *      are hopped over, not walked round, but you can't come down inside one;
  *      a fence still stops you.
+ *  10. THE HILLSIDES. Up a slope you may land on up to 45°, down one up to 62°,
+ *      so out on the hills nearly every aim is green and no spot you can stand
+ *      on is a dead end.
  */
 
 import { readFileSync } from 'node:fs';
@@ -32,7 +35,7 @@ import { fileURLToPath } from 'node:url';
 import { decodeTerrain } from '../src/world/data.ts';
 import { Heightfield } from '../src/world/heightfield.ts';
 import { Surfaces, simulateArc } from '../src/world/surfaces.ts';
-import { TELEPORT, TELEPORT_COLOURS } from '../src/locomotion/config.ts';
+import { GROUND, TELEPORT, TELEPORT_COLOURS } from '../src/locomotion/config.ts';
 import { hasInterior, openColliders } from '../src/village/interiors.ts';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -60,7 +63,7 @@ function aim(x, z, standY, yaw, pitchDeg = 20, S = S0) {
   const r = simulateArc(S, origin, dir, buf);
   const fromY = S.floorYAt(x, z, standY);
   const hopY = Math.max(fromY, r.area?.y ?? 0);
-  const valid = r.landed && S.standable(r.area, r.landing.x, r.landing.z) && !S.crossesWall(x, z, r.landing.x, r.landing.z, hopY);
+  const valid = r.landed && S.standable(r.area, r.landing.x, r.landing.z, fromY) && !S.crossesWall(x, z, r.landing.x, r.landing.z, hopY);
   return { ...r, valid, dist: Math.hypot(r.landing.x - x, r.landing.z - z) };
 }
 
@@ -141,7 +144,7 @@ for (let x = -140; x <= 160; x += 3) {
 }
 check('there is dry, standable ground around the bay', dry > 50, `${dry} samples`);
 check('the swash line is refused', swash > 0, `${swash} samples`);
-check('slopes steeper than 38° are refused', steepSeen === 0 || steepRefused === steepSeen, `${steepRefused}/${steepSeen}`);
+check('slopes steeper than 45° are refused', steepSeen === 0 || steepRefused === steepSeen, `${steepRefused}/${steepSeen}`);
 
 console.log('\n7. walk-in buildings');
 {
@@ -237,6 +240,49 @@ console.log('\n9. over the clutter');
   const q0 = [f.cx - across[0] * 2, f.cz - across[1] * 2];
   const q1 = [f.cx + across[0] * 2, f.cz + across[1] * 2];
   check('a fence still stops a hop', S.crossesWall(q0[0], q0[1], q1[0], q1[1], Math.max(hf.heightAt(...q0), hf.heightAt(...q1))));
+}
+
+console.log('\n10. the hillsides');
+{
+  // a 55° slope: refused climbing up onto it, fine scrambling down onto it
+  let steep = null;
+  for (let x = -300; x <= 300 && !steep; x += 3)
+    for (let z = -400; z <= 0 && !steep; z += 3) {
+      const a = S.groundAt(x, z);
+      const ny = hf.normalAt(x, z, n).y;
+      if (a.kind === 'ground' && a.y > 10 && Math.abs(Math.acos(ny) - (55 * Math.PI) / 180) < 0.02) steep = [x, z, a];
+    }
+  check('found a 55° slope', !!steep);
+  if (steep) {
+    const [x, z, a] = steep;
+    check('  refused from below it', !S.standable(a, x, z, a.y + 0.2));
+    check('  refused with no idea where you stand', !S.standable(a, x, z));
+    check('  fine from above it', S.standable(a, x, z, a.y + GROUND.downhillDrop + 0.1));
+  }
+  // every spot you can stand on out on the hills, thrown round in 16 directions at three pitches
+  let spots = 0;
+  let deadEnds = 0;
+  let aims = 0;
+  let green = 0;
+  for (let x = -480; x < 460; x += 19)
+    for (let z = -740; z < 200; z += 19) {
+      const a = S.groundAt(x, z);
+      if (a.kind !== 'ground' || a.y < 8 || !S.standable(a, x, z)) continue;
+      spots++;
+      let any = false;
+      for (let k = 0; k < 16; k++)
+        for (const pitch of [0, 15, 30]) {
+          const r = aim(x, z, a.y, (k / 16) * Math.PI * 2, pitch);
+          aims++;
+          if (r.valid && r.dist > 0.6) {
+            green++;
+            any = true;
+          }
+        }
+      if (!any) deadEnds++;
+    }
+  check('no spot on the hills is a dead end', deadEnds === 0, `${deadEnds}/${spots}`);
+  check('nearly every aim out on the hills is green', green / aims > 0.9, `${((green / aims) * 100).toFixed(1)}%`);
 }
 
 const failed = results.filter((r) => !r).length;

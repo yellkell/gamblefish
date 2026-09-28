@@ -18,6 +18,8 @@
  *                make way for the ride's. The coins are money: what you've caught goes into your
  *                wallet at every landing (and if a gate takes you off, you keep what you had).
  *  THE BOTTOM    confetti, and the choice: back up to the top, or off into the village.
+ *  AFTER DARK    lanterns all the way up the slide's outer rail come on at dusk, like the pier's
+ *                (skelter/lights.ts): the tower's wound in a string of warm lights.
  *
  * How far it's built rides in the save (GameState.woodworks.built.skelter, in logs).
  */
@@ -42,6 +44,7 @@ import { clipAbove, setBuilding, BUILT } from './clip.ts';
 import { Coins } from './coins.ts';
 import { BARRIER_SIZE, GROUND_LANDING_Y, HEAD_RADIUS, LANDING_HOLD, PLINTH_RADIUS, PLINTH_TOP, ROOF_HEIGHT, SLIDE_PITCH, SLIDE_SPEED, TOTAL_DESCENT, TOTAL_TIERS, TOWER_RADIUS, TOWER_TOP } from './constants.ts';
 import { Confetti, SKY_LIGHT } from './fx.ts';
+import { createLights, type SkelterLights } from './lights.ts';
 import { HelterPath, helterPath } from './path.ts';
 import { SKELTER, TOWARD_VILLAGE } from './site.ts';
 import { Slide } from './slide.ts';
@@ -96,6 +99,7 @@ export class SkelterSystem extends createSystem({}) {
   /* the site */
   private tower: TowerHandles | null = null;
   private track: TrackHandles | null = null;
+  private lights: SkelterLights | null = null;
   private clipped: Material[] = [];
   private collar!: Group;
   private stakes!: Group;
@@ -291,8 +295,9 @@ export class SkelterSystem extends createSystem({}) {
     if (this.tower) return;
     this.tower = createTower();
     this.track = createSlideTrack(helterPath);
-    this.frame.add(this.tower.group, this.track.group);
-    this.clipped = [...clipAbove(this.tower.group), ...clipAbove(this.track.group)];
+    this.lights = createLights(helterPath);
+    this.frame.add(this.tower.group, this.track.group, this.lights.group);
+    this.clipped = [...clipAbove(this.tower.group), ...clipAbove(this.track.group), ...clipAbove(this.lights.group)];
     // the ride: its slide, its coins, the wind past you, the confetti at the bottom
     this.slide = new Slide(this.frame, this.player);
     this.coins = new Coins(this.frame, this.player, (streak, gem) => skelterAudio.coin(streak, gem));
@@ -397,6 +402,7 @@ export class SkelterSystem extends createSystem({}) {
     if (this.tower && this.track) {
       this.tower.group.visible = this.shownH > 0.01;
       this.track.group.visible = this.shownH > 0.01;
+      if (this.lights) this.lights.group.visible = this.shownH > 0.01;
       setBuilding(this.clipped, !this.complete);
       BUILT.value = this.floorY + (this.complete ? 1e6 : this.shownH);
     }
@@ -939,11 +945,13 @@ export class SkelterSystem extends createSystem({}) {
     this.confetti.update(dt, this.head);
   }
 
-  /** The painted tower is lit by the island's sun (or moon), and dims with the day. */
+  /** The painted tower is lit by the island's sun (or moon), and dims with the day; its lanterns
+   *  come on at dusk, like the pier's. */
   private lightByDay(): void {
     const sky = skelterDeps.sky;
     if (!sky) return;
     const n = sky.night.value;
+    this.lights?.update(n);
     SKY_LIGHT.uSunDir.value.copy(sky.sunDir);
     const c = sky.sunColor;
     const m = Math.max(c.r, c.g, c.b, 1e-3);

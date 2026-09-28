@@ -74,9 +74,9 @@ const NOT_A_FLOOR = new Set(['ladder']);
 
 /** Things lying about that the teleport arcs over (up to GROUND.hopOver tall), instead of
  *  refusing the hop: boats pulled up on the sand, the wreck, crates, traps, barrels, benches,
- *  tables, log piles, bollards, a bucket, rocks, a build crate. Rails, fences, walls, counters,
+ *  tables, log piles, bollards, a bucket, rocks (the gem rocks too), a build crate. Rails, fences, walls, counters,
  *  furniture indoors and standing trees still stop you. */
-const HOP_OVER = new Set(['rowboat', 'boat', 'wreck', 'crate', 'crates', 'trap', 'traps', 'barrel', 'bench', 'table', 'woodpile', 'logPile', 'bollard', 'bucket', 'rock', 'buildCrate']);
+const HOP_OVER = new Set(['rowboat', 'boat', 'wreck', 'crate', 'crates', 'trap', 'traps', 'barrel', 'bench', 'table', 'woodpile', 'logPile', 'bollard', 'bucket', 'rock', 'gemRock', 'buildCrate']);
 
 const _n = { x: 0, y: 1, z: 0 };
 
@@ -252,14 +252,18 @@ export class Surfaces {
   /**
    * Is this a place you may stand? Decks always are (like every club area).
    * Natural ground has to be dry — clear of the swash — and no steeper than
-   * a slope you'd actually stand on; the sea never is.
+   * a slope you'd actually stand on; the sea never is. Given `fromY`, the
+   * floor you're hopping from, ground well below it may be steeper
+   * (GROUND.downhillNormalY): scrambling down is allowed, so no hillside
+   * leaves you stuck.
    */
-  standable(area: FloorArea | null, x: number, z: number): boolean {
+  standable(area: FloorArea | null, x: number, z: number, fromY?: number): boolean {
     if (!area) return false;
     if (area.kind === 'deck') return true;
     if (area.kind === 'water') return false;
     if (area.y < GROUND.waterY + GROUND.dryMargin) return false;
-    return this.terrain.normalAt(x, z, _n).y >= GROUND.minNormalY;
+    const down = fromY !== undefined && area.y <= fromY - GROUND.downhillDrop;
+    return this.terrain.normalAt(x, z, _n).y >= (down ? GROUND.downhillNormalY : GROUND.minNormalY);
   }
 
   /**

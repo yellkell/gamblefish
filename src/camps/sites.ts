@@ -1,8 +1,8 @@
 /**
  * THE FIRE DANCERS' CAMPS, as plain data (the bake levels and clears their plots, the runtime
  * builds them there, tools/camps-check.mjs proves they're hidden): FIRE FIGHT 2's beach party,
- * gone off into the wilds of the island in eight little groups, each round its own fire with a
- * chest. Find all eight and a ninth sets up on the main beach (BEACH_CAMP).
+ * gone off into the wilds of the island in twelve little groups, each round its own fire with a
+ * chest. Find all twelve and a thirteenth sets up on the main beach (BEACH_CAMP).
  *
  * None of them is on the chart and none can be seen from the start: every one is tucked behind a
  * ridge or down a hollow the pier, the boardwalk and the beach can't see into (the check casts
@@ -55,9 +55,17 @@ export const CAMPS: CampSite[] = [
   { id: 'ridge', name: 'Skyfire Ridge', x: -330, z: -460, chestAt: 1.9, dancers: 6, sea: { deep: 1, reef: 0.3 }, logs: [6, 12], bestTier: 2 },
   // the far north-east, a basin on the island's back side
   { id: 'basin', name: 'Starfall Basin', x: 360, z: -540, chestAt: 3.1, dancers: 9, sea: { deep: 0.8, bay: 0.8 }, logs: [14, 22], bestTier: 2 },
+  // the big forest behind the village, off to the left: over the first ridge, just out of sight
+  { id: 'fern', name: 'Fernlight Hollow', x: -295, z: -228, chestAt: 0.9, dancers: 8, sea: { reef: 0.8, shallows: 0.6, pier: 0.4 }, logs: [10, 18], bestTier: 1 },
+  // …and deeper in, on a shelf high in the west woods
+  { id: 'canopy', name: 'Canopy Drums', x: -440, z: -322, chestAt: 4.0, dancers: 9, sea: { deep: 0.7, reef: 0.7 }, logs: [12, 20], bestTier: 2 },
+  // out on the far right, the island's east side: a clearing in the coast hills above the sea
+  { id: 'tide', name: 'Tidecrest Clearing', x: 446, z: -290, chestAt: 2.2, dancers: 8, sea: { bay: 0.8, shallows: 0.6, deep: 0.4 }, logs: [10, 18], bestTier: 1 },
+  // …and further up that coast, on a bench facing the sunrise
+  { id: 'sunrise', name: 'Sunrise Bluff', x: 500, z: -400, chestAt: 5.5, dancers: 9, sea: { deep: 1, reef: 0.5 }, logs: [12, 20], bestTier: 2 },
 ];
 
-/** the ninth: on the main beach west of the timber yard, once all eight above are found */
+/** the thirteenth: on the main beach west of the timber yard, once all twelve above are found */
 export const BEACH_CAMP: CampSite = { id: 'beach', name: 'The Beach Party', x: -16, z: -64, chestAt: 6.08, dancers: 10, sea: { deep: 1, reef: 0.6 }, logs: [8, 14], bestTier: 2, beach: true };
 
 /** every camp, the beach party last */
