@@ -13,7 +13,7 @@
  * through the guides for your line.
  */
 
-import { BufferAttribute, Color, Matrix4, Mesh, Quaternion, Vector3, type Object3D } from 'three';
+import { BufferAttribute, Color, Matrix3, Matrix4, Mesh, Quaternion, Vector2, Vector3, type Object3D } from 'three';
 import { bendAt, bendPower, BODY_Y, CRANK, REEL_Z, ROD_L, SEAT_Y, type Props, type RodTags, type RodUniforms } from './props.ts';
 import { rodPaint, type GearLevels } from './rodLook.ts';
 
@@ -22,6 +22,21 @@ const ROD_TILT = 0.38;
 const GEAR = 5.2; // rotor turns per crank turn
 export const LINE_PER_CRANK = 0.8; // m of line per crank turn
 
+/* The blank is a damped 2-D spring across its axis (~2.5 Hz, lightly damped). */
+const K = 250;
+const C = 8;
+/** What the blank's own weight bends it when it's held level. */
+const SAG = 0.012;
+/** How much of the hand's swing the tip lags by (1 = all of its mass at the tip). */
+const INERTIA = 0.7;
+/** The hand's acceleration is clamped here (m/s²): a tracking glitch mustn't fold the rod. */
+const MAX_ACC = 120;
+/** The tip jumping this far in a frame is a teleport or a snap turn, not a swing. */
+const JUMP = 0.6;
+const MAX_BEND = 0.75;
+/** The unbent tip-top, rod space. */
+const TIP0 = new Vector3(0, ROD_L, 0);
+
 const _m = new Matrix4();
 const _inv = new Matrix4();
 const _v = new Vector3();
@@ -29,6 +44,25 @@ const _b = { lat: 0, drop: 0 };
 const _p = new Vector3();
 const _q = new Quaternion();
 const _one = new Vector3(1, 1, 1);
+const _g = new Vector3();
+const _a = new Vector3();
+const _t = new Vector2();
+const _rot = new Matrix3();
+
+/**
+ * Add the part of a pull that bends the blank to `out` (rod space x, z). `d` is the pull's unit
+ * direction in rod space, `amount` what it would bend a blank it pulls square across. Along the
+ * blank a pull only compresses it: pointing the rod at the fish takes the bend out of it. Across it
+ * bends it by the sine of the angle, and a line running back past the tip (a rod held high over a
+ * fish below) hooks the tip over with all of it.
+ */
+function addPull(d: Vector3, amount: number, out: Vector2): void {
+  const s = Math.hypot(d.x, d.z);
+  if (amount <= 0 || s < 1e-4) return;
+  const f = d.y >= 0 ? s : Math.min(1, s / 0.2);
+  out.x += (d.x / s) * f * amount;
+  out.y += (d.z / s) * f * amount;
+}
 
 /** Hand → rod: rod +Y along the blank (tilted up from the pointing −Z), rod −Z (the reel) hanging below. */
 const HOLD = new Matrix4()
@@ -49,14 +83,20 @@ export class Rod {
   private readonly u: RodUniforms;
   /** world position of the tip-top (the line leaves from here) */
   readonly tip = new Vector3();
-  /** smoothed world velocity of the tip (m/s) */
+  /** smoothed world velocity of the tip as your hand swings it (the unbent tip: the blank's wobble isn't your swing) (m/s) */
   readonly tipVel = new Vector3();
   private readonly lastTip = new Vector3();
+  private readonly lastVel = new Vector3();
+  /** smoothed world acceleration of the unbent tip (m/s²): the blank lags it */
+  private readonly tipAcc = new Vector3();
   private hasLast = false;
+  private hasVel = false;
   private readonly samples: TipSample[] = [];
 
   bend = 0;
-  private bendVel = 0;
+  /** the tip's deflection across the blank (rod space x, z; its length is `bend`) and its rate */
+  private readonly bendXZ = new Vector2();
+  private readonly bendVel = new Vector2();
   private load = 0.15;
   private readonly bendDir = new Vector3(0, 0, -1);
   private shapeP = bendPower(0.15);
@@ -127,17 +167,57 @@ export class Rod {
     this.mesh.matrixWorldNeedsUpdate = true;
     _inv.copy(this.mesh.matrix).invert();
 
-    // bend: a damped spring toward the load (~2.5 Hz, lightly damped)
-    const K = 250;
-    const C = 8;
-    this.bendVel += ((o.bendT - this.bend) * K - this.bendVel * C) * dt;
-    this.bend += this.bendVel * dt;
+    // the hand's swing, read off the unbent tip (the cast and the strike read this too)
+    _p.copy(TIP0).applyMatrix4(this.mesh.matrix);
+    let swung = false;
+    if (this.hasLast && dt > 0) {
+      _v.copy(_p).sub(this.lastTip);
+      if (_v.lengthSq() > JUMP * JUMP) {
+        this.resetMotion();
+      } else {
+        this.lastVel.copy(this.tipVel);
+        this.tipVel.lerp(_v.divideScalar(dt), 1 - Math.exp(-dt * 30));
+        this.samples.push({ t: time, v: this.tipVel.clone() });
+        while (this.samples.length && time - this.samples[0].t > 0.15) this.samples.shift();
+        if (this.hasVel) {
+          _a.copy(this.tipVel).sub(this.lastVel).divideScalar(dt);
+          this.tipAcc.lerp(_a, 1 - Math.exp(-dt * 20));
+          swung = true;
+        }
+        this.hasVel = true;
+      }
+    }
+    this.lastTip.copy(_p);
+    this.hasLast = true;
+
+    // where it's pulled (rod space, across the blank): its own weight toward the ground, and the
+    // line from the tip-top toward the bob (a fish hanging off it, or the rod loaded in the
+    // back-cast, pulls straight down)
+    _g.set(0, -1, 0).transformDirection(_inv);
+    _t.set(0, 0);
+    addPull(_g, SAG, _t);
+    const lineLoad = Math.max(0, o.bendT - SAG);
+    if (!o.towards) addPull(_g, lineLoad, _t);
+    else if (_v.copy(o.towards).applyMatrix4(_inv).sub(TIP0).lengthSq() > 1e-6) addPull(_v.normalize(), lineLoad, _t);
+
+    // the spring: toward the pull, and the tip lagging behind the hand when you swing it
+    let ax = 0;
+    let az = 0;
+    if (swung) {
+      _rot.setFromMatrix4(_inv);
+      _a.copy(this.tipAcc).clampLength(0, MAX_ACC).applyMatrix3(_rot);
+      ax = (-_a.x * INERTIA) / ROD_L;
+      az = (-_a.z * INERTIA) / ROD_L;
+    }
+    const b = this.bendXZ;
+    const bv = this.bendVel;
+    const h = Math.min(dt, 0.05); // a long frame mustn't blow the spring up
+    bv.x += ((_t.x - b.x) * K - bv.x * C + ax) * h;
+    bv.y += ((_t.y - b.y) * K - bv.y * C + az) * h;
+    b.addScaledVector(bv, h).clampLength(0, MAX_BEND);
+    this.bend = b.length();
+    if (this.bend > 1e-5) this.bendDir.set(b.x / this.bend, 0, b.y / this.bend);
     this.load += (o.loadT - this.load) * (1 - Math.exp(-dt * 6));
-    // direction (rod space, across the blank): toward the line, or down toward the ground
-    if (o.towards) _v.copy(o.towards).applyMatrix4(_inv);
-    else _v.set(0, -1, 0).transformDirection(_inv);
-    _v.y = 0;
-    if (_v.lengthSq() > 1e-6) this.bendDir.lerp(_v.normalize(), 1 - Math.exp(-dt * 10)).normalize();
     const P = bendPower(this.load);
     this.shapeP = P;
     this.u.rodBend.value.set(this.bendDir.x, 0, this.bendDir.z, this.bend);
@@ -146,14 +226,6 @@ export class Rod {
     // the tip, on the same curve as the shader
     bendAt(ROD_L, this.bend, P, _b);
     this.tip.set(this.bendDir.x * _b.lat, ROD_L - _b.drop, this.bendDir.z * _b.lat).applyMatrix4(this.mesh.matrix);
-    if (this.hasLast && dt > 0) {
-      _v.copy(this.tip).sub(this.lastTip).divideScalar(dt);
-      this.tipVel.lerp(_v, 1 - Math.exp(-dt * 30));
-      this.samples.push({ t: time, v: this.tipVel.clone() });
-      while (this.samples.length && time - this.samples[0].t > 0.15) this.samples.shift();
-    }
-    this.lastTip.copy(this.tip);
-    this.hasLast = true;
 
     // reel: bail, rotor (GEAR× the crank, shown at most ~3 turns/s), spool
     const bailT = o.bailOpen ? 1 : 0;
@@ -211,7 +283,9 @@ export class Rod {
 
   resetMotion(): void {
     this.hasLast = false;
+    this.hasVel = false;
     this.samples.length = 0;
     this.tipVel.set(0, 0, 0);
+    this.tipAcc.set(0, 0, 0);
   }
 }
