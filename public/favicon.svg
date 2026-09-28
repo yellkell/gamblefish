@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- The FISH & CHIPS mark boiled down to a tab icon: the logo's clay casino chip (src/ui/logo.ts
+       chip), with the sailfish leaping across its face where the "&" sits. The PNG and .ico sizes
+       are rendered from this file by tools/make-icons.mjs. -->
+  <defs>
+    <radialGradient id="clay" cx="0.38" cy="0.32" r="0.75">
+      <stop offset="0" stop-color="#e8394f"/>
+      <stop offset="0.6" stop-color="#c8243a"/>
+      <stop offset="1" stop-color="#8e1426"/>
+    </radialGradient>
+    <radialGradient id="face" cx="0.4" cy="0.35" r="0.7">
+      <stop offset="0" stop-color="#fffaf0"/>
+      <stop offset="1" stop-color="#e6d9bc"/>
+    </radialGradient>
+    <linearGradient id="fish" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1fa99c"/>
+      <stop offset="0.55" stop-color="#3fd6c6"/>
+      <stop offset="1" stop-color="#d9fff9"/>
+    </linearGradient>
+  </defs>
+  <!-- the chip's edge, seen a little from below -->
+  <circle cx="32" cy="33.5" r="30" fill="#5e0b18"/>
+  <circle cx="32" cy="32" r="30" fill="url(#clay)"/>
+  <!-- the eight edge spots -->
+  <circle cx="32" cy="32" r="26.5" fill="none" stroke="#fbf4e4" stroke-width="7" stroke-dasharray="8.33 12.48" transform="rotate(-11.25 32 32)"/>
+  <!-- the inlay -->
+  <circle cx="32" cy="32" r="20.5" fill="url(#face)"/>
+  <circle cx="32" cy="32" r="20.5" fill="none" stroke="#8e1426" stroke-width="1"/>
+  <!-- the sailfish, leaping across it -->
+  <g transform="translate(31 34) rotate(-24) scale(0.98)">
+    <path d="M11 -2.2 L22.5 -0.3 L11 1.9 C7 6.4 -4 7 -12 2 L-20.5 8.8 L-16.6 0 L-20.5 -8.8 L-12 -2 C-11 -3 -10 -4 -9 -4.6 L-8.5 -7 C-4 -8.5 -0.5 -13.5 2.5 -17 C5.5 -15 7.4 -10 7.6 -4.9 C9 -4.1 10.3 -3 11 -2.2 Z"
+      fill="url(#fish)" stroke="#061820" stroke-width="2" stroke-linejoin="round" paint-order="stroke"/>
+    <path d="M-3.5 -6.2 L-2.2 -10.8 M0.2 -6 L1.8 -13.2 M3.8 -5.4 L4.8 -12" stroke="#0d6f67" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+    <circle cx="7.4" cy="-1" r="1.35" fill="#061820"/>
+  </g>
+</svg>
