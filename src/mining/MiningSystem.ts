@@ -102,7 +102,7 @@ const DRAW_R = 260;
 const GEM_TRAY = { lining: 0x160a1e, glow: 0.55 };
 const TILT = (35 * Math.PI) / 180;
 /** what the tray says as it rises, the sparkle in your eyes (one each time) */
-const DAZZLED = ['The sparkle blinds your eyes!', 'The glitter blinds your eyes!', 'Their shine blinds your eyes!'];
+const DAZZLED = ['The sparkle blinds your eyes!', 'The glimmer blinds your eyes!', 'Their shine blinds your eyes!'];
 /** a stone in the tray, across its girdle (m) */
 const STONE = 0.072;
 
