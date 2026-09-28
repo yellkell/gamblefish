@@ -7,16 +7,10 @@
 import { CanvasTexture, CylinderGeometry, Group, Mesh, MeshBasicMaterial, MeshStandardMaterial, SphereGeometry, SRGBColorSpace, TorusGeometry, Vector3, type Object3D } from 'three';
 import { casinoEnv } from '../../casino/look.ts';
 import { Batch, blade, M, OUTLINE, rounded, stalk, turned, type Kit } from '../craft.ts';
+import { LINE, REELS, RODS } from '../../fishing/rodLook.ts';
 import { goopTub } from './goop.ts';
 
 /* ── rods ───────────────────────────────────────────────────────────── */
-
-const RODS: { blank: string; len: number; grip: 'cork' | 'eva'; wrap: string }[] = [
-  { blank: '#8a6a48', len: 1.9, grip: 'cork', wrap: '#2a2a2e' }, // hand-me-down
-  { blank: '#1c1c20', len: 2.1, grip: 'cork', wrap: '#c8a040' }, // 7 ft graphite
-  { blank: '#a8201c', len: 2.4, grip: 'eva', wrap: '#f4f0e8' }, // 9 ft surf
-  { blank: '#101a3a', len: 2.2, grip: 'eva', wrap: '#c8a040' }, // carbon big-game
-];
 
 /** a rod standing up: butt cap, grip, reel seat, fore grip, a tapering blank with its guides */
 export function rod(k: Kit, level: number, withReel = true): Group {
@@ -59,13 +53,6 @@ export function rod(k: Kit, level: number, withReel = true): Group {
 }
 
 /* ── reels ──────────────────────────────────────────────────────────── */
-
-const REELS = [
-  { body: '#4a4e56', trim: '#b8bcc4' },
-  { body: '#c8a040', trim: '#2a2a2e' },
-  { body: '#1a2a5a', trim: '#c8ccd4' },
-  { body: '#c8a040', trim: '#1a1a1e' },
-];
 
 /**
  * A reel under a rod, its foot up at the rod (at the origin), hanging toward +z: a spinning reel
@@ -122,8 +109,6 @@ export function reel(k: Kit, level: number): Group {
 }
 
 /* ── line ───────────────────────────────────────────────────────────── */
-
-const LINE = ['#e8e0c0', '#f4f4f0', '#3fd66a', '#ff8a3a', '#3fa0ff'];
 
 /** a spool of line, standing on its flange */
 export function spool(k: Kit, level: number): Group {

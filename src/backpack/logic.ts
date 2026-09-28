@@ -2,7 +2,8 @@
  * The backpack's rules — Tarkov's grid, Backpack Battles' merging — as pure functions (no
  * three.js, no DOM), so tools/backpack-check.mjs runs the same code the headset does.
  *
- *  SHAPES   A fish takes the cells its real length needs (CELL_CM per cell, up to 7). Slender
+ *  SHAPES   A fish takes the cells its real length needs (CELL_CM per cell, up to 6: the first
+ *           backpack's width, so every fish but the great white fits an empty one). Slender
  *           and small fish are one cell tall; deep-bodied or heavy fish three cells long or more
  *           are two tall with a one-cell tail fin at the tail end — so a snapper packs like a
  *           Tetris piece and a houndfish like a bar. Pieces turn in 90° steps.
@@ -18,7 +19,8 @@ export type Rot = 0 | 1 | 2 | 3;
 export type Cell = [number, number]; // [col, row]
 
 export const CELL_CM = 22;
-export const MAX_LEN = 7;
+/** the longest a fish gets: the first backpack's width, so even a marlin fits an empty one */
+export const MAX_LEN = 6;
 export const TIERS = ['Common', 'Silver', 'Gold', 'Legendary'] as const;
 /** value multiplier applied to the combined value when merging INTO tier i (index = new tier) */
 export const MERGE_BONUS = [1, 1.5, 1.75, 2];

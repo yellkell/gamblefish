@@ -178,6 +178,14 @@ and the vendors.
     further, bites 28% sooner, trophy fish 2.4× as often), and which trophy fish need it.
   - Every shop board shows a picture of each thing it sells: the item's own 3D model,
     photographed once at load (`src/ui/thumbnail.ts`).
+  - The rod in your hand looks like what you've bought (`src/fishing/rodLook.ts`): the blank,
+    grips, wraps and fittings follow your rod (brown fibreglass and cork up to a navy big-game
+    blank with gold guides and a gimbal butt), the reel's body and trim your reel, and the line
+    on the spool, through the guides and out to the float your line. The bake tags each of the
+    rod's vertices with its material, so it's repainted in place.
+  - Your hook and bait hang under the float on a short leader (`src/fishing/baitRig.ts`): the
+    shops' own models, swinging on the cast, sinking under the float in the water, gone
+    while a fish has them.
 - **Trophy fish** (`src/fishing/trophyFish.ts`): roosterfish, opah, sailfish,
   swordfish (night only) and blue marlin. They bite only when you have the gear each one
   needs and the bobber is over deep enough water (8–13 m, out past the drop-off off the

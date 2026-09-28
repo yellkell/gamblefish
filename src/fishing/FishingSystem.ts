@@ -51,10 +51,13 @@ import type { Heightfield } from '../world/heightfield.ts';
 import type { Ocean } from '../world/ocean.ts';
 import { LineWraps } from '../world/lineWrap.ts';
 import type { Surfaces, Vec3 } from '../world/surfaces.ts';
+import type { Kit } from '../village/craft.ts';
+import { BaitRig } from './baitRig.ts';
 import { CatchCard, Toast } from './hud.ts';
 import { CLAMP_Y, RodGauge } from './rodGauge.ts';
 import { swim, type FishUniforms, type Props } from './props.ts';
 import { LINE_PER_CRANK, Rod } from './rod.ts';
+import { LINE } from './rodLook.ts';
 import { SHARK_ID, SharkFight, sharkUnlocked, RUNS } from './shark.ts';
 import { GRIP_Y, SharkShow } from './sharkShow.ts';
 import {
@@ -120,7 +123,9 @@ export const fishingDeps: {
   indoors: (() => boolean) | null;
   /** the island's hour (world/sky.ts): what bites, and when */
   hour: (() => number) | null;
-} = { props: null, state: null, ocean: null, terrain: null, surfaces: null, layout: null, wallet: null, fx: null, indoors: null, hour: null };
+  /** 0 by day .. 1 after dark (world/sky.ts): the bait's shine fades with the daylight */
+  night: { value: number } | null;
+} = { props: null, state: null, ocean: null, terrain: null, surfaces: null, layout: null, wallet: null, fx: null, indoors: null, hour: null, night: null };
 
 /** the hour the fish go by: the island's clock, or FISHING.hour without one */
 const hourNow = (): number => fishingDeps.hour?.() ?? FISHING.hour;
@@ -173,6 +178,9 @@ export class FishingSystem extends createSystem({}) {
   private t = 0; // time in state
 
   private bobber!: Mesh;
+  /** the hook and bait hanging under the float (fishing/baitRig.ts) */
+  private bait!: BaitRig;
+  private readonly baitAnchor = new Vector3();
   private readonly bob = new Vector3();
   private readonly bobVel = new Vector3();
   private dip = 0;
@@ -250,6 +258,9 @@ export class FishingSystem extends createSystem({}) {
     this.bobber = props.makeBobber();
     this.bobber.visible = false;
     this.scene.add(this.bobber);
+    const kit: Kit = { renderer: this.renderer, props };
+    this.bait = new BaitRig(kit, fishingDeps.night);
+    this.scene.add(this.bait.group);
 
     this.lineGeo = new LineGeometry();
     this.lineGeo.setPositions(this.lineBuf);
@@ -410,6 +421,7 @@ export class FishingSystem extends createSystem({}) {
     }
     this.hintT -= dt;
 
+    this.dressGear();
     this.updateRod(dt, time);
     this.updateBobber(dt, reelIn);
     this.updateShark(dt, time);
@@ -417,6 +429,7 @@ export class FishingSystem extends createSystem({}) {
     this.updateLanding(dt, time);
     this.updateLine();
     this.placeFloat(dt);
+    this.updateBait(dt);
     this.updateSound(dt);
     this.updateGauge();
     this.toast.update(dt, this.camera);
@@ -1114,6 +1127,38 @@ export class FishingSystem extends createSystem({}) {
   }
 
   /* ── rod, bobber, line ───────────────────────────────────────────────── */
+
+  /** The rod, the line and what's on the hook, as you've bought them (the shops' upgrades). */
+  private dressGear(): void {
+    const u = fishingDeps.state!.upgrades;
+    this.rod.dress({ rod: u.rod | 0, reel: u.reel | 0, line: u.line | 0 });
+    this.bait.setGear(u.bait | 0, u.hooks | 0);
+    const line = Math.max(0, Math.min(LINE.length - 1, u.line | 0));
+    if (line !== this.lineLevel) {
+      this.lineLevel = line;
+      this.lineMat.color.set(LINE[line]);
+      this.bait.setLineColour(LINE[line]);
+    }
+  }
+  private lineLevel = -1;
+
+  /** The bait under the float, gone while a fish has it. */
+  private updateBait(dt: number): void {
+    const show = this.bobber.visible && this.state !== 'fighting' && this.state !== 'landing';
+    const s = this.bobber.scale.x;
+    const a = this.baitAnchor.copy(this.bobber.position);
+    a.y -= BOBBER_R * s;
+    const terrain = fishingDeps.terrain!;
+    const ocean = fishingDeps.ocean!;
+    const S = fishingDeps.surfaces;
+    // the sea bed or the sand under it, or the boards when the float's been let down on a deck
+    const floor = (x: number, z: number): number => {
+      const g = terrain.heightAt(x, z);
+      const area = S?.areaNear(x, z, a.y);
+      return area?.kind === 'deck' ? area.y : g;
+    };
+    this.bait.update(dt, show, a, s, floor, (x, z) => ocean.heightAt(x, z));
+  }
 
   private updateRod(dt: number, time: number): void {
     if (this.state === 'stowed') {

@@ -21,7 +21,7 @@ check('a 94 cm houndfish is a 4-long bar', needle.length === 4 && bounds(needle)
 const snapper = shapeFor('redSnapper', 75, 5.29);
 check('a 75 cm snapper is 3 long, 2 deep with a 1-cell tail', snapper.length === 5 && bounds(snapper).w === 3 && bounds(snapper).h === 2, JSON.stringify(snapper));
 check('a tiny silverside is one cell', shapeFor('silverside', 12, 0.03).length === 1);
-check('nothing longer than 7', shapeFor('tarpon', 250, 40).length <= 14 && bounds(shapeFor('tarpon', 250, 40)).w === 7);
+check('nothing longer than 6', shapeFor('tarpon', 250, 40).length <= 12 && bounds(shapeFor('tarpon', 250, 40)).w === 6);
 
 console.log('\nrotation');
 const r1 = rotate(needle, 1);
@@ -67,6 +67,28 @@ check('…and fuse into Gold', g && g.piece.tier === 2 && g.piece.value === Math
 const legend = piece(30, 'tang', 30, 0.4, { tier: 3, x: 4, y: 0 });
 const legend2 = piece(31, 'tang', 30, 0.4, { tier: 3, x: 4, y: 2 });
 check('Legendary is the top: it never merges further', mergePartners(legend2, [legend]).length === 0);
+
+console.log('\nthe biggest fish');
+// every fish but the great white (released for its bounty) fits an empty first backpack, at its
+// heaviest: a sailfish or a marlin never has to be sold off by hand
+{
+  const { FISH, FISH_IDS } = await import('../vendor/tidewater/src/game/FishTable.js');
+  const { registerTimedFish } = await import('../src/fishing/timedFish.ts');
+  const { registerTrophyFish } = await import('../src/fishing/trophyFish.ts');
+  const { registerSharkFish, SHARK_ID } = await import('../src/fishing/shark.ts');
+  const { fishLengthCm } = await import('../src/fishing/tidewater.ts');
+  registerTimedFish(FISH, FISH_IDS);
+  registerTrophyFish(FISH, FISH_IDS);
+  registerSharkFish(FISH, FISH_IDS);
+  const misfits = [];
+  for (const id of FISH_IDS) {
+    if (id === SHARK_ID) continue;
+    const kg = FISH[id].kg[1];
+    const p = piece(1, id, fishLengthCm(id, kg), kg, { placed: false });
+    if (!findSpot(p, [], C, R)) misfits.push(`${id} ${Math.round(p.cm)} cm`);
+  }
+  check(`every fish fits an empty ${C}×${R} backpack (${FISH_IDS.length - 1} species)`, misfits.length === 0, misfits.join(', ') || undefined);
+}
 
 const failed = results.filter((r) => !r).length;
 console.log(`\n${results.length - failed}/${results.length} passed`);

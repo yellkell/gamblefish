@@ -254,7 +254,7 @@ World.create(container, {
     paintLogo();
   }
   await built(0.45);
-  Object.assign(fishingDeps, { props, state: game, ocean, terrain: heightfield, surfaces, layout: json.layout, wallet, fx });
+  Object.assign(fishingDeps, { props, state: game, ocean, terrain: heightfield, surfaces, layout: json.layout, wallet, fx, night: sky.state.night });
   // point-and-click panels first: a hand on a button claims its trigger before fishing sees it
   world.registerSystem(PointerSystem);
   world.registerSystem(FishingSystem);
