@@ -7,11 +7,12 @@
  *  THE ROCKS     sixteen, four on each kind of ground (mining/sites.ts), veined with lines of
  *                light in the colour of what's inside. Swing the pick's point into one: steel rings on
  *                stone, chips and sparks fly, a jolt in your hand, and the veins open wider and
- *                blaze. Six good blows and it bursts apart, and the sparkle blinds you for a moment.
+ *                blaze. Six good blows and it bursts apart.
  *  THE TRAY      out of the rubble rises a tray like the dancers' chest pack, lined in black
  *                velvet, with the rock's stones lying in its slots, turning in the light: what's in
  *                it depends on the ground (mining/gems.ts);
- *                its board doesn't say where you are, only what the sparkle does to your eyes. Reach in and click one (trigger or grip)
+ *                its board doesn't say where you are or what they're worth: the sparkle blinds your
+ *                eyes, and the Jeweller might want to look at them. Reach in and click one (trigger or grip)
  *                and it's in your pouch; TAKE ALL; CLOSE. Walk away and it sinks back; come back
  *                and it rises again, until you've taken everything.
  *  REGROWING     a few minutes after it breaks, once you're away from it, the rock grows back out
@@ -25,7 +26,6 @@
 import { createSystem, InputComponent } from '@iwsdk/core';
 import {
   AdditiveBlending,
-  BackSide,
   BoxGeometry,
   Color,
   DodecahedronGeometry,
@@ -37,7 +37,6 @@ import {
   MeshLambertMaterial,
   Object3D,
   Quaternion,
-  SphereGeometry,
   Vector3,
   type Points,
   type Texture,
@@ -103,10 +102,7 @@ const DRAW_R = 260;
 const GEM_TRAY = { lining: 0x160a1e, glow: 0.55 };
 const TILT = (35 * Math.PI) / 180;
 /** what the tray says as it rises, the sparkle in your eyes (one each time) */
-const DAZZLED = ['Blinding!', 'My eyes!', 'So bright!', 'Dazzling!', 'Look at them shine!', 'Too sparkly!'];
-/** the glare when a rock bursts: how long, and how bright at its peak (looking straight at it) */
-const GLARE_S = 1.1;
-const GLARE_PEAK = 0.8;
+const DAZZLED = ['The sparkle blinds your eyes!', 'The glitter blinds your eyes!', 'Their shine blinds your eyes!'];
 /** a stone in the tray, across its girdle (m) */
 const STONE = 0.072;
 
@@ -174,10 +170,6 @@ export class MiningSystem extends createSystem({}) {
   private hover: RockGem | null = null;
   private infoKey = '';
   private dazzle = DAZZLED[0];
-  /** the glare filling your eyes as a rock bursts: a bright shell round your head, fading */
-  private glare!: Mesh;
-  private glareT = GLARE_S;
-  private glareK = 0;
   private readonly placedFrom = new Vector3();
   private readonly trig: Record<Hand, boolean> = { left: false, right: false };
   private readonly grip: Record<Hand, boolean> = { left: false, right: false };
@@ -221,14 +213,6 @@ export class MiningSystem extends createSystem({}) {
     this.sparks.frustumCulled = false;
     this.scene.add(this.sparks);
     this.buildTray();
-    this.glare = new Mesh(
-      new SphereGeometry(0.2, 16, 12),
-      new MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0, blending: AdditiveBlending, side: BackSide, depthTest: false, depthWrite: false, toneMapped: false, fog: false }),
-    );
-    this.glare.renderOrder = 999;
-    this.glare.frustumCulled = false;
-    this.glare.visible = false;
-    this.camera.add(this.glare);
     mineView.system = this;
     mineView.nearest = () => {
       const n = this.nearest(this.camera.getWorldPosition(_v));
@@ -291,14 +275,6 @@ export class MiningSystem extends createSystem({}) {
     });
     this.animateFlights(dt);
     this.toast.update(dt, this.camera);
-    if (this.glareT < GLARE_S) {
-      this.glareT += dt;
-      const k = this.glareT / GLARE_S;
-      // a flash in a blink, then a long fade, flickering as it goes
-      const a = k < 0.08 ? k / 0.08 : Math.pow(1 - (k - 0.08) / 0.92, 2) * (0.85 + 0.15 * Math.sin(this.glareT * 40));
-      (this.glare.material as MeshBasicMaterial).opacity = this.glareK * Math.max(0, a);
-      if (this.glareT >= GLARE_S) this.glare.visible = false;
-    }
   }
 
   /** The pick in your right hand; its point biting into a rock. */
@@ -391,13 +367,6 @@ export class MiningSystem extends createSystem({}) {
       const a = Math.random() * Math.PI * 2;
       this.chipList.push({ p: centre.clone().add(new Vector3(Math.cos(a) * 0.4, 0, Math.sin(a) * 0.4)), v: new Vector3(Math.cos(a) * 2.2, 1.5 + Math.random() * 2.5, Math.sin(a) * 2.2), age: 0, c: stoneColour(r.site.ground), s: 1 + Math.random() });
     }
-    // the sparkle blinds you: brightest if you're looking straight at it, tinted with its stones
-    const look = this.camera.getWorldDirection(_w);
-    const to = _v.copy(centre).sub(this.camera.getWorldPosition(new Vector3())).normalize();
-    this.glareK = GLARE_PEAK * (0.35 + 0.65 * Math.max(0, look.dot(to)));
-    this.glareT = 0;
-    (this.glare.material as MeshBasicMaterial).color.set(GEMS[r.stock[0]?.id ?? 'peridot'].colour).lerp(new Color(0xffffff), 0.55);
-    this.glare.visible = true;
     if (!quiet) {
       rockBreak();
       const s = this.renderer.xr.getSession() ?? undefined;
@@ -680,7 +649,7 @@ export class MiningSystem extends createSystem({}) {
     if (!quiet) {
       gemChime(rare);
       pulseHand(this.renderer.xr.getSession() ?? undefined, hand, 0.45, 45);
-      const tag = `${info.name} · ${gem.ct.toFixed(2)} ct · $${gem.value}`;
+      const tag = `${info.name} · ${gem.ct.toFixed(2)} ct`;
       this.toast.show(first ? `${tag}. New! It's in your field guide` : best ? `${tag}. Your biggest yet!` : tag, first ? 3.2 : 2.2, first || best ? INK.good : INK.hot);
     }
     this.infoKey = '';
@@ -694,11 +663,10 @@ export class MiningSystem extends createSystem({}) {
       return;
     }
     const all = [...r.stock];
-    const worth = all.reduce((a, g) => a + g.value, 0);
     const news = all.filter((g) => !this.state.gems.log[g.id]).map((g) => g.id);
     all.forEach((g, i) => this.take(g, 'right', i > 0));
     gemChime(all.some((g) => GEMS[g.id].rarity < 0.5));
-    this.toast.show(`${all.length} stone${all.length === 1 ? '' : 's'} into your pouch · $${worth}${news.length ? `. New in your field guide: ${[...new Set(news)].map((id) => GEMS[id].name).join(', ')}` : ''}`, 3, INK.good);
+    this.toast.show(`${all.length} stone${all.length === 1 ? '' : 's'} into your pouch${news.length ? `. New in your field guide: ${[...new Set(news)].map((id) => GEMS[id].name).join(', ')}` : ''}`, 3, INK.good);
   }
 
   private animateFlights(dt: number): void {
@@ -740,30 +708,27 @@ export class MiningSystem extends createSystem({}) {
   private paintInfo(): void {
     const r = this.openRock!;
     const h = this.hover;
-    const worth = r.stock.reduce((a, g) => a + g.value, 0);
     const key = `${r.site.id}|${r.stock.length}|${h ? `${h.c},${h.r}` : '-'}`;
     if (key === this.infoKey) return;
     this.infoKey = key;
     const L = this.infoLetters;
     L.begin();
-    // no name for where you are: just what the sparkle does to your eyes
-    L.title(this.dazzle, 28, 66, 34, 'left', 420);
-    if (r.stock.length) L.text(`worth $${worth}`, 612, 64, 24, 'accent', 'right', 700);
+    // no name for where you are, and no prices: just what the sparkle does to your eyes
+    L.title(this.dazzle, 28, 66, 34, 'left', 584);
     if (h) {
       const g = GEMS[h.id];
       L.text(g.name, 28, 120, 34, 'ink', 'left', 700, 420);
       L.text(g.mineral, 28, 152, 19, 'dim', 'left', 500, 420);
-      L.text(`${h.ct.toFixed(2)} ct`, 28, 186, 24, 'ink', 'left', 600);
-      L.text(`$${h.value}`, 612, 124, 34, 'accent', 'right', 700);
-      if (!this.state.gems.log[h.id]) L.text('new to your book!', 612, 186, 20, 'good', 'right', 700);
+      L.text(`${h.ct.toFixed(2)} carats`, 612, 124, 28, 'accent', 'right', 700);
+      if (!this.state.gems.log[h.id]) L.text('new to your book!', 28, 188, 20, 'good', 'left', 700);
     } else if (r.stock.length) {
       L.text(`${r.stock.length} stone${r.stock.length === 1 ? '' : 's'} in the rock`, 28, 118, 26, 'ink', 'left', 600, 584);
       L.text('Reach in and take one, or TAKE ALL', 28, 154, 22, 'dim', 'left', 500, 584);
-      L.text(`${this.state.gems.pouch.length} in your pouch · the Jeweller buys them`, 28, 188, 19, 'dim', 'left', 500, 584);
+      L.text('The Jeweller might want to look at these.', 28, 188, 19, 'accent', 'left', 500, 584);
     } else {
       L.text('Nothing left but rubble.', 28, 120, 26, 'ink', 'left', 600, 584);
       L.text('It grows back in a few minutes, once you’ve gone.', 28, 156, 21, 'dim', 'left', 500, 584);
-      L.text(`${this.state.gems.pouch.length} stones in your pouch for the Jeweller`, 28, 188, 19, 'accent', 'left', 600, 584);
+      L.text('Take them to the Jeweller.', 28, 188, 19, 'accent', 'left', 600, 584);
     }
     L.end();
   }

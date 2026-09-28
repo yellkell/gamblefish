@@ -7,7 +7,7 @@
  *  THE POUCH  once the Jeweller's pickaxe is yours (and never before): a drawstring pouch of
  *             violet velvet, gold cord and tassels, its mouth open and your best stones peeking
  *             out of it, sparkling, one of each of your three most valuable kinds. A black velvet
- *             tag in front: how many stones, and what the Jeweller would give for them.
+ *             tag in front: how many stones, for the Jeweller (not what they're worth).
  *
  * Both sit in the tray's frame (X across, Y up out of the tray, Z down it toward you).
  */
@@ -29,6 +29,8 @@ const TAG_M: [number, number] = [0.13, 0.04875];
 export class Stash {
   readonly group = new Group();
   private readonly logs: Mesh[] = [];
+  /** the rope round the bundle (gone with the last log) */
+  private readonly bands: Mesh[] = [];
   private readonly logTag: Panel;
   private readonly logLetters: Lettering;
   private readonly pouch = new Group();
@@ -69,6 +71,7 @@ export class Stash {
     const rope = new MeshLambertMaterial({ color: 0xc8b07a });
     for (const z of [-0.028, 0.028]) {
       const band = new Mesh(new TorusGeometry(0.043, 0.003, 5, 20), rope);
+      this.bands.push(band);
       band.scale.set(1, 0.95, 1);
       band.position.set(0, 0.043, z);
       bundle.add(band);
@@ -152,6 +155,8 @@ export class Stash {
       this.logKey = logKey;
       const shown = Math.min(MAX_LOGS, n);
       this.logs.forEach((m, i) => (m.visible = i < shown));
+      // a rope round two or more; nothing to tie round none
+      for (const b of this.bands) b.visible = shown >= 2;
       const L = this.logLetters;
       L.begin();
       L.title(n ? `${n} LOG${n === 1 ? '' : 'S'}` : 'NO LOGS', TAG_PX[0] / 2, 84, 56, 'center', TAG_PX[0] - 30);
@@ -164,10 +169,9 @@ export class Stash {
     this.gemTag.mesh.visible = own;
     if (!own) return;
     const pouch = s.gems.pouch;
-    const worth = pouch.reduce((a, g) => a + g.value, 0);
     // its best kinds, peeking out of its mouth
     const best = [...new Set([...pouch].sort((a, b) => b.value - a.value).map((g) => g.id))].slice(0, 3);
-    const gemKey = `${pouch.length}|${worth}|${best.join(',')}`;
+    const gemKey = `${pouch.length}|${best.join(',')}`;
     if (gemKey !== this.gemKey) {
       this.gemKey = gemKey;
       for (const st of this.stones) {
@@ -188,8 +192,8 @@ export class Stash {
       const L = this.gemLetters;
       L.begin();
       const count = pouch.length;
-      L.title(count ? `${count} GEM${count === 1 ? '' : 'S'}` : 'EMPTY POUCH', TAG_PX[0] / 2, 62, count ? 46 : 36, 'center', TAG_PX[0] - 30);
-      if (count) L.text(`$${worth.toLocaleString('en-US')} at the Jeweller`, TAG_PX[0] / 2, 100, 22, 'accent', 'center', 600, TAG_PX[0] - 30);
+      L.title(count ? `${count} GEM${count === 1 ? '' : 'S'}` : 'EMPTY POUCH', TAG_PX[0] / 2, count ? 58 : 72, count ? 40 : 36, 'center', TAG_PX[0] - 60);
+      if (count) L.text('take these to the Jeweller', TAG_PX[0] / 2, 88, 19, 'accent', 'center', 600, TAG_PX[0] - 70);
       L.end();
     }
     this.stones.forEach((st, i) => (st.holder.rotation.y = time * 0.6 + i * 2.1));

@@ -330,13 +330,12 @@ and the vendors.
     what's inside, breathing softly day and night. The bake clears the plants and Tidewater's own rocks round each. Own the
     pick and walk up to one and it's in your hand, the rod over your shoulder, as the axe is among
     the trees. Swing its point into the rock: steel rings on stone, chips and sparks fly, a jolt in
-    your hand, and the veins open wider and blaze. Six blows and it bursts apart, the sparkle
-    blinding you for a moment (a flash of glare in the stones' colour, brightest if you're looking
-    straight at it), the chunks glowing along the cracks as they tumble and sink into rubble.
+    your hand, and the veins open wider and blaze. Six blows and it bursts apart, the chunks glowing along the cracks as they tumble and sink into rubble.
     A few minutes later, once you've gone, it grows back with new stones in it.
   - **The tray:** out of the rubble rises a tray like the dancers' chest pack, lined in black
-    velvet, the rock's stones turning in its slots; its board says only what the sparkle does to
-    your eyes ("Blinding!", "My eyes!"), not where you are. Reach in and click one (trigger or grip) and it
+    velvet, the rock's stones turning in its slots; its board opens on "The sparkle blinds your
+    eyes!", never where you are or what the stones are worth (the Jeweller might want to look at
+    them). Reach in and click one (trigger or grip) and it
     flies into your pouch; TAKE ALL; CLOSE. What's inside depends on the ground (`src/mining/gems.ts`):
     peridot and aquamarine on the shore, watermelon tourmaline and emerald in the forest, amethyst
     and black opal on the high ground, sapphire and ruby on the peaks, the second of each the rare
@@ -358,7 +357,7 @@ and the vendors.
   - **The pouch:** once the pickaxe is yours (not before), a violet velvet drawstring pouch sits
     beside the backpack tray, under the logs: pleated at the neck by a gold cord with tasselled
     ends, your three most valuable kinds of stone sparkling in its open mouth, and a black velvet
-    tag with how many you have and what the Jeweller would give. `npm run check:mining` checks that every rock is on its
+    tag with how many you have: take these to the Jeweller (no prices till you're at his window). `npm run check:mining` checks that every rock is on its
     ground, clear, standable and reachable, and that the stones and the pouch behave.
 - **The boards** (`src/ui/boards.ts`): every shop's, table's and counter's point-and-click board is a
   thing in the room, not a pane of dark glass: made of what that place would make it of, lettered
