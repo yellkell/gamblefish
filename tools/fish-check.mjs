@@ -11,7 +11,8 @@
  *   node tools/fish-check.mjs
  */
 
-import { FISH, FISH_IDS, UPGRADES, fishValue, fishLengthCm, pickSpecies } from '../src/fishing/tidewater.ts';
+import { FISH, FISH_IDS, UPGRADES, createGameState, fishValue, fishLengthCm, pickSpecies } from '../src/fishing/tidewater.ts';
+import { shownLevel } from '../src/fishing/gear.ts';
 import { TIMED, biting } from '../src/fishing/timedFish.ts';
 import { TROPHY } from '../src/fishing/trophyFish.ts';
 import { SHARK_DEPTH, SHARK_ID, SharkFight, RUNS } from '../src/fishing/shark.ts';
@@ -129,6 +130,28 @@ console.log('\nthe great white');
   const both = fight(true, true);
   check('two hands on it, reeling through the run is safe', both.state === 'caught', both.state);
   check(`its value is a bounty ($${fishValue(SHARK_ID, 700)})`, fishValue(SHARK_ID, 700) > 5000 && f.price > 0);
+}
+
+console.log('\nthe gear you show (the bait on your hook, the rod and reel in your hand)');
+{
+  const u = { bait: 4, rod: 2 };
+  check('with nothing picked, your best shows', shownLevel(u, {}, 'bait') === 4 && shownLevel(u, undefined, 'rod') === 2);
+  check('any level you have can show (frozen shrimp, the hand-me-down rod too)', shownLevel(u, { bait: 2 }, 'bait') === 2 && shownLevel(u, { bait: 0, rod: 0 }, 'bait') === 0 && shownLevel(u, { rod: 0 }, 'rod') === 0);
+  check("one you haven't got falls back to your best", shownLevel(u, { bait: 5 }, 'bait') === 4 && shownLevel(u, { rod: 3 }, 'rod') === 2 && shownLevel(u, { bait: -1 }, 'bait') === 4);
+  const s = createGameState();
+  s.upgrades.bait = 3;
+  s.upgrades.rod = 2;
+  s.upgrades.reel = 3;
+  s.looks = { bait: 1, rod: 0, reel: 1 };
+  const d = JSON.parse(JSON.stringify(s.toJSON()));
+  const t = createGameState();
+  t.fromJSON(d);
+  check('the picks are saved and read back', t.looks.bait === 1 && t.looks.rod === 0 && t.looks.reel === 1, JSON.stringify(d.looks));
+  check('and the bites, the cast and the reeling still go by your best', t.stats.biteMul === UPGRADES.bait.levels[3].biteMul && t.stats.castM === UPGRADES.rod.levels[2].castM && t.stats.reelSpeed === UPGRADES.reel.levels[3].reelSpeed, `${t.stats.biteMul}, ${t.stats.castM} m, ${t.stats.reelSpeed} m/s`);
+  t.fromJSON({ ...d, looks: { bait: 9, rod: 'x' } });
+  check("a pick beyond the save's gear is dropped", Object.keys(t.looks).length === 0);
+  t.fromJSON({ ...d, looks: undefined });
+  check('an older save has none: your best shows', Object.keys(t.looks).length === 0);
 }
 
 const failed = results.filter((r) => !r).length;

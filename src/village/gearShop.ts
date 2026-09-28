@@ -13,11 +13,17 @@
  * Point at BUY: it's paid from the wallet (Tidewater's GameState.buy), or the board says how
  * much more you need. The board says what each level does for you, in numbers against what you
  * have (fishing/gear.ts gearEffect), and which trophy fish need it.
+ *
+ * At the bait shop every bait you've bought (and the frozen shrimp you started with) has a USE
+ * button: that's the one that goes on your hook and hangs under the float. At the tackle shop a
+ * board by the rack of rods does the same for the rod in your hand and the reel on it. It's only
+ * the look: the bites come as fast as your best bait brings them, you cast as far as your best
+ * rod and reel in as fast as your best reel.
  */
 
 import { Group, MeshBasicMaterial, SphereGeometry, TorusGeometry, Vector3, type Object3D } from 'three';
-import { uiDeny, winFanfare } from '../audio/sfx.ts';
-import { gearEffect, GEAR_SHOPS } from '../fishing/gear.ts';
+import { uiClick, uiDeny, winFanfare } from '../audio/sfx.ts';
+import { gearEffect, GEAR_SHOPS, LOOK_TRACKS, shownLevel } from '../fishing/gear.ts';
 import { FISH, UPGRADES, type GameState } from '../fishing/tidewater.ts';
 import { TROPHY } from '../fishing/trophyFish.ts';
 import { InteractivePanel, register } from '../ui/pointer.ts';
@@ -240,7 +246,7 @@ export class GearShopCounter {
     display.add(counter.group());
     display.add(DECOR[room.name]?.(kit, room, top, cz) ?? new Group());
     room.contents.add(mergeStatic(display));
-    for (const t of this.tracks) UPGRADES[t].levels.forEach((_, lv) => lv > 0 && this.pics.set(`${t}:${lv}`, thumbnail(kit.renderer, gearIcon(kit, t, lv))));
+    for (const t of this.tracks) UPGRADES[t].levels.forEach((_, lv) => (lv > 0 || t === 'bait') && this.pics.set(`${t}:${lv}`, thumbnail(kit.renderer, gearIcon(kit, t, lv))));
 
     this.board = new InteractivePanel([BW, BH], [1.6, (1.6 * BH) / BW]);
     // a board in the shop's own style, framed, hung on the back wall (ui/boards.ts)
@@ -257,19 +263,24 @@ export class GearShopCounter {
     this.paint();
   }
 
-  /** One row per track (its next level), or, in a one-track shop, one per level. */
+  /**
+   * One row per track (its next level), or, in a one-track shop, one per level (at the bait shop
+   * the frozen shrimp you started with too, to go back to).
+   */
   private rows(): Row[] {
     const u = this.state.upgrades;
     if (this.tracks.length === 1) {
       const t = this.tracks[0];
-      return UPGRADES[t].levels.slice(1).map((_, i) => ({ track: t, level: i + 1 }));
+      const from = t === 'bait' ? 0 : 1;
+      return UPGRADES[t].levels.slice(from).map((_, i) => ({ track: t, level: i + from }));
     }
     return this.tracks.map((t) => ({ track: t, level: Math.min(UPGRADES[t].levels.length - 1, (u[t] | 0) + 1) }));
   }
 
   click(id: string): void {
-    const [, track, lv] = id.split(':');
+    const [act, track, lv] = id.split(':');
     const level = Number(lv);
+    if (act === 'use') return this.use(track, level);
     const u = this.state.upgrades;
     const next = UPGRADES[track]?.levels[level];
     if (!next || (u[track] | 0) + 1 !== level) return;
@@ -280,11 +291,23 @@ export class GearShopCounter {
       this.paint();
       return;
     }
+    // new gear goes straight on (a new bait on the hook, a new rod in your hand)
+    delete this.state.looks[track];
     // buy() spends, saves and tells everyone (the rod, the wallet, this board)
     if (!this.state.buy(track)) return;
     winFanfare(1);
     const fish = opens(track, level);
     this.note = `Sold! ${gearEffect(UPGRADES[track].levels, track, level, level)} now.` + (fish.length ? ` Needed for ${fish.join(' and ')}.` : '');
+    this.noteColour = 'good';
+    this.paint();
+  }
+
+  /** Put a bait you've bought on the hook. */
+  private use(track: string, level: number): void {
+    if (track !== 'bait' || !pickLook(this.state, track, level)) return;
+    const best = this.state.upgrades.bait | 0;
+    const lv = UPGRADES.bait.levels;
+    this.note = `On your hook: ${lv[level].label.toLowerCase()}.` + (level < best ? ` The fish bite as fast as for your ${lv[best].label.toLowerCase()}.` : '');
     this.noteColour = 'good';
     this.paint();
   }
@@ -296,10 +319,19 @@ export class GearShopCounter {
     L.begin();
     L.title(role?.title ?? 'SHOP', 44, 82, 56, 'left', 620);
     const single = this.tracks.length === 1;
-    L.text(single ? `yours now: ${UPGRADES[this.tracks[0]].levels[u[this.tracks[0]] | 0].label}` : 'the big ones need big-game tackle', 44, 122, 28, 'dim', 'left', 600, 700);
+    const t0 = this.tracks[0];
+    const onHook = t0 === 'bait' ? shownLevel(u, this.state.looks, 'bait') : -1;
+    const sub = !single
+      ? 'the big ones need big-game tackle'
+      : t0 === 'bait'
+        ? `on your hook: ${UPGRADES.bait.levels[onHook].label}` + (onHook < (u.bait | 0) ? `  ·  bites as fast as ${UPGRADES.bait.levels[u.bait | 0].label}` : '')
+        : `yours now: ${UPGRADES[t0].levels[u[t0] | 0].label}`;
+    L.text(sub, 44, 122, 28, 'dim', 'left', 600, 700);
     L.text(`wallet $${Math.floor(this.state.money).toLocaleString('en-US')}`, BW - 44, 80, 34, 'accent', 'right', 700);
     const rows = this.rows();
     const rowH = Math.min(150, 470 / rows.length);
+    // (laid out for rows 94 high; more rows than that, and it all shrinks to fit)
+    const k = Math.min(1, rowH / 94);
     rows.forEach(({ track, level }, i) => {
       const y = 148 + i * rowH;
       const have = u[track] | 0;
@@ -311,17 +343,125 @@ export class GearShopCounter {
       L.thumb(this.pics.get(`${track}:${level}`), 40, y + 4, pic, !owned && !next && !maxed);
       const tx = 40 + pic + 20;
       if (!single) L.text(UPGRADES[track].name.toUpperCase(), tx, y + 22, 24, 'accent', 'left', 600);
-      L.text(lv.label, tx, y + (single ? 44 : 60), 38, owned || maxed ? 'dim' : next ? 'ink' : 'dim', 'left', 700, 700 - tx);
+      const on = level === onHook;
+      L.text(lv.label, tx, y + (single ? 44 * k : 60), Math.round(38 * k), on ? 'ink' : owned || maxed ? 'dim' : next ? 'ink' : 'dim', 'left', 700, 700 - tx);
       const fish = opens(track, level);
       // what it does for you, in numbers, and which trophy fish need it
       const does = [gearEffect(UPGRADES[track].levels, track, level, have), fish.length ? `needed for ${fish.join(', ')}` : ''].filter(Boolean).join('  ·  ');
-      L.text(maxed ? 'Fully upgraded' : does, tx, y + (single ? 80 : 94), 24, 'dim', 'left', 500, 750 - tx);
-      if (!maxed) L.text(`$${lv.cost.toLocaleString('en-US')}`, 880, y + 58, 40, owned ? 'dim' : 'accent', 'right', 700);
+      L.text(maxed ? 'Fully upgraded' : does, tx, y + (single ? 80 * k : 94), Math.round(24 * k), 'dim', 'left', 500, 750 - tx);
+      if (!maxed && lv.cost > 0) L.text(`$${lv.cost.toLocaleString('en-US')}`, 880, y + 58 * k, Math.round(40 * k), owned ? 'dim' : 'accent', 'right', 700);
+      const bh = 80 * k;
+      if (track === 'bait' && owned) {
+        // a bait you've got: put it on the hook
+        L.button(`use:${track}:${level}`, on ? 'ON HOOK ✓' : 'USE', 906, y + 14 * k, 250, bh, on ? 'done' : 'go', Math.round((on ? 30 : 36) * k));
+        return;
+      }
       const afford = this.state.money >= lv.cost;
       const st = owned || maxed ? 'done' : !next ? 'off' : afford ? 'go' : 'off';
-      L.button(`buy:${track}:${level}`, owned || maxed ? 'YOURS ✓' : next ? 'BUY' : 'NEXT', 906, y + 14, 250, 80, st, owned || maxed || !next ? 30 : 36);
+      L.button(`buy:${track}:${level}`, owned || maxed ? 'YOURS ✓' : next ? 'BUY' : 'NEXT', 906, y + 14 * k, 250, bh, st, Math.round((owned || maxed || !next ? 30 : 36) * k));
     });
     if (this.note) L.text(this.note, 44, BH - 38, 28, this.noteColour, 'left', 600, BW - 88);
+    L.end();
+  }
+}
+
+/**
+ * Show a level of a track you've bought (fishing/gear.ts LOOK_TRACKS): only its look. Your best
+ * clears the pick, so the next one you buy is the one you use. Saved and told if it changed.
+ */
+function pickLook(state: GameState, track: string, level: number): boolean {
+  const best = state.upgrades[track] | 0;
+  if (!LOOK_TRACKS.includes(track) || !Number.isInteger(level) || level < 0 || level > best) return false;
+  const was = shownLevel(state.upgrades, state.looks, track);
+  if (level === best) delete state.looks[track];
+  else state.looks[track] = level;
+  if (level !== was) {
+    uiClick();
+    state.save();
+    state.emit();
+  }
+  return true;
+}
+
+/* ── the tackle shop's rod rack: which rod's in your hand ─────────────── */
+
+const RW = 1240;
+const RH = 560;
+
+/** the board's two columns: what each track's pick is called, and what its number is */
+const RACK: { track: 'rod' | 'reel'; on: string; stat: (lv: Record<string, unknown>) => string; same: string; you: string }[] = [
+  { track: 'rod', on: 'IN HAND ✓', stat: (lv) => `casts ${lv.castM} m`, same: 'casts as far as', you: 'cast as far as' },
+  { track: 'reel', on: 'ON ROD ✓', stat: (lv) => `reels in ${lv.reelSpeed} m/s`, same: 'reels in as fast as', you: 'reel in as fast as' },
+];
+
+/**
+ * A board on the wall by the rack of rods: every rod and every reel, the ones you've bought with
+ * a USE button, the ones you fish with ticked. You cast as far as your best rod and reel in as
+ * fast as your best reel, whichever you use.
+ */
+export class RodRackBoard {
+  private readonly board: InteractivePanel;
+  private readonly letters: Lettering;
+  private readonly pics = new Map<string, HTMLCanvasElement>();
+  private note = '';
+
+  constructor(
+    room: Interior,
+    private readonly state: GameState,
+    kit: Kit,
+  ) {
+    for (const { track } of RACK) UPGRADES[track].levels.forEach((_, lv) => this.pics.set(`${track}:${lv}`, thumbnail(kit.renderer, gearIcon(kit, track, lv))));
+    const W = 1.0;
+    this.board = new InteractivePanel([RW, RH], [W, (W * RH) / RW]);
+    const look = lookFor(room.name);
+    this.letters = new Lettering(this.board, look, room.name.charCodeAt(0) * 3 + 1);
+    mount(this.board, look, { renderer: kit.renderer });
+    // on the left wall, between the rack and the door, facing into the room
+    this.board.mesh.position.set(-room.w / 2 + 0.02 + look.frame.d, 1.4, Math.min(room.d / 2 - W / 2 - 0.12, 1.15));
+    this.board.mesh.rotation.y = Math.PI / 2;
+    room.contents.add(this.board.mesh);
+    this.board.paint = () => this.paint();
+    this.board.onClick = (id) => this.click(id);
+    this.board.repaintOnFonts(() => this.paint());
+    register(this.board);
+    state.onChange(() => this.paint());
+    this.paint();
+  }
+
+  click(id: string): void {
+    const [act, track, lv] = id.split(':');
+    const level = Number(lv);
+    const col = RACK.find((c) => c.track === track);
+    if (act !== 'use' || !col || !pickLook(this.state, track, level)) return;
+    const best = this.state.upgrades[track] | 0;
+    const lvs = UPGRADES[track].levels;
+    this.note = `${track === 'rod' ? 'In your hand' : 'On your rod'}: the ${lvs[level].label.toLowerCase()}.` + (level < best ? ` It ${col.same} your ${lvs[best].label.toLowerCase()}.` : '');
+    this.paint();
+  }
+
+  private paint(): void {
+    const L = this.letters;
+    const u = this.state.upgrades;
+    L.begin();
+    L.title('YOUR ROD AND REEL', 36, 70, 48, 'left', RW - 72);
+    const behind = RACK.filter((c) => shownLevel(u, this.state.looks, c.track) < (u[c.track] | 0)).map((c) => `${c.you} your ${UPGRADES[c.track].levels[u[c.track] | 0].label}`);
+    L.text(behind.length ? `you still ${behind.join(' and ')}` : 'pick the ones you fish with: only the look changes', 36, 108, 24, 'dim', 'left', 600, RW - 72);
+    const rowH = 90;
+    RACK.forEach((c, k) => {
+      const x0 = 32 + k * 604;
+      const best = u[c.track] | 0;
+      const shown = shownLevel(u, this.state.looks, c.track);
+      UPGRADES[c.track].levels.forEach((lv, i) => {
+        const y = 124 + i * rowH;
+        const owned = i <= best;
+        const on = i === shown;
+        L.thumb(this.pics.get(`${c.track}:${i}`), x0, y + 6, rowH - 14, !owned);
+        L.text(lv.label, x0 + 94, y + 40, 28, on ? 'ink' : 'dim', 'left', 700, 300);
+        L.text(owned ? c.stat(lv) : `$${lv.cost.toLocaleString('en-US')} at the counter`, x0 + 94, y + 70, 22, 'dim', 'left', 500, 300);
+        if (owned) L.button(`use:${c.track}:${i}`, on ? c.on : 'USE', x0 + 404, y + 12, 164, 64, on ? 'done' : 'go', on ? 22 : 30);
+      });
+    });
+    if (this.note) L.text(this.note, 36, RH - 36, 20, 'good', 'left', 600, RW - 72);
     L.end();
   }
 }

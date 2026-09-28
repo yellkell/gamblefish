@@ -53,6 +53,7 @@ import { LineWraps } from '../world/lineWrap.ts';
 import type { Surfaces, Vec3 } from '../world/surfaces.ts';
 import type { Kit } from '../village/craft.ts';
 import { BaitRig } from './baitRig.ts';
+import { shownLevel } from './gear.ts';
 import { CatchCard, Toast } from './hud.ts';
 import { CLAMP_Y, RodGauge } from './rodGauge.ts';
 import { swim, type FishUniforms, type Props } from './props.ts';
@@ -1131,8 +1132,9 @@ export class FishingSystem extends createSystem({}) {
   /** The rod, the line and what's on the hook, as you've bought them (the shops' upgrades). */
   private dressGear(): void {
     const u = fishingDeps.state!.upgrades;
-    this.rod.dress({ rod: u.rod | 0, reel: u.reel | 0, line: u.line | 0 });
-    this.bait.setGear(u.bait | 0, u.hooks | 0);
+    const looks = fishingDeps.state!.looks;
+    this.rod.dress({ rod: shownLevel(u, looks, 'rod'), reel: shownLevel(u, looks, 'reel'), line: u.line | 0 });
+    this.bait.setGear(shownLevel(u, looks, 'bait'), u.hooks | 0);
     const line = Math.max(0, Math.min(LINE.length - 1, u.line | 0));
     if (line !== this.lineLevel) {
       this.lineLevel = line;

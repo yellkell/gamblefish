@@ -185,7 +185,11 @@ and the vendors.
     rod's vertices with its material, so it's repainted in place.
   - Your hook and bait hang under the float on a short leader (`src/fishing/baitRig.ts`): the
     shops' own models, swinging on the cast, sinking under the float in the water, gone
-    while a fish has them.
+    while a fish has them. At the Bait Shop every bait you've bought (and the frozen shrimp you
+    started with) has a **USE** button to put it on the hook, and at the Tackle Shop a **YOUR
+    ROD AND REEL** board on the wall by the rack does the same for the rod in your hand and the
+    reel on it. That only changes the look: the bites come as fast as your best bait brings them,
+    you cast as far as your best rod and reel in as fast as your best reel. Buying new gear puts it on. The picks are saved (`looks`, by track).
 - **Trophy fish** (`src/fishing/trophyFish.ts`): roosterfish, opah, sailfish,
   swordfish (night only) and blue marlin. They bite only when you have the gear each one
   needs and the bobber is over deep enough water (8–13 m, out past the drop-off off the

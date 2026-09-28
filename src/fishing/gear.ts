@@ -96,6 +96,20 @@ export function gearEffect(levels: Level[], track: string, level: number, have: 
  */
 export const baitShift = (d: { baitGoop?: unknown; upgrades?: { bait?: unknown } }): number => (d.baitGoop !== true && Number(d.upgrades?.bait) >= 1 ? 1 : 0);
 
+/**
+ * The level of a track you're showing: the one you picked (`looks`: the rod and reel on the
+ * tackle shop's rack board, the bait at the bait shop) if you still have it, else your best. Only the look: what the
+ * gear does always goes by your best.
+ */
+export const shownLevel = (upgrades: Record<string, number>, looks: Record<string, number> | undefined, track: string): number => {
+  const best = upgrades[track] | 0;
+  const look = looks?.[track];
+  return look !== undefined && Number.isInteger(look) && look >= 0 && look <= best ? look : best;
+};
+
+/** The tracks whose look you can pick, and where (village/gearShop.ts). */
+export const LOOK_TRACKS = ['rod', 'reel', 'bait'];
+
 /** Which tracks each village shop sells (village/gearShop.ts). */
 export const GEAR_SHOPS: Record<string, string[]> = {
   S3: ['rod', 'reel', 'line', 'hooks'],

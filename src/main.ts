@@ -40,7 +40,7 @@ import { BlackjackTable } from './casino/BlackjackTable.ts';
 import { PointerSystem } from './ui/pointer.ts';
 import { buildInteriors, interiorAt, openColliders, type Interior } from './village/interiors.ts';
 import { GOODS, HOME, HOME_SHOPS, HomeShopCounter, Shack, VILLA, VILLA_SHOPS } from './village/homeGoods.ts';
-import { GearShopCounter } from './village/gearShop.ts';
+import { GearShopCounter, RodRackBoard } from './village/gearShop.ts';
 import { GEAR_COUNTERS, JEWELLER } from './village/interiors.ts';
 import { GemWindows } from './village/gemWindows.ts';
 import { Villa } from './village/villa.ts';
@@ -420,6 +420,9 @@ World.create(container, {
   // the fishing upgrades: tackle, bait and luck (fishing/gear.ts)
   await built(0.9);
   const gearShops = GEAR_COUNTERS.map((n) => room(n)).filter((r): r is Interior => !!r).map((r) => new GearShopCounter(r, game, kit));
+  // and at the tackle shop, a board by the rack of rods: which of your rods and reels you fish with
+  const tackle = room('S3');
+  const rodRack = tackle ? new RodRackBoard(tackle, game, kit) : null;
   // Coral at home, and what you've given her
   await built(0.95);
   const villaRoom = room(VILLA);
@@ -453,7 +456,7 @@ World.create(container, {
   };
 
   // Dev hook: drive the rig without a headset (`__fish.move.to(x, z, yaw)`).
-  (window as unknown as { __fish: unknown }).__fish = { world, surfaces, move: teleportView, json, game, fishing: fishingView, vegetation, backpack: backpackView, interiors, tables, music, shore, sky, homeShops, gearShops, villa, fx, props: fishingDeps.props, wood: woodView, skelter: skelterView, camps: campView, mining: mineView, gemWindows, statue, spotFor };
+  (window as unknown as { __fish: unknown }).__fish = { world, surfaces, move: teleportView, json, game, fishing: fishingView, vegetation, backpack: backpackView, interiors, tables, music, shore, sky, homeShops, gearShops, rodRack, villa, fx, props: fishingDeps.props, wood: woodView, skelter: skelterView, camps: campView, mining: mineView, gemWindows, statue, spotFor };
 
   if (import.meta.env.DEV) void import('./dev/harness.ts').then((m) => m.installHarness(world));
 
