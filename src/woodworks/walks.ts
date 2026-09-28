@@ -358,6 +358,9 @@ export class Walks {
           P.box(s, lx, DECK + 2.62, lz, 0.19, 0.04, 0.19, post);
           P.box(s, lx, DECK + 2.48, lz + 0.26, 0.07, 0.07, 0.52, post);
           P.brace(s, lx, DECK + 2.12, lz + 0.07, DECK + 2.45, lz + 0.3, 0.05, post);
+          // (a lamp post, as the pier's are: a fishing line swung against it goes round it)
+          const [px, pz] = toWorld(lx, lz);
+          colliders[s].push({ tag: 'lampPost', walkable: false, solid: true, cx: px, cz: pz, hx: 0.065, hz: 0.065, rotY: yaw, top: DECK + 2.64, bottom: DECK });
           const [wx, wz] = toWorld(lx, lz + 0.46);
           const lamp = lantern(lanternGlass);
           lamp.position.set(wx, DECK + 2.445, wz);

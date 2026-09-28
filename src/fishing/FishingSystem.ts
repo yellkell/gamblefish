@@ -49,7 +49,8 @@ import type { WristWallet } from '../ui/wallet.ts';
 import type { WorldJson } from '../world/data.ts';
 import type { Heightfield } from '../world/heightfield.ts';
 import type { Ocean } from '../world/ocean.ts';
-import type { Surfaces } from '../world/surfaces.ts';
+import { LineWraps } from '../world/lineWrap.ts';
+import type { Surfaces, Vec3 } from '../world/surfaces.ts';
 import { CatchCard, Toast } from './hud.ts';
 import { CLAMP_Y, RodGauge } from './rodGauge.ts';
 import { swim, type FishUniforms, type Props } from './props.ts';
@@ -140,12 +141,12 @@ const _x = new Vector3();
 const _h = new Vector3();
 const _up = new Vector3(0, 1, 0);
 const _q = new Quaternion();
-/** where the line rests on its way down (updateLine) */
-const _rests = Array.from({ length: 16 }, () => new Vector3());
 /** and where it comes down outside the pier and in under it, to a fish under it */
 const _edgeTop = new Vector3();
 const _edgeUnder = new Vector3();
-const LINE_N = 40;
+/** the line's points: enough for every corner it can have (16 rests on each of five stretches
+ *  between the posts it's round, 8 round each post) and still curve between them */
+const LINE_N = 128;
 
 /** A point `t` along the curve from `a` up through a point `rise` m high over `a`, to `b`. */
 function bezier(a: Vector3, rise: number, b: Vector3, t: number, out: Vector3): Vector3 {
@@ -153,6 +154,8 @@ function bezier(a: Vector3, rise: number, b: Vector3, t: number, out: Vector3): 
   out.set(u * u * a.x + 2 * u * t * a.x + t * t * b.x, u * u * a.y + 2 * u * t * rise + t * t * b.y, u * u * a.z + 2 * u * t * a.z + t * t * b.z);
   return out;
 }
+
+const dist = (p: Vec3, q: Vec3): number => Math.hypot(q.x - p.x, q.y - p.y, q.z - p.z);
 
 const smooth = (e0: number, e1: number, x: number): number => {
   const t = Math.min(1, Math.max(0, (x - e0) / (e1 - e0)));
@@ -175,7 +178,9 @@ export class FishingSystem extends createSystem({}) {
   private lineGeo!: LineGeometry;
   private lineMat!: LineMaterial;
   private readonly lineBuf = new Float32Array((LINE_N + 1) * 3);
-  private readonly linePts: Vector3[] = [];
+  private readonly linePts: Vec3[] = [];
+  /** the posts the line's caught round (world/lineWrap.ts) */
+  private wraps: LineWraps | null = null;
 
   private bite: Bite | null = null;
   private fight: CatchMinigame | null = null;
@@ -1276,16 +1281,22 @@ export class FishingSystem extends createSystem({}) {
     // sand), rather than through it: pulled taut over all of it, from corner to corner. A fish
     // that's gone in under the pier has the line down outside the posts and in under the beams to
     // it, as a real line bends round the timber. The same in flight: a cast coming down past the
-    // rail pulls the line over it, not through it.
+    // rail pulls the line over it, not through it. Swung against a lamp post from the side, it
+    // goes round it instead, and stays round it till it's swung back clear.
     const pts = this.linePts;
     pts.length = 0;
     pts.push(a);
     const S = fishingDeps.surfaces;
     if (S) {
+      const W = (this.wraps ??= new LineWraps(S));
+      if (this.state === 'idle' || this.state === 'windup') W.reset();
       let end: Vector3 = b;
       if (S.lineUnder(a, b, _edgeTop, _edgeUnder)) end = _edgeTop;
-      const n = S.lineRests(a, end, _rests);
-      for (let k = 0; k < n; k++) pts.push(_rests[k]);
+      const m = W.lay(a, end);
+      for (let k = 0; k <= m; k++) {
+        for (let j = 0; j < W.restCounts[k]; j++) pts.push(W.rests[k][j]);
+        if (k < m) for (let j = 0; j < W.counts[k]; j++) pts.push(W.bends[k][j]);
+      }
       if (end !== b) pts.push(_edgeTop, _edgeUnder);
     }
     pts.push(b);
@@ -1295,7 +1306,7 @@ export class FishingSystem extends createSystem({}) {
     // it rests from under it, through the timber)
     const spans = pts.length - 1;
     let total = 0;
-    for (let k = 1; k <= spans; k++) total += pts[k].distanceTo(pts[k - 1]);
+    for (let k = 1; k <= spans; k++) total += dist(pts[k], pts[k - 1]);
     let left = LINE_N;
     let o = 0;
     this.lineBuf[o++] = a.x;
@@ -1304,11 +1315,11 @@ export class FishingSystem extends createSystem({}) {
     for (let k = 1; k <= spans; k++) {
       const p = pts[k - 1];
       const q = pts[k];
-      const len = p.distanceTo(q);
+      const len = dist(p, q);
       const n = k === spans ? left : Math.max(1, Math.min(left - (spans - k), Math.round((LINE_N * len) / Math.max(total, 1e-6))));
       left -= n;
-      _v.copy(p).lerp(q, 0.5);
-      if (spans === 1) _v.y -= S ? S.lineDroop(p, q, sag) : sag;
+      _v.set((p.x + q.x) / 2, (p.y + q.y) / 2, (p.z + q.z) / 2);
+      if (spans === 1) _v.y -= S ? S.lineDroop(p, q, sag, this.wraps?.skip) : sag;
       for (let j = 1; j <= n; j++) {
         const t = j / n;
         const u = 1 - t;
