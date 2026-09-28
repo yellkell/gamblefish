@@ -48,11 +48,15 @@ export interface GemInfo {
   fact: string;
 }
 
-export const GROUNDS: Record<Ground, { name: string; where: string }> = {
-  shore: { name: 'THE SHORE', where: 'rocks on the far shores' },
-  forest: { name: 'THE FOREST', where: 'rocks deep in the forest' },
-  high: { name: 'THE HIGH GROUND', where: 'rocks on the high ground, 55 m up and more' },
-  peak: { name: 'THE PEAKS', where: 'rocks up on the island’s peaks' },
+/**
+ * Each ground: its name, where its rocks are (the book's "Found in" line), and the signs to look
+ * for, the book's hint for a gem you haven't found yet (the conditions, never the gem).
+ */
+export const GROUNDS: Record<Ground, { name: string; where: string; signs: string }> = {
+  shore: { name: 'THE SHORE', where: 'big rocks on the far shores', signs: 'Down on the sand within sound of the surf, far from the village, salt dried white on the stone.' },
+  forest: { name: 'THE FOREST', where: 'big rocks deep in the forest', signs: 'In the shade under the trees, 10 to 45 m up, where moss has crept over the stone.' },
+  high: { name: 'THE HIGH GROUND', where: 'big rocks on the high ground', signs: 'Out on the bare shoulders of the hills, 55 to 90 m up, in dark basalt spotted with rusty lichen.' },
+  peak: { name: 'THE PEAKS', where: 'big rocks up on the peaks', signs: 'On the island’s summits, 120 m and higher, in pale speckled granite. A long climb.' },
 };
 
 export const GEMS: Record<string, GemInfo> = {

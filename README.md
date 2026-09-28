@@ -252,7 +252,9 @@ and the vendors.
     past the boatyard, with a log pile and a chopping block but no stall (`src/woodworks/lots.ts`).
     Once you own the axe, walk up to either and it's in your hand. Swing it into a trunk: four good blows and the tree creaks, falls away
     from you, and its 4 logs fly into your backpack. A sapling grows back from the stump
-    about a minute later. The backpack tray shows your log count.
+    about a minute later. Beside the backpack tray lies a little bundle of real logs, one for each
+    you carry up to a full stack of six, bound with rope, the count burnt into a pine tag
+    (`src/backpack/stash.ts`).
   - **The build boards** (`src/woodworks/buildSign.ts`): what asks for wood is a notice board of old
     planks nailed into a frame on two stakes, with a pitched cap, lettered by hand like the shop
     signs. How far along it is shows as a row of log ends, the ones in painted in, the rest chalked
@@ -349,10 +351,14 @@ and the vendors.
     flash their colours as it turns; the tourmaline is pink at the heart and green at the rind; the
     emerald cut's table shows its hall of mirrors. Little four-pointed stars flash on them.
   - **The book:** once the pickaxe is yours the field guide gains a last spread after the fish, the
-    eight gems four to a page. One you haven't found is a shadow and the ground it comes from; the
-    first you take fills its entry in (its names, where it's found, how many and your biggest, and a
-    true DID YOU KNOW? fact), and the stone itself lies on the page, turning. The backpack tray shows
-    how many gems are in your pouch. `npm run check:mining` checks that every rock is on its
+    eight gems four to a page. One you haven't found is a shadow with no name: where to look (the
+    ground, how high, what the stone looks like) and whether it's the common one there or a rare
+    one. The first you take fills its entry in (its names, where it's found, how many and your
+    biggest, and a true DID YOU KNOW? fact), and the stone itself lies on the page, turning.
+  - **The pouch:** once the pickaxe is yours (not before), a violet velvet drawstring pouch sits
+    beside the backpack tray, under the logs: pleated at the neck by a gold cord with tasselled
+    ends, your three most valuable kinds of stone sparkling in its open mouth, and a black velvet
+    tag with how many you have and what the Jeweller would give. `npm run check:mining` checks that every rock is on its
     ground, clear, standable and reachable, and that the stones and the pouch behave.
 - **The boards** (`src/ui/boards.ts`): every shop's, table's and counter's point-and-click board is a
   thing in the room, not a pane of dark glass: made of what that place would make it of, lettered

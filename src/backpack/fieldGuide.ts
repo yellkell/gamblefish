@@ -13,7 +13,8 @@
  * great white has the last page to itself. Point at the arrows in the page corners to turn.
  *
  * Once the Jeweller's pickaxe is yours, a last spread follows the fish: the island's eight gems,
- * four to a page. One you haven't found is a shadow and the ground it comes from; the first one
+ * four to a page. One you haven't found is a shadow with no name, and the conditions to look for
+ * (the kind of ground, how high, what the stone looks like) and how rare it is; the first one
  * you take out of a rock fills its entry in (its names, where it's found, how many you've had and
  * your biggest, and a true fact), and the stone itself lies on the page, turning in the light.
  */
@@ -393,14 +394,16 @@ export class FieldGuide {
       c.fillText(e ? g.name : '? ? ?', tx, y + 46, tw);
       c.font = `italic ${font(500, 22)}`;
       c.fillStyle = INK_FADED;
-      c.fillText(e ? g.mineral : 'not yet found', tx, y + 74, tw);
+      // not found yet: no name, no colour, just the conditions to look for, and how rare it is
+      const rare = g.rarity < 0.5;
+      c.fillText(e ? g.mineral : rare ? 'not yet found  ·  rare: only now and then' : 'not yet found  ·  the common one there', tx, y + 74, tw);
       c.font = font(600, 21);
       c.fillStyle = INK_BROWN;
       c.fillText(`Found in ${GROUNDS[g.where].where}`, tx, y + 102, tw);
       if (e) {
         c.fillText(`${e.count} found  ·  biggest ${e.bestCt.toFixed(2)} ct  ·  $${g.perCt}/ct`, tx, y + 128, tw);
         this.fact(c, id, tx, y + 140, tw, 3, 19, g.fact);
-      }
+      } else this.fact(c, id, tx, y + 118, tw, 3, 19, GROUNDS[g.where].signs, 'WHERE TO LOOK');
       if (i < page.ids.length - 1) {
         c.strokeStyle = 'rgba(90, 60, 30, 0.25)';
         c.lineWidth = 2;
@@ -443,7 +446,7 @@ export class FieldGuide {
   }
 
   /** A true fact, in a ruled box: "Did you know?" and up to `lines` lines. */
-  private fact(c: CanvasRenderingContext2D, id: string, x: number, y: number, w: number, lines: number, size: number, own?: string): void {
+  private fact(c: CanvasRenderingContext2D, id: string, x: number, y: number, w: number, lines: number, size: number, own?: string, heading = 'DID YOU KNOW?'): void {
     const text = own ?? FACTS[id];
     if (!text) return;
     const lh = size * 1.22;
@@ -458,7 +461,7 @@ export class FieldGuide {
     c.textAlign = 'left';
     c.font = font(700, size - 2);
     const head = own ? 24 : 30;
-    c.fillText('DID YOU KNOW?', x + 20, y + head);
+    c.fillText(heading, x + 20, y + head);
     c.font = `italic ${font(500, size)}`;
     c.fillStyle = INK_BROWN;
     wrap(c, text, x + 20, y + head + lh, w - 36, lh, lines);
