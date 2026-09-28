@@ -329,7 +329,6 @@ World.create(container, {
     addBox: (b: BoxCollider) => surfaces.addBox(b),
     removeBox: (b: BoxCollider) => surfaces.removeBox(b),
     env: casinoEnv(world.renderer),
-    night: sky.state.night,
     busy: () => backpackView.open || skelterView.onTower || woodView.axeOut || campView.busy || interiorAt(interiors, world.player.position.x, world.player.position.z) !== null,
   });
   world.registerSystem(MiningSystem);

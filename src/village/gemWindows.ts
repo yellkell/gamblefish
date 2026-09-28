@@ -3,8 +3,8 @@
  * glass and brass bars along it with two windows cut in it, and a board behind each.
  *
  *   THE PROSPECTOR'S WINDOW   sells the PICKAXE (one of them lies on the counter under it till
- *                             it's yours), and says what the rocks out in the wilds hold, ground
- *                             by ground: the ones you've found by name, the rest a shadow.
+ *                             it's yours), and nothing else: where the rocks are and what's in
+ *                             them is yours to find out.
  *   WE BUY GEMS               the other window. Every kind in your pouch, how many and what
  *                             they're worth, a SELL for each, and SELL ALL. On a velvet pad under
  *                             it lies one of each kind you've ever found.
@@ -16,7 +16,7 @@ import { Group, Vector3 } from 'three';
 import { uiDeny, winFanfare } from '../audio/sfx.ts';
 import type { GameState } from '../fishing/tidewater.ts';
 import { gemMesh, twinkles } from '../mining/gemMesh.ts';
-import { GEM_IDS, GEMS, GROUND_IDS, GROUNDS, gemsOf, sellGems } from '../mining/gems.ts';
+import { GEM_IDS, GEMS, sellGems } from '../mining/gems.ts';
 import { buildPickaxe } from '../mining/rock.ts';
 import { casinoEnv } from '../casino/look.ts';
 import { Lettering, LOOKS, mount, type InkName } from '../ui/boards.ts';
@@ -110,8 +110,9 @@ export class GemWindows {
     this.shownPick.scale.setScalar(0.8);
     g.add(this.shownPick);
     const pic = buildPickaxe(casinoEnv(r));
-    pic.rotation.set(0, Math.PI / 2, -0.5);
-    this.pickPic = thumbnail(r, pic, { dir: new Vector3(1, 0.3, 0.2).normalize() });
+    // side on, the haft running up to the head, diagonal across the picture
+    pic.rotation.set(0.75, 0, 0);
+    this.pickPic = thumbnail(r, pic, { dir: new Vector3(1, 0.12, 0.08).normalize() });
 
     // each gem's picture, and its shadow for the ones you've not found
     for (const id of GEM_IDS) {
@@ -184,7 +185,7 @@ export class GemWindows {
       return;
     }
     winFanfare(5);
-    this.pickNote = 'It’s yours! Walk up to a gem rock and it’s in your hand. Your field guide has gem pages now.';
+    this.pickNote = 'It’s yours! Your field guide has gem pages now.';
     this.pickNoteInk = 'good';
     this.paint();
   }
@@ -195,23 +196,15 @@ export class GemWindows {
     const [W, H] = PX;
     const own = s.gems.pick;
     L.begin();
-    L.title('PROSPECTOR’S WINDOW', 44, 86, 50, 'left', W - 88);
-    L.thumb(this.pickPic, 44, 120, 150);
-    L.text('The Prospector’s Pickaxe', 214, 168, 38, own ? 'dim' : 'ink', 'left', 700, 470);
-    L.text('forged steel on hickory · for gem rocks', 214, 206, 24, 'dim', 'left', 500, 470);
-    L.text(`$${PICKAXE_PRICE}`, 214, 252, 36, own ? 'dim' : 'accent', 'left', 700);
-    L.button('pick', own ? 'YOURS ✓' : 'BUY', W - 290, 150, 246, 90, own ? 'done' : s.money >= PICKAXE_PRICE ? 'go' : 'off', 40);
-    // what's out there, ground by ground
-    L.text('Big rocks stand out in the wilds, crystals showing through.', 44, 330, 25, 'ink', 'left', 600, W - 88);
-    L.text('Swing the point into one till it breaks: what’s inside depends on the ground.', 44, 364, 25, 'ink', 'left', 600, W - 88);
-    GROUND_IDS.forEach((gr, i) => {
-      const y = 430 + i * 64;
-      L.text(GROUNDS[gr].name, 44, y, 26, 'title', 'left', 700, 300);
-      const names = gemsOf(gr).map((id) => (s.gems.log[id] ? GEMS[id].name : '? ? ?'));
-      L.text(names.join('  ·  '), 360, y, 25, 'ink', 'left', 600, W - 404);
-      L.text(GROUNDS[gr].where, 360, y + 26, 19, 'dim', 'left', 500, W - 404);
-    });
-    if (this.pickNote) L.text(this.pickNote, 44, H - 36, 23, this.pickNoteInk, 'left', 600, W - 88);
+    // just the pick: where to use it is yours to find out
+    L.title('PROSPECTOR’S WINDOW', W / 2, 96, 54, 'center', W - 88);
+    L.thumb(this.pickPic, 60, 150, 300);
+    L.text('Pickaxe', 400, 236, 50, own ? 'dim' : 'ink', 'left', 700, 540);
+    L.text('forged steel on hickory', 400, 280, 26, 'dim', 'left', 500, 540);
+    L.text(`$${PICKAXE_PRICE}`, 400, 356, 58, own ? 'dim' : 'accent', 'left', 700);
+    L.button('pick', own ? 'YOURS ✓' : 'BUY', 400, 392, 540, 100, own ? 'done' : s.money >= PICKAXE_PRICE ? 'go' : 'off', 48);
+    L.text('For the big rocks out in the wilds.', W / 2, 580, 28, 'ink', 'center', 600, W - 88);
+    if (this.pickNote) L.text(this.pickNote, W / 2, H - 60, 26, this.pickNoteInk, 'center', 600, W - 88);
     L.end();
   }
 
@@ -255,7 +248,7 @@ export class GemWindows {
       const worth = mine.reduce((a, g) => a + g.value, 0);
       L.thumb(found ? this.pics.get(id) : this.shadows.get(id), x, y + 6, ch - 12, !mine.length && found);
       L.text(found ? GEMS[id].name : '? ? ?', x + ch + 4, y + 42, 27, found ? 'ink' : 'dim', 'left', 700, cw - ch - 10);
-      L.text(mine.length ? `×${mine.length} · $${worth.toLocaleString('en-US')}` : found ? 'none in your pouch' : `from ${GROUNDS[GEMS[id].where].name.toLowerCase()}`, x + ch + 4, y + 72, 21, mine.length ? 'accent' : 'dim', 'left', 600, cw - ch - 10);
+      L.text(mine.length ? `×${mine.length} · $${worth.toLocaleString('en-US')}` : found ? 'none in your pouch' : 'not yet found', x + ch + 4, y + 72, 21, mine.length ? 'accent' : 'dim', 'left', 600, cw - ch - 10);
       if (mine.length) L.button(`sell:${id}`, 'SELL', x + ch + 4, y + 82, 120, 34, 'go', 22);
     });
     L.button('all', pouch.length ? `SELL ALL ${pouch.length} · $${total.toLocaleString('en-US')}` : 'YOUR POUCH IS EMPTY', 44, H - 132, W - 88, 70, pouch.length ? 'go' : 'off', 34);

@@ -1,5 +1,5 @@
 /**
- * A GEM ROCK: a big boulder with crystals of what's inside it breaking through its skin.
+ * A GEM ROCK: a big boulder veined with light, the colour of the gems inside it.
  *
  *  - THE STONE is an icosphere, flattened, carved by a few fracture planes and roughened, in the
  *    ground's own stone: weathered grey-tan on the shore, mossy grey in the forest, dark basalt
@@ -21,19 +21,14 @@ import {
   CylinderGeometry,
   Float32BufferAttribute,
   Group,
-  Matrix4,
   Mesh,
   MeshLambertMaterial,
   MeshStandardMaterial,
-  Quaternion,
   Vector3,
-  type ShaderMaterial,
   type Texture,
 } from 'three';
-import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { stalk } from '../village/craft.ts';
 import { GEMS, gemsOf, type Ground } from './gems.ts';
-import { crystalPoint, gemMaterial, twinkles } from './gemMesh.ts';
 import { ROCK_H, ROCK_R } from './sites.ts';
 
 /** the stone of each ground: its colour, a second (moss, lichen, speckle) and where that goes */
@@ -43,6 +38,9 @@ const STONE: Record<Ground, { base: number; dark: number; accent: number; accent
   high: { base: 0x5a5452, dark: 0x3a3534, accent: 0xa8683a, accentUp: 0.4, speckle: 0.08 },
   peak: { base: 0xb0aaa4, dark: 0x7e7872, accent: 0x3a3634, accentUp: 0, speckle: 0.45 },
 };
+
+/** the veins' clock, shared by every rock (MiningSystem sets it) */
+export const ROCK_TIME = { value: 0 };
 
 /** the stone's colour on `ground` (for its rubble) */
 export function stoneColour(ground: Ground): Color {
@@ -115,14 +113,10 @@ export interface RockModel {
   stone: Mesh;
   /** the chunks it breaks into, each about its own middle (`home`: where that is in the rock) */
   chunks: { mesh: Mesh; home: Vector3 }[];
-  /** the crystals poking out, and their twinkles */
-  crystals: Group;
   /** the crack glow, 0 whole .. 1 about to go */
   crack: { value: number };
   /** the stone's own material (its crack colour) */
   material: MeshLambertMaterial;
-  /** the crystals' material (dimmed at night) */
-  crystalMat: ShaderMaterial;
 }
 
 /**
@@ -234,41 +228,8 @@ export function buildRock(ground: Ground, seed: number): RockModel {
     g.translate(-home.x, -home.y, -home.z);
     return { mesh: new Mesh(g, material), home };
   });
-  // the crystals: clusters on the upper faces, pointing out along the surface
-  const gem = gemsOf(ground)[0];
-  const crystalMat = gemMaterial(gem, 'rock');
-  const crystals = new Group();
-  const parts: BufferGeometry[] = [];
-  const clusters = 4 + Math.floor(r() * 3);
-  for (let c = 0; c < clusters; c++) {
-    // a face on the upper half, facing out
-    let fi = 0;
-    for (let tries = 0; tries < 40; tries++) {
-      fi = Math.floor(r() * (f.length / 3)) * 3;
-      const m = pts[f[fi]].clone().add(pts[f[fi + 1]]).add(pts[f[fi + 2]]).divideScalar(3);
-      if (m.y > sy * 0.35) break;
-    }
-    const [a, b, cc] = [pts[f[fi]], pts[f[fi + 1]], pts[f[fi + 2]]];
-    const at = a.clone().add(b).add(cc).divideScalar(3);
-    const n = b.clone().sub(a).cross(cc.clone().sub(a)).normalize();
-    if (n.dot(at.clone().sub(centre)) < 0) n.negate();
-    const pointsIn = 3 + Math.floor(r() * 3);
-    for (let k = 0; k < pointsIn; k++) {
-      const g = crystalPoint(seed * 7 + c * 13 + k);
-      const len = (0.2 + r() * 0.22) * (k === 0 ? 1.35 : 1);
-      const dir = n.clone().add(new Vector3(r() - 0.5, r() - 0.5, r() - 0.5).multiplyScalar(0.9)).normalize();
-      const q = new Quaternion().setFromUnitVectors(new Vector3(0, 1, 0), dir);
-      const off = new Vector3(r() - 0.5, 0, r() - 0.5).multiplyScalar(0.12).applyQuaternion(q);
-      g.applyMatrix4(new Matrix4().compose(at.clone().add(off).addScaledVector(dir, -0.04), q, new Vector3(len * 0.5, len, len * 0.5)));
-      parts.push(g);
-    }
-    const tw = twinkles(3, 0.08, GEMS[gem].colour, seed + c, 1.6);
-    tw.position.copy(at).addScaledVector(n, 0.12);
-    crystals.add(tw);
-  }
-  crystals.add(new Mesh(mergeGeometries(parts, false)!, crystalMat));
   const crack = material.userData.crack as { value: number };
-  return { stone, chunks, crystals, crack, material, crystalMat };
+  return { stone, chunks, crack, material };
 }
 
 function geo(pos: number[], col: number[], computeFlat: boolean): BufferGeometry {
@@ -282,8 +243,9 @@ function geo(pos: number[], col: number[], computeFlat: boolean): BufferGeometry
 
 /**
  * The stone: faceted and vertex-coloured, lit by the island's sun and moon. Along veins laid
- * through it (in its own frame, so the chunks carry theirs away) the gems' light shows through
- * the cracks as they open (`userData.crack`, 0..1), in the ground's gem colour.
+ * through it (in its own frame, so the chunks carry theirs away) the gems' light shows, in the
+ * ground's gem colour: softly, breathing (ROCK_TIME), while it's whole; wider and brighter as the
+ * pick opens the cracks (`userData.crack`, 0..1).
  */
 function crackMaterial(ground: Ground): MeshLambertMaterial {
   const m = new MeshLambertMaterial({ vertexColors: true, flatShading: true });
@@ -292,6 +254,7 @@ function crackMaterial(ground: Ground): MeshLambertMaterial {
   m.userData.crack = crack;
   m.onBeforeCompile = (sh) => {
     sh.uniforms.uCrack = crack;
+    sh.uniforms.uRockTime = ROCK_TIME;
     sh.uniforms.uCrackGlow = glow;
     sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vRockP;').replace('#include <begin_vertex>', '#include <begin_vertex>\nvRockP = position;');
     sh.fragmentShader = sh.fragmentShader
@@ -299,6 +262,7 @@ function crackMaterial(ground: Ground): MeshLambertMaterial {
         '#include <common>',
         `#include <common>
 uniform float uCrack;
+uniform float uRockTime;
 uniform vec3 uCrackGlow;
 varying vec3 vRockP;
 float rockVein(vec3 p) {
@@ -313,11 +277,15 @@ float rockVein(vec3 p) {
       .replace(
         '#include <emissivemap_fragment>',
         `#include <emissivemap_fragment>
-if (uCrack > 0.001) {
-  float w = 0.03 + 0.12 * uCrack;
-  float v = 1.0 - smoothstep(0.0, w, rockVein(vRockP));
-  totalEmissiveRadiance += uCrackGlow * v * (0.6 + 2.2 * uCrack);
-  diffuseColor.rgb *= 1.0 - v * 0.8;
+{
+  // whole, the veins breathe; struck, they open and blaze
+  float w = 0.05 + 0.11 * uCrack;
+  float d = rockVein(vRockP);
+  float v = 1.0 - smoothstep(0.0, w, d);
+  float halo = (1.0 - smoothstep(w, w * 3.0, d)) * 0.25;
+  float breathe = 0.85 + 0.15 * sin(uRockTime * 1.7 + dot(vRockP, vec3(2.1, 1.3, 1.7)));
+  totalEmissiveRadiance += uCrackGlow * (v + halo) * (1.3 + 2.6 * uCrack) * breathe;
+  diffuseColor.rgb *= 1.0 - v * 0.85;
 }`,
       );
   };

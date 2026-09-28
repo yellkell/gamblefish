@@ -4,13 +4,14 @@
  *  THE PICKAXE   bought at the Jeweller's first window (village/gemWindows.ts). Once it's yours,
  *                walk up to a gem rock and it's in your hand (the rod goes over your shoulder), as
  *                the axe is among the trees.
- *  THE ROCKS     sixteen, four on each kind of ground (mining/sites.ts), crystals of what's inside
- *                breaking through their skin. Swing the pick's point into one: steel rings on
- *                stone, chips and sparks fly, a jolt in your hand, and the cracks open wider, the
- *                gems' light shining out through them. Six good blows and it bursts apart.
+ *  THE ROCKS     sixteen, four on each kind of ground (mining/sites.ts), veined with lines of
+ *                light in the colour of what's inside. Swing the pick's point into one: steel rings on
+ *                stone, chips and sparks fly, a jolt in your hand, and the veins open wider and
+ *                blaze. Six good blows and it bursts apart, and the sparkle blinds you for a moment.
  *  THE TRAY      out of the rubble rises a tray like the dancers' chest pack, lined in black
  *                velvet, with the rock's stones lying in its slots, turning in the light: what's in
- *                it depends on the ground (mining/gems.ts). Reach in and click one (trigger or grip)
+ *                it depends on the ground (mining/gems.ts);
+ *                its board doesn't say where you are, only what the sparkle does to your eyes. Reach in and click one (trigger or grip)
  *                and it's in your pouch; TAKE ALL; CLOSE. Walk away and it sinks back; come back
  *                and it rises again, until you've taken everything.
  *  REGROWING     a few minutes after it breaks, once you're away from it, the rock grows back out
@@ -24,6 +25,7 @@
 import { createSystem, InputComponent } from '@iwsdk/core';
 import {
   AdditiveBlending,
+  BackSide,
   BoxGeometry,
   Color,
   DodecahedronGeometry,
@@ -35,6 +37,7 @@ import {
   MeshLambertMaterial,
   Object3D,
   Quaternion,
+  SphereGeometry,
   Vector3,
   type Points,
   type Texture,
@@ -52,8 +55,8 @@ import { INK, Panel } from '../ui/panel.ts';
 import { InteractivePanel, pointerView, register } from '../ui/pointer.ts';
 import type { BoxCollider } from '../world/data.ts';
 import { dropTwinkles, gemMesh, tickGems, twinkles } from './gemMesh.ts';
-import { GEMS, GROUNDS, pocket, ROCK_GRID, rockStock, type RockGem } from './gems.ts';
-import { buildPickaxe, buildRock, PICK_TIP, stoneColour, type RockModel } from './rock.ts';
+import { GEMS, pocket, ROCK_GRID, rockStock, type RockGem } from './gems.ts';
+import { buildPickaxe, buildRock, PICK_TIP, ROCK_TIME, stoneColour, type RockModel } from './rock.ts';
 import { ROCK_H, ROCK_R, ROCK_SITES, type RockSite } from './sites.ts';
 
 type Hand = 'left' | 'right';
@@ -65,11 +68,9 @@ export const mineDeps: {
   addBox: ((b: BoxCollider) => void) | null;
   removeBox: ((b: BoxCollider) => void) | null;
   env: Texture | null;
-  /** 0 by day .. 1 after dark (world/sky.ts) */
-  night: { value: number } | null;
   /** indoors, the backpack open, up the helter skelter, the axe out (the pick stays away) */
   busy: (() => boolean) | null;
-} = { state: null, ground: null, addBox: null, removeBox: null, env: null, night: null, busy: null };
+} = { state: null, ground: null, addBox: null, removeBox: null, env: null, busy: null };
 
 /** Anyone can ask: is the pick in your hand, is a rock's tray open (the rod goes away for either)? */
 export const mineView: {
@@ -101,6 +102,11 @@ const DRAW_R = 260;
 /** the tray: black velvet, lit from within */
 const GEM_TRAY = { lining: 0x160a1e, glow: 0.55 };
 const TILT = (35 * Math.PI) / 180;
+/** what the tray says as it rises, the sparkle in your eyes (one each time) */
+const DAZZLED = ['Blinding!', 'My eyes!', 'So bright!', 'Dazzling!', 'Look at them shine!', 'Too sparkly!'];
+/** the glare when a rock bursts: how long, and how bright at its peak (looking straight at it) */
+const GLARE_S = 1.1;
+const GLARE_PEAK = 0.8;
 /** a stone in the tray, across its girdle (m) */
 const STONE = 0.072;
 
@@ -167,6 +173,11 @@ export class MiningSystem extends createSystem({}) {
   private dismissed: Rock | null = null;
   private hover: RockGem | null = null;
   private infoKey = '';
+  private dazzle = DAZZLED[0];
+  /** the glare filling your eyes as a rock bursts: a bright shell round your head, fading */
+  private glare!: Mesh;
+  private glareT = GLARE_S;
+  private glareK = 0;
   private readonly placedFrom = new Vector3();
   private readonly trig: Record<Hand, boolean> = { left: false, right: false };
   private readonly grip: Record<Hand, boolean> = { left: false, right: false };
@@ -188,7 +199,7 @@ export class MiningSystem extends createSystem({}) {
       group.position.copy(base);
       group.rotation.y = site.yaw;
       group.scale.setScalar(site.size);
-      group.add(model.stone, model.crystals);
+      group.add(model.stone);
       this.scene.add(group);
       const box: BoxCollider = { tag: 'gemRock', walkable: false, solid: true, cx: site.x, cz: site.z, hx: ROCK_R * site.size * 0.85, hz: ROCK_R * site.size * 0.85, rotY: 0, top: base.y + ROCK_H * site.size * 0.8, bottom: base.y - 1 };
       d.addBox!(box);
@@ -210,6 +221,14 @@ export class MiningSystem extends createSystem({}) {
     this.sparks.frustumCulled = false;
     this.scene.add(this.sparks);
     this.buildTray();
+    this.glare = new Mesh(
+      new SphereGeometry(0.2, 16, 12),
+      new MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0, blending: AdditiveBlending, side: BackSide, depthTest: false, depthWrite: false, toneMapped: false, fog: false }),
+    );
+    this.glare.renderOrder = 999;
+    this.glare.frustumCulled = false;
+    this.glare.visible = false;
+    this.camera.add(this.glare);
     mineView.system = this;
     mineView.nearest = () => {
       const n = this.nearest(this.camera.getWorldPosition(_v));
@@ -246,12 +265,10 @@ export class MiningSystem extends createSystem({}) {
     if (!this.ready || introActive()) return;
     const dt = Math.min(delta, 0.05);
     tickGems(time);
-    const night = mineDeps.night?.value ?? 0;
+    ROCK_TIME.value = time;
     const eye = this.camera.getWorldPosition(_v).clone();
     for (const r of this.rocks) {
       r.group.visible = Math.hypot(r.base.x - eye.x, r.base.z - eye.z) < DRAW_R;
-      // the crystals catch the moon, not a studio's lamps, after dark
-      r.model.crystalMat.uniforms.uBright.value = 1 - 0.55 * night;
       this.updateRock(r, dt, eye);
     }
     // the pick comes out by a whole rock (if it's yours), and the rod goes away (fishingDeps.indoors)
@@ -274,6 +291,14 @@ export class MiningSystem extends createSystem({}) {
     });
     this.animateFlights(dt);
     this.toast.update(dt, this.camera);
+    if (this.glareT < GLARE_S) {
+      this.glareT += dt;
+      const k = this.glareT / GLARE_S;
+      // a flash in a blink, then a long fade, flickering as it goes
+      const a = k < 0.08 ? k / 0.08 : Math.pow(1 - (k - 0.08) / 0.92, 2) * (0.85 + 0.15 * Math.sin(this.glareT * 40));
+      (this.glare.material as MeshBasicMaterial).opacity = this.glareK * Math.max(0, a);
+      if (this.glareT >= GLARE_S) this.glare.visible = false;
+    }
   }
 
   /** The pick in your right hand; its point biting into a rock. */
@@ -340,7 +365,6 @@ export class MiningSystem extends createSystem({}) {
     r.t = 0;
     r.stock = rockStock(r.site.ground, Math.random);
     r.model.stone.visible = false;
-    r.model.crystals.visible = false;
     mineDeps.removeBox?.(r.box);
     const g = new Group();
     g.position.copy(r.group.position);
@@ -367,6 +391,13 @@ export class MiningSystem extends createSystem({}) {
       const a = Math.random() * Math.PI * 2;
       this.chipList.push({ p: centre.clone().add(new Vector3(Math.cos(a) * 0.4, 0, Math.sin(a) * 0.4)), v: new Vector3(Math.cos(a) * 2.2, 1.5 + Math.random() * 2.5, Math.sin(a) * 2.2), age: 0, c: stoneColour(r.site.ground), s: 1 + Math.random() });
     }
+    // the sparkle blinds you: brightest if you're looking straight at it, tinted with its stones
+    const look = this.camera.getWorldDirection(_w);
+    const to = _v.copy(centre).sub(this.camera.getWorldPosition(new Vector3())).normalize();
+    this.glareK = GLARE_PEAK * (0.35 + 0.65 * Math.max(0, look.dot(to)));
+    this.glareT = 0;
+    (this.glare.material as MeshBasicMaterial).color.set(GEMS[r.stock[0]?.id ?? 'peridot'].colour).lerp(new Color(0xffffff), 0.55);
+    this.glare.visible = true;
     if (!quiet) {
       rockBreak();
       const s = this.renderer.xr.getSession() ?? undefined;
@@ -382,7 +413,6 @@ export class MiningSystem extends createSystem({}) {
       r.shake = Math.max(0, r.shake - dt * 5);
       const sh = r.shake * 0.02 * Math.sin(performance.now() * 0.09);
       m.stone.position.set(sh, 0, sh * 0.6);
-      m.crystals.position.copy(m.stone.position);
       return;
     }
     if (r.state === 'breaking') {
@@ -431,7 +461,6 @@ export class MiningSystem extends createSystem({}) {
         if (r.rubble) r.group.remove(r.rubble);
         r.rubble = null;
         m.stone.visible = true;
-        m.crystals.visible = true;
         mineDeps.addBox?.(r.box);
       }
       return;
@@ -441,13 +470,10 @@ export class MiningSystem extends createSystem({}) {
     const e = k * k * (3 - 2 * k);
     m.stone.scale.set(1, Math.max(0.02, e), 1);
     m.stone.position.set(0, 0, 0);
-    m.crystals.scale.setScalar(Math.max(0.02, e));
-    m.crystals.position.set(0, 0, 0);
     if (k >= 1) {
       r.state = 'whole';
       r.t = 0;
       m.stone.scale.setScalar(1);
-      m.crystals.scale.setScalar(1);
     }
   }
 
@@ -536,6 +562,7 @@ export class MiningSystem extends createSystem({}) {
     if (this.openRock === r) return;
     if (this.openRock) this.closeTray();
     this.openRock = r;
+    this.dazzle = DAZZLED[Math.floor(Math.random() * DAZZLED.length)];
     this.tray.group.userData.rise = 0;
     this.placeTray(r);
     this.syncStones();
@@ -719,7 +746,8 @@ export class MiningSystem extends createSystem({}) {
     this.infoKey = key;
     const L = this.infoLetters;
     L.begin();
-    L.title(GROUNDS[r.site.ground].name, 28, 66, 30, 'left', 400);
+    // no name for where you are: just what the sparkle does to your eyes
+    L.title(this.dazzle, 28, 66, 34, 'left', 420);
     if (r.stock.length) L.text(`worth $${worth}`, 612, 64, 24, 'accent', 'right', 700);
     if (h) {
       const g = GEMS[h.id];

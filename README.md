@@ -320,19 +320,21 @@ and the vendors.
   - **The Jeweller's windows** (`src/village/gemWindows.ts`): a second counter down the Jeweller's
     right-hand wall, a screen of glass and brass bars along it with two windows cut in it, a board
     over each. The **Prospector's Window** sells the **pickaxe** ($250; one lies on the counter till
-    it's yours) and says what each ground holds, the gems you've found by name. **We Buy Gems**
+    it's yours) and nothing else: where the rocks are is yours to find out. **We Buy Gems**
     shows every kind in your pouch with a SELL for each, and SELL ALL; one of each kind you've
     ever found lies on a velvet pad under it.
   - **The rocks** (`src/mining/sites.ts`, `src/mining/rock.ts`): sixteen big boulders out in the
-    wilds, four on each kind of ground, none on the chart; crystals of what's inside break through
-    their skin and twinkle. The bake clears the plants and Tidewater's own rocks round each. Own the
+    wilds, four on each kind of ground, none on the chart, veined with glowing lines in the colour of
+    what's inside, breathing softly day and night. The bake clears the plants and Tidewater's own rocks round each. Own the
     pick and walk up to one and it's in your hand, the rod over your shoulder, as the axe is among
     the trees. Swing its point into the rock: steel rings on stone, chips and sparks fly, a jolt in
-    your hand, and the cracks open wider with the gems' light shining out through them. Six blows
-    and it bursts apart, the chunks glowing along the cracks as they tumble and sink into rubble.
+    your hand, and the veins open wider and blaze. Six blows and it bursts apart, the sparkle
+    blinding you for a moment (a flash of glare in the stones' colour, brightest if you're looking
+    straight at it), the chunks glowing along the cracks as they tumble and sink into rubble.
     A few minutes later, once you've gone, it grows back with new stones in it.
   - **The tray:** out of the rubble rises a tray like the dancers' chest pack, lined in black
-    velvet, the rock's stones turning in its slots. Reach in and click one (trigger or grip) and it
+    velvet, the rock's stones turning in its slots; its board says only what the sparkle does to
+    your eyes ("Blinding!", "My eyes!"), not where you are. Reach in and click one (trigger or grip) and it
     flies into your pouch; TAKE ALL; CLOSE. What's inside depends on the ground (`src/mining/gems.ts`):
     peridot and aquamarine on the shore, watermelon tourmaline and emerald in the forest, amethyst
     and black opal on the high ground, sapphire and ruby on the peaks, the second of each the rare

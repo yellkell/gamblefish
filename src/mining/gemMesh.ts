@@ -202,32 +202,6 @@ function cabochon(): BufferGeometry {
   return g;
 }
 
-/** A rough crystal for a rock's face: a hexagonal prism with a pointed end. */
-export function crystalPoint(seed: number): BufferGeometry {
-  const r = rnd(seed);
-  const n = 6;
-  const h = 1;
-  const pos: number[] = [];
-  const ring = (y: number, s: number): Vector3[] => Array.from({ length: n }, (_, i) => {
-    const a = (i / n) * Math.PI * 2;
-    const w = s * (0.85 + r() * 0.3);
-    return new Vector3(Math.cos(a) * w, y, Math.sin(a) * w);
-  });
-  const lo = ring(-0.3, 0.32);
-  const hi = ring(h * 0.62, 0.3);
-  const tip = new Vector3((r() - 0.5) * 0.08, h, (r() - 0.5) * 0.08);
-  const tri = (a: Vector3, b: Vector3, c: Vector3): void => {
-    pos.push(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z);
-  };
-  for (let i = 0; i < n; i++) {
-    const j = (i + 1) % n;
-    tri(lo[i], hi[j], lo[j]);
-    tri(lo[i], hi[i], hi[j]);
-    tri(hi[i], tip, hi[j]);
-  }
-  return flat(pos);
-}
-
 function flat(pos: number[]): BufferGeometry {
   const g = new BufferGeometry();
   g.setAttribute('position', new Float32BufferAttribute(pos, 3));

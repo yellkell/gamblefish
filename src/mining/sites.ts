@@ -5,7 +5,7 @@
  *
  * Sixteen big rocks out in the wilds, four on each kind of ground, well away from the village:
  * a couple of each close enough for an afternoon, the rest a proper walk. None is on the chart:
- * you find them by going to look (the crystals catching the light give them away).
+ * you find them by going to look (the glowing veins give them away, even at night).
  *
  *   THE SHORE        down on the far beaches, a stone's throw from the sea
  *   THE FOREST       in among the trees, 10–45 m up
