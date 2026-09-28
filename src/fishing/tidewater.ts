@@ -156,6 +156,8 @@ export interface GameState {
   woodworks: Woodworks;
   /** the fire dancers' camps you've found, and what's left in each chest today (camps/stock.ts) */
   camps: Record<string, CampSave>;
+  /** Coral (village/coral.ts): the gifts she's thanked you for, and how often you've called */
+  coral: CoralSave;
   readonly stats: GearStats;
   readonly holdKg: number;
   readonly holdValue: number;
@@ -197,6 +199,26 @@ export interface Woodworks {
 
 const freshWoodworks = (): Woodworks => ({ wood: 0, axe: false, built: {} });
 
+export interface CoralSave {
+  /** villa gifts (village/homeGoods.ts ids) she's thanked you for in person */
+  thanked: string[];
+  /** times you've come in to see her */
+  visits: number;
+}
+
+/**
+ * Read Coral's save back. A save from before she spoke has none: everything already in her
+ * villa counts as thanked (she took it all in on the board), so she doesn't reel off the lot.
+ */
+function readCoral(d: unknown, home: string[]): CoralSave {
+  const c = (d as { coral?: Partial<CoralSave> }).coral;
+  if (!c || typeof c !== 'object') return { thanked: [...home], visits: home.length ? 1 : 0 };
+  return {
+    thanked: Array.isArray(c.thanked) ? c.thanked.filter((x): x is string => typeof x === 'string') : [...home],
+    visits: Math.max(0, Math.floor(Number(c.visits) || 0)),
+  };
+}
+
 function readWoodworks(d: unknown): Woodworks {
   const w = (d as { woodworks?: Partial<Woodworks> }).woodworks;
   const out = freshWoodworks();
@@ -230,11 +252,12 @@ export function createGameState(): GameState {
   s.home = [];
   s.woodworks = freshWoodworks();
   s.camps = {};
+  s.coral = { thanked: [], visits: 0 };
   const toJSON = s.toJSON.bind(s);
   const fromJSON = s.fromJSON.bind(s);
   const reset = s.reset.bind(s);
   // (baitGoop: this save's bait levels count goop bait: fishing/gear.ts baitShift)
-  s.toJSON = () => ({ ...(toJSON() as object), home: s.home, woodworks: s.woodworks, camps: s.camps, baitGoop: true });
+  s.toJSON = () => ({ ...(toJSON() as object), home: s.home, woodworks: s.woodworks, camps: s.camps, coral: s.coral, baitGoop: true });
   s.fromJSON = (d: unknown) => {
     if (!fromJSON(d)) return false;
     s.upgrades.bait = (s.upgrades.bait | 0) + baitShift(d as Parameters<typeof baitShift>[0]);
@@ -242,12 +265,14 @@ export function createGameState(): GameState {
     s.home = Array.isArray(home) ? home.filter((x): x is string => typeof x === 'string') : [];
     s.woodworks = readWoodworks(d);
     s.camps = readCamps(d);
+    s.coral = readCoral(d, s.home);
     return true;
   };
   s.reset = () => {
     s.home = []; // first: Tidewater's reset saves and emits
     s.woodworks = freshWoodworks();
     s.camps = {};
+    s.coral = { thanked: [], visits: 0 };
     reset();
   };
   s.load();
