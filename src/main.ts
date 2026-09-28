@@ -292,6 +292,8 @@ World.create(container, {
     env: casinoEnv(world.renderer),
     night: sky.state.night,
     busy: () => backpackView.open || skelterView.onTower || interiorAt(interiors, world.player.position.x, world.player.position.z) !== null,
+    // once the helter skelter's built (all its logs in), the timber yard buys logs back
+    buysLogs: () => (game.woodworks.built.skelter ?? 0) >= SKELTER.cost,
   });
   world.registerSystem(WoodSystem);
 

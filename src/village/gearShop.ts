@@ -20,10 +20,9 @@ import { uiDeny, winFanfare } from '../audio/sfx.ts';
 import { gearEffect, GEAR_SHOPS } from '../fishing/gear.ts';
 import { FISH, UPGRADES, type GameState } from '../fishing/tidewater.ts';
 import { TROPHY } from '../fishing/trophyFish.ts';
-import { font } from '../ui/fonts.ts';
-import { INK, roundRect } from '../ui/panel.ts';
 import { InteractivePanel, register } from '../ui/pointer.ts';
-import { drawThumb, thumbnail } from '../ui/thumbnail.ts';
+import { thumbnail } from '../ui/thumbnail.ts';
+import { Lettering, lookFor, mount, type InkName } from '../ui/boards.ts';
 import { Batch, M, rng, rounded, stalk, turned, type Kit } from './craft.ts';
 import { shopCounter, type Interior } from './interiors.ts';
 import { mergeStatic } from './merge.ts';
@@ -219,9 +218,10 @@ interface Row {
 
 export class GearShopCounter {
   private readonly board: InteractivePanel;
+  private readonly letters: Lettering;
   private readonly tracks: string[];
   private note = '';
-  private noteColour: string = INK.dim;
+  private noteColour: InkName = 'dim';
   /** a picture of every level of every track this shop sells */
   private readonly pics = new Map<string, HTMLCanvasElement>();
 
@@ -243,7 +243,11 @@ export class GearShopCounter {
     for (const t of this.tracks) UPGRADES[t].levels.forEach((_, lv) => lv > 0 && this.pics.set(`${t}:${lv}`, thumbnail(kit.renderer, gearIcon(kit, t, lv))));
 
     this.board = new InteractivePanel([BW, BH], [1.6, (1.6 * BH) / BW]);
-    this.board.mesh.position.set(cx, top + 1.05, -room.d / 2 + 0.02);
+    // a board in the shop's own style, framed, hung on the back wall (ui/boards.ts)
+    const look = lookFor(room.name);
+    this.letters = new Lettering(this.board, look, room.name.charCodeAt(0) + room.name.length);
+    mount(this.board, look, { renderer: kit.renderer });
+    this.board.mesh.position.set(cx, top + 1.05, -room.d / 2 + 0.02 + look.frame.d);
     room.contents.add(this.board.mesh);
     this.board.paint = () => this.paint();
     this.board.onClick = (id) => this.click(id);
@@ -272,7 +276,7 @@ export class GearShopCounter {
     if (this.state.money < next.cost) {
       uiDeny();
       this.note = `You need $${Math.ceil(next.cost - this.state.money)} more for the ${next.label.toLowerCase()}.`;
-      this.noteColour = INK.danger;
+      this.noteColour = 'bad';
       this.paint();
       return;
     }
@@ -281,87 +285,43 @@ export class GearShopCounter {
     winFanfare(1);
     const fish = opens(track, level);
     this.note = `Sold! ${gearEffect(UPGRADES[track].levels, track, level, level)} now.` + (fish.length ? ` Needed for ${fish.join(' and ')}.` : '');
-    this.noteColour = INK.good;
+    this.noteColour = 'good';
     this.paint();
   }
 
   private paint(): void {
-    const b = this.board;
-    const c = b.ctx;
+    const L = this.letters;
     const role = ROLES[this.room.name];
     const u = this.state.upgrades;
-    b.clear();
-    roundRect(c, 6, 6, BW - 12, BH - 12, 26);
-    c.fillStyle = 'rgba(24, 18, 12, 0.94)';
-    c.fill();
-    c.lineWidth = 6;
-    c.strokeStyle = role?.colour ?? '#b89a72';
-    c.stroke();
-    c.textBaseline = 'alphabetic';
-    c.textAlign = 'left';
-    c.font = font(700, 54);
-    c.fillStyle = '#f6ecd4';
-    c.fillText(role?.title ?? 'SHOP', 40, 76);
-    c.font = font(600, 28);
-    c.fillStyle = INK.dim;
+    L.begin();
+    L.title(role?.title ?? 'SHOP', 44, 82, 56, 'left', 620);
     const single = this.tracks.length === 1;
-    c.fillText(single ? `yours now: ${UPGRADES[this.tracks[0]].levels[u[this.tracks[0]] | 0].label}` : 'the big ones need big-game tackle', 40, 116, 700);
-    c.textAlign = 'right';
-    c.font = font(700, 36);
-    c.fillStyle = INK.amber;
-    c.fillText(`wallet $${Math.floor(this.state.money).toLocaleString('en-US')}`, BW - 40, 76);
-
-    const buttons: { id: string; x: number; y: number; w: number; h: number }[] = [];
+    L.text(single ? `yours now: ${UPGRADES[this.tracks[0]].levels[u[this.tracks[0]] | 0].label}` : 'the big ones need big-game tackle', 44, 122, 28, 'dim', 'left', 600, 700);
+    L.text(`wallet $${Math.floor(this.state.money).toLocaleString('en-US')}`, BW - 44, 80, 34, 'accent', 'right', 700);
     const rows = this.rows();
     const rowH = Math.min(150, 470 / rows.length);
     rows.forEach(({ track, level }, i) => {
-      const y = 146 + i * rowH;
+      const y = 148 + i * rowH;
       const have = u[track] | 0;
       const lv = UPGRADES[track].levels[level];
       const owned = have >= level;
       const next = have + 1 === level;
       const maxed = !single && have >= UPGRADES[track].levels.length - 1;
       const pic = Math.min(rowH - 12, 124);
-      drawThumb(c, this.pics.get(`${track}:${level}`), 36, y + 4, pic, !owned && !next && !maxed);
-      const tx = 36 + pic + 20;
-      c.textAlign = 'left';
-      c.font = font(600, 24);
-      c.fillStyle = role?.colour ?? INK.dim;
-      if (!single) c.fillText(UPGRADES[track].name.toUpperCase(), tx, y + 22);
-      c.font = font(700, 38);
-      c.fillStyle = owned || maxed ? INK.dim : next ? INK.hot : 'rgba(234, 244, 248, 0.4)';
-      c.fillText(lv.label, tx, y + (single ? 44 : 60), 700 - tx);
-      c.font = font(500, 24);
-      c.fillStyle = INK.dim;
+      L.thumb(this.pics.get(`${track}:${level}`), 40, y + 4, pic, !owned && !next && !maxed);
+      const tx = 40 + pic + 20;
+      if (!single) L.text(UPGRADES[track].name.toUpperCase(), tx, y + 22, 24, 'accent', 'left', 600);
+      L.text(lv.label, tx, y + (single ? 44 : 60), 38, owned || maxed ? 'dim' : next ? 'ink' : 'dim', 'left', 700, 700 - tx);
       const fish = opens(track, level);
       // what it does for you, in numbers, and which trophy fish need it
       const does = [gearEffect(UPGRADES[track].levels, track, level, have), fish.length ? `needed for ${fish.join(', ')}` : ''].filter(Boolean).join('  ·  ');
-      c.fillText(maxed ? 'Fully upgraded' : does, tx, y + (single ? 80 : 94), 750 - tx);
-      c.textAlign = 'right';
-      c.font = font(700, 40);
-      c.fillStyle = owned || maxed ? INK.dim : INK.amber;
-      if (!maxed) c.fillText(`$${lv.cost.toLocaleString('en-US')}`, 880, y + 58);
-      const bx = 910;
-      const bw = 250;
-      const bh = 80;
-      const id = `buy:${track}:${level}`;
-      if (next && !maxed) buttons.push({ id, x: bx, y: y + 14, w: bw, h: bh });
-      roundRect(c, bx, y + 14, bw, bh, 16);
+      L.text(maxed ? 'Fully upgraded' : does, tx, y + (single ? 80 : 94), 24, 'dim', 'left', 500, 750 - tx);
+      if (!maxed) L.text(`$${lv.cost.toLocaleString('en-US')}`, 880, y + 58, 40, owned ? 'dim' : 'accent', 'right', 700);
       const afford = this.state.money >= lv.cost;
-      c.fillStyle = owned || maxed ? 'rgba(63, 214, 106, 0.18)' : !next ? 'rgba(255,255,255,0.06)' : b.hover === id ? '#ffc640' : afford ? INK.amber : 'rgba(255,255,255,0.1)';
-      c.fill();
-      c.textAlign = 'center';
-      c.font = font(700, owned || maxed || !next ? 30 : 36);
-      c.fillStyle = owned || maxed ? INK.good : !next ? INK.dim : afford ? '#1a1206' : INK.dim;
-      c.fillText(owned || maxed ? 'YOURS ✓' : next ? 'BUY' : 'NEXT', bx + bw / 2, y + 66);
+      const st = owned || maxed ? 'done' : !next ? 'off' : afford ? 'go' : 'off';
+      L.button(`buy:${track}:${level}`, owned || maxed ? 'YOURS ✓' : next ? 'BUY' : 'NEXT', 906, y + 14, 250, 80, st, owned || maxed || !next ? 30 : 36);
     });
-    b.buttons = buttons;
-    if (this.note) {
-      c.textAlign = 'left';
-      c.font = font(600, 28);
-      c.fillStyle = this.noteColour;
-      c.fillText(this.note, 40, BH - 36, BW - 80);
-    }
-    b.commit();
+    if (this.note) L.text(this.note, 44, BH - 38, 28, this.noteColour, 'left', 600, BW - 88);
+    L.end();
   }
 }

@@ -262,7 +262,9 @@ and the vendors.
     keeps the pier's rail and has no crate. Then the **deep walk** (44 logs) opens, running past the
     drop-off to a platform over 14 m of water. Each platform stands on a regular grid of piles, is
     railed down its sides and open at the far edge to fish off, and has a lantern at each corner and
-    a bucket and a coil of rope made fast to a cleat (`src/woodworks/bucket.ts`). Each walk appears
+    a bucket and a coil of rope made fast to a cleat (`src/woodworks/bucket.ts`), their shine fading
+    with the daylight so they're moonlit at night, not lit up, and an orange-and-white life ring
+    on the rail across from them (`src/woodworks/buoy.ts`). Each walk appears
     on the field guide's chart, named, once it's finished. Wood, the axe and the walks are saved.
     Until a walk's finished a rope with its sign hangs across the gateway and the way is shut; with
     the last plank down it's unhooked, swings down and it's gone, and the walk is open. (Tidewater
@@ -291,11 +293,14 @@ and the vendors.
   sea chest, built so its lid opens: hollow inside, lined in red velvet, its logs lying in the
   bottom). None of them is on the chart and none can be seen from the
   start: they're over the ridges, down the hollows and round the far coasts, a long walk out.
-  Listen for the drums, which carry further than the firelight. `npm run check:camps` proves every
+  Listen for the drums, which carry further than the firelight: a little West African ensemble
+  in 12/8 (bell, shaker, two bass drums and a djembe with a fill every fourth bar), each camp at
+  its own tempo. `npm run check:camps` proves every
   one is hidden from the boardwalk, the pier and the beach, is level and standable, and can be
   reached on foot.
   - **Pleased to see you:** walk into a camp and its dancers throw their hands in the air, and gift
-    you everything in their chest ("2 of 8"). A hidden camp's gift is given once.
+    you everything in their chest (no pop-up: the chest's readout keeps the count, "2 of 8 camps
+    found"). A hidden camp's gift is given once.
   - **The chest:** click OPEN THEIR GIFT over it (or grip its lid). The lid swings up and the
     **chest pack** rises out of it: a tray like your backpack's, with the dancers' fish lying in its
     slots and their logs beside it. Reach in and **click** a fish to pack it straight into your
@@ -303,9 +308,22 @@ and the vendors.
     Point at the logs to add them to your stack, or TAKE ALL. There's always a prize fish a tier up
     (the harder camps can hold a Gold). Walk away and the lid comes down.
   - **The beach party:** find all eight and a ninth group comes down to the main beach, west of the
-    timber yard, and lights a fire there. Their chest fills every day with a couple of nice fish
+    timber yard, and lights a fire there (the hidden camps' chests say so once you have). Their chest fills every day with a couple of nice fish
     (Silver or better) and a stack of logs, fresh at midnight. Which camps you've found, and what's left in each chest,
     are saved.
+- **The boards** (`src/ui/boards.ts`): every shop's, table's and counter's point-and-click board is a
+  thing in the room, not a pane of dark glass: made of what that place would make it of, lettered
+  its way, and set in a real frame. The carpenter's is planed pine with the lettering burnt in; the
+  florist's sage-green boards with flowers painted round; the pawn shop prices things on manila
+  tickets on string; the taxidermist uses engraved brass plaques; the jeweller black velvet and
+  gold leaf in a gilt frame; the boutique cream linen and teal ribbons; the tackle shop navy boards
+  with a painted rope and life-ring buttons; the bait shop and the fish market a chalkboard; the fortune
+  teller starry cloth and tarot cards; the bank green leather tooled in gold with brass plates; the
+  Lucky Lure black lacquer with art-deco gold leaf and pink enamel; the Card Shark green baize with
+  ivory plaques on a mahogany stand; the dancers' chest bark
+  cloth printed with tapa bands in a bamboo frame, with carved tags. Indoors they're drawn like
+  the rooms (the lamp's light painted on); outdoors they're lit like everything else, and dim at
+  dusk.
 - **ALWAYS DAY:** a switch under MUSIC in the backpack holds the island in the early
   afternoon. The fish that only bite at night won't bite while it's on.
 - **Wallet:** `src/ui/wallet.ts` puts an odometer-style money counter on both
@@ -380,6 +398,7 @@ same questions as ff2's `TELEPORT_AREAS`, `floorYAt` and `crossesWall`:
 | `tools/teleport-check.mjs` | headless teleport rules check, including no landing under a house floor |
 | `tools/fish-check.mjs` | headless check that the timed fish keep their hours and the trophy fish need their gear |
 | `tools/camps-check.mjs` | headless check that the camps are hidden from the start, level, reachable, and their chests fill properly |
+| `tools/line-check.mjs` | headless check that the fishing line lies over the pier's rails, posts and deck as drawn, not through them |
 
 Dev hook: `__fish.move.to(x, z, yaw)`, `__fish.move.snapTurn(±1)` and
 `__fish.move.stepBack()`.

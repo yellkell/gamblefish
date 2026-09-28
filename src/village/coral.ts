@@ -3,7 +3,7 @@
  * head (ui/speechBubble.ts) rather than on a board on the wall.
  *
  *  - She greets you as warmly as you've earned: her heart is the gifts you've given her from the
- *    JEWELLER and the BOUTIQUE (village/homeGoods.ts), one heart each, and how she talks to you
+ *    Jeweller and the Boutique (village/homeGoods.ts), one heart each, and how she talks to you
  *    moves through five stages as they fill (a stranger, warming, fond, close, yours).
  *  - Anything delivered since you were last here, she thanks you for in person, by name, one
  *    line each, and a heart fills in the bubble with a chime; then a word on where the two of you
@@ -81,8 +81,8 @@ const EVENING: Record<Stage, string[]> = {
 
 /** early on, with nothing new: where the nice things come from */
 const HINTS = [
-  'The JEWELLER in town has the prettiest things. Just saying.',
-  'Have you seen the BOUTIQUE? Their silks are divine.',
+  'The Jeweller in town has the prettiest things. Just saying.',
+  'Have you seen the Boutique? Their silks are divine.',
   'A girl could get used to a little sparkle, you know.',
 ];
 

@@ -19,7 +19,7 @@
  *  Also: grip a fish in the tray to lift it back into your hand; drop one in the RELEASE net at
  *  the tray's side to let it go. Close the tray (A) with a fish in hand and you keep holding it.
  *
- *  DROP TARGETS: other places in the world can take a fish from your hand — Joe's scale at the
+ *  DROP TARGETS: other places in the world can take a fish from your hand — the fish market's scale at the
  *  market, a shop counter, Coral's hands. Hold the fish over one (tray open or not) and a ghost
  *  settles on it with what it's worth there; click to hand it over.
  *
@@ -90,7 +90,7 @@ export const backpackDeps: {
   blocked?: (() => boolean) | null;
 } = { state: null, props: null, chart: null, where: null, walks: null, travel: null };
 
-/** Somewhere in the world that takes a fish from your hand (Joe's scale, a counter...). */
+/** Somewhere in the world that takes a fish from your hand (the fish market's scale, a counter...). */
 export interface DropTarget {
   /** world-space centre, and how close the fish must come (m) */
   position: Vector3;

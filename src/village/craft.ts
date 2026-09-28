@@ -38,6 +38,7 @@ import {
   Vector2,
   Vector3,
   type Material,
+  type Object3D,
   type WebGLRenderer,
 } from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
@@ -617,4 +618,23 @@ export class Batch {
     }
     return out;
   }
+}
+
+/**
+ * For a thing made with this kit that stands OUTDOORS (the bucket and rope at the end of a walk).
+ * The kit's finishes take their shine from the casinos' studio light (casinoEnv), which knows
+ * nothing of the time of day: indoors that's right, but out on the pier at night it lit a bucket
+ * up like noon. Here each material is its own copy, and its studio light fades with the daylight
+ * (`night`: world/sky.ts), leaving it lit by the moon like everything round it.
+ */
+export function outdoors<T extends Object3D>(o: T, night: { value: number }): T {
+  o.traverse((node) => {
+    const mesh = node as Mesh;
+    if (!mesh.isMesh) return;
+    const mats = (Array.isArray(mesh.material) ? mesh.material : [mesh.material]).map((m) => (m as MeshStandardMaterial).clone());
+    const base = mats.map((m) => m.envMapIntensity ?? 1);
+    mesh.material = Array.isArray(mesh.material) ? mats : mats[0];
+    mesh.onBeforeRender = () => mats.forEach((m, i) => (m.envMapIntensity = base[i] * (1 - 0.97 * night.value)));
+  });
+  return o;
 }

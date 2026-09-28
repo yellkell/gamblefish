@@ -37,6 +37,7 @@ import { font } from '../ui/fonts.ts';
 import { Keyboard } from '../ui/keyboard.ts';
 import { INK, roundRect } from '../ui/panel.ts';
 import { InteractivePanel, register } from '../ui/pointer.ts';
+import { Lettering, LOOKS, mount, type InkName } from '../ui/boards.ts';
 import { drawQr } from '../ui/qr.ts';
 import type { Interior } from './interiors.ts';
 
@@ -47,18 +48,10 @@ const H = 900;
 const BRASS = '#d8b060';
 /** on the board, every visit */
 
-interface Btn {
-  id: string;
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-  enabled?: boolean;
-}
-
 export class IslandBank {
   readonly group = new Group();
   private readonly board = new InteractivePanel([W, H], [1.5, 0.9]);
+  private readonly letters = new Lettering(this.board, LOOKS.bank, 11);
   private readonly keyboard = new Keyboard();
   private face: Face = 'packs';
   private chosen: CoinPack | null = null;
@@ -169,7 +162,8 @@ export class IslandBank {
     const frame = new Mesh(new RoundedBoxGeometry(1.56, 0.96, 0.03, 3, 0.012), brass);
     frame.position.set(0, 1.6, cz - 0.3);
     this.board.mesh.position.set(0, 1.6, cz - 0.28);
-    (this.board.mesh.material as MeshBasicMaterial).transparent = false;
+    // (it keeps the brass frame above: just the board made solid)
+    mount(this.board, LOOKS.bank, { frame: false });
     g.add(frame, this.board.mesh);
     // the keyboard, on a tilted stand in front of the counter when it's needed
     this.keyboard.panel.mesh.position.set(0, 1.12, cz + 0.42);
@@ -249,36 +243,15 @@ export class IslandBank {
   /* ── the board ──────────────────────────────────────────────────── */
 
   private paint(): void {
-    const c = this.board.ctx;
-    const buttons: Btn[] = [];
-    const btn = (id: string, label: string, x: number, y: number, w: number, h: number, tone = BRASS, on = true, size = 38): void => {
-      buttons.push({ id, x, y, w, h, enabled: on });
-      roundRect(c, x, y, w, h, 18);
-      c.fillStyle = !on ? 'rgba(255,255,255,0.07)' : this.board.hover === id ? '#ffffff' : tone;
-      c.fill();
-      c.fillStyle = on ? '#1a1206' : INK.dim;
-      c.font = font(700, size);
-      c.textAlign = 'center';
-      c.textBaseline = 'middle';
-      c.fillText(label, x + w / 2, y + h / 2 + 2, w - 20);
-      c.textBaseline = 'alphabetic';
-    };
-    const text = (s: string, x: number, y: number, size: number, colour: string = INK.hot, align: CanvasTextAlign = 'left', weight: 500 | 600 | 700 = 600, max?: number): void => {
-      c.font = font(weight, size);
-      c.fillStyle = colour;
-      c.textAlign = align;
-      c.fillText(s, x, y, max);
-    };
-    // the ground: deep green baize with a brass rule
-    const grad = c.createLinearGradient(0, 0, 0, H);
-    grad.addColorStop(0, '#12301f');
-    grad.addColorStop(1, '#081a10');
-    c.fillStyle = grad;
-    c.fillRect(0, 0, W, H);
-    c.strokeStyle = BRASS;
-    c.lineWidth = 6;
-    c.strokeRect(14, 14, W - 28, H - 28);
-    text('ISLAND BANK', 44, 88, 64, BRASS, 'left', 700);
+    // green leather tooled in gold, brass plates for buttons (ui/boards.ts: the bank's look)
+    const L = this.letters;
+    const c = L.begin();
+    const btn = (id: string, label: string, x: number, y: number, w: number, h: number, tone = BRASS, on = true, size = 38): void =>
+      L.button(id, label, x, y, w, h, !on ? 'off' : tone.startsWith('rgba(255,255,255') ? 'alt' : 'go', size);
+    const INKS: Record<string, InkName> = { [INK.hot]: 'ink', [INK.dim]: 'dim', [INK.amber]: 'accent', [BRASS]: 'title', [INK.good]: 'good', [INK.danger]: 'bad' };
+    const text = (s: string, x: number, y: number, size: number, colour: string = INK.hot, align: CanvasTextAlign = 'left', weight: 500 | 600 | 700 = 600, max?: number): void =>
+      L.text(s, x, y, size, INKS[colour] ?? colour, align, weight, max);
+    L.title('ISLAND BANK', 48, 90, 64, 'left', 600);
     text(`wallet $${Math.floor(this.state.money).toLocaleString('en-US')}`, W - 44, 84, 40, INK.amber, 'right', 700);
     const badge = bank.mode === 'test' ? 'TEST MODE · no real money' : bank.mode === 'dev' ? 'DEV BANK · no real money' : bank.mode === 'live' ? '' : '';
     if (badge) text(badge, 470, 84, 30, '#3fd6c6', 'left', 700);
@@ -296,7 +269,7 @@ export class IslandBank {
           const x = 44 + i * 358;
           const y = 300;
           const id = `pack:${p.id}`;
-          buttons.push({ id, x, y, w: 336, h: 330, enabled: open });
+          L.area(id, x, y, 336, 330, open);
           roundRect(c, x, y, 336, 330, 24);
           c.fillStyle = this.board.hover === id ? 'rgba(255, 220, 140, 0.22)' : 'rgba(255, 255, 255, 0.07)';
           c.fill();
@@ -415,8 +388,7 @@ export class IslandBank {
         break;
       }
     }
-    this.board.buttons = buttons;
-    this.board.commit();
+    L.end();
   }
 }
 

@@ -42,6 +42,7 @@ import type { GameState } from '../fishing/tidewater.ts';
 import { font } from '../ui/fonts.ts';
 import { INK, roundRect } from '../ui/panel.ts';
 import { InteractivePanel, register } from '../ui/pointer.ts';
+import { Lettering, lookFor, mount } from '../ui/boards.ts';
 import type { Interior } from '../village/interiors.ts';
 import { basic, isNatural, Round, Shoe, total, type Action, type Card, type Outcome } from './blackjack.ts';
 import { CardMesh } from './cards.ts';
@@ -78,6 +79,7 @@ interface Live {
 export class BlackjackTable {
   readonly group = new Group();
   private readonly board: InteractivePanel;
+  private readonly letters: Lettering;
   private readonly chips: InstancedMesh;
   private readonly labels: Label[] = [];
   private readonly dealerLabel: Label;
@@ -155,6 +157,9 @@ export class BlackjackTable {
 
     // the board behind the dealer
     this.board = new InteractivePanel([1000, 420], [1.2, 0.504]);
+    this.letters = new Lettering(this.board, lookFor('G'), 9);
+    // baize in a mahogany frame, standing on two posts behind the dealer
+    mount(this.board, lookFor('G'), { renderer: world.renderer, stand: 1.55 });
     this.board.mesh.position.set(0, 1.55, -0.85);
     g.add(this.board.mesh);
     this.board.paint = () => this.paintBoard();
@@ -479,47 +484,20 @@ export class BlackjackTable {
   /* ── the board ──────────────────────────────────────────────────── */
 
   private paintBoard(): void {
-    const c = this.board.ctx;
-    this.board.clear();
-    roundRect(c, 4, 4, 992, 412, 22);
-    c.fillStyle = 'rgba(10, 18, 12, 0.94)';
-    c.fill();
-    c.lineWidth = 4;
-    c.strokeStyle = '#7dff5a';
-    c.stroke();
-    c.textBaseline = 'alphabetic';
-    c.textAlign = 'left';
-    c.font = font(700, 40);
-    c.fillStyle = '#9dff80';
-    c.fillText('BLACKJACK', 28, 56);
-    c.font = font(600, 28);
-    c.fillStyle = INK.hot;
-    c.fillText(this.status, 250, 55, 520);
-    c.textAlign = 'right';
-    c.fillStyle = INK.amber;
-    c.fillText(`$${this.state.money}`, 972, 55);
-    c.textAlign = 'left';
-    c.font = font(500, 22);
-    c.fillStyle = INK.dim;
-    c.fillText('Blackjack pays 3 to 2 · Dealer stands on all 17s · 6 decks', 28, 96);
-
-    const buttons: { id: string; x: number; y: number; w: number; h: number; enabled?: boolean }[] = [];
-    const btn = (id: string, label: string, x: number, y: number, w: number, h: number, colour: string, on: boolean, size = 34): void => {
-      buttons.push({ id, x, y, w, h, enabled: on });
-      roundRect(c, x, y, w, h, 16);
-      c.fillStyle = !on ? 'rgba(255,255,255,0.06)' : this.board.hover === id ? '#ffffff' : colour;
-      c.fill();
-      c.fillStyle = on ? '#0c140c' : INK.dim;
-      c.font = font(700, size);
-      c.textAlign = 'center';
-      c.fillText(label, x + w / 2, y + h / 2 + size * 0.36);
-    };
+    // the Card Shark's board: green baize, gold rules, ivory plaques (ui/boards.ts)
+    const L = this.letters;
+    const c = L.begin();
+    L.title('BLACKJACK', 34, 64, 44, 'left', 230);
+    L.text(this.status, 276, 60, 28, 'ink', 'left', 600, 500);
+    L.text(`$${this.state.money}`, 966, 60, 28, 'accent', 'right', 700);
+    L.text('Blackjack pays 3 to 2 · Dealer stands on all 17s · 6 decks', 34, 102, 22, 'dim', 'left', 500);
+    const btn = (id: string, label: string, x: number, y: number, w: number, h: number, on: boolean, size = 34, alt = false): void => L.button(id, label, x, y, w, h, !on ? 'off' : alt ? 'alt' : 'go', size);
     const betting = this.phase === 'betting';
     if (betting) {
       this.opts.chips.forEach((v, i) => {
-        const x = 70 + i * 120;
-        const y = 190;
-        buttons.push({ id: `chip${v}`, x: x - 48, y: y - 48, w: 96, h: 96 });
+        const x = 76 + i * 120;
+        const y = 194;
+        L.area(`chip${v}`, x - 48, y - 48, 96, 96);
         c.fillStyle = `#${(CHIP_COLOUR[v] ?? 0xffffff).toString(16).padStart(6, '0')}`;
         c.beginPath();
         c.arc(x, y, 42, 0, Math.PI * 2);
@@ -534,23 +512,19 @@ export class BlackjackTable {
         c.textAlign = 'center';
         c.fillText(`$${v}`, x, y + 10);
       });
-      c.textAlign = 'right';
-      c.font = font(700, 40);
-      c.fillStyle = INK.amber;
-      c.fillText(this.bet ? `BET $${this.bet}` : '', 970, 206);
-      btn('clear', 'CLEAR', 28, 290, 260, 100, '#9aa4ac', this.bet > 0);
-      btn('deal', this.bet ? 'DEAL' : this.lastBet ? `REBET $${this.lastBet}` : 'DEAL', 310, 290, 660, 100, '#7dff5a', this.bet > 0 || this.lastBet > 0, 44);
+      L.text(this.bet ? `BET $${this.bet}` : '', 964, 210, 40, 'accent', 'right', 700);
+      btn('clear', 'CLEAR', 34, 290, 254, 96, this.bet > 0, 34, true);
+      btn('deal', this.bet ? 'DEAL' : this.lastBet ? `REBET $${this.lastBet}` : 'DEAL', 310, 290, 656, 96, this.bet > 0 || this.lastBet > 0, 44);
     } else {
       const r = this.round;
       const on = this.phase === 'player' && !!r;
-      btn('hit', 'HIT', 28, 150, 300, 110, '#7dff5a', on && r!.can('hit'), 46);
-      btn('stand', 'STAND', 348, 150, 300, 110, '#ffb000', on && r!.can('stand'), 46);
-      btn('hint', 'HINT', 668, 150, 302, 110, '#9aa4ac', on);
-      btn('double', 'DOUBLE', 28, 280, 460, 110, '#3fd6ff', on && r!.can('double'));
-      btn('split', 'SPLIT', 510, 280, 460, 110, '#ff7fcf', on && r!.can('split'));
+      btn('hit', 'HIT', 34, 150, 296, 108, on && r!.can('hit'), 46);
+      btn('stand', 'STAND', 350, 150, 296, 108, on && r!.can('stand'), 46);
+      btn('hint', 'HINT', 666, 150, 300, 108, on, 34, true);
+      btn('double', 'DOUBLE', 34, 278, 456, 108, on && r!.can('double'));
+      btn('split', 'SPLIT', 510, 278, 456, 108, on && r!.can('split'));
     }
-    this.board.buttons = buttons;
-    this.board.commit();
+    L.end();
   }
 }
 
