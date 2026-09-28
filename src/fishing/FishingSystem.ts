@@ -83,6 +83,8 @@ export const FISHING = {
   triggerOff: 0.25,
   /** bobber on a short drop below the tip while you're not casting */
   dangle: 0.45,
+  /** with a fish on, the float's this far up the line from the hook (m) */
+  floatUp: 0.45,
   /** cast: tip speed → bobber speed, and the top speed (at the base rod's 22 m) */
   castGain: 1.0,
   castMaxSpeed: 20,
@@ -147,6 +149,8 @@ const _edgeUnder = new Vector3();
 /** the line's points: enough for every corner it can have (16 rests on each of five stretches
  *  between the posts it's round, 8 round each post) and still curve between them */
 const LINE_N = 128;
+/** the float's radius (Tidewater's buildBobberGeometry), at arm's length where it isn't scaled up */
+const BOBBER_R = 0.028;
 
 /** A point `t` along the curve from `a` up through a point `rise` m high over `a`, to `b`. */
 function bezier(a: Vector3, rise: number, b: Vector3, t: number, out: Vector3): Vector3 {
@@ -412,7 +416,7 @@ export class FishingSystem extends createSystem({}) {
     this.updateHooked(dt, time);
     this.updateLanding(dt, time);
     this.updateLine();
-    this.placeFloat();
+    this.placeFloat(dt);
     this.updateSound(dt);
     this.updateGauge();
     this.toast.update(dt, this.camera);
@@ -596,6 +600,7 @@ export class FishingSystem extends createSystem({}) {
       : new CatchMinigame({ species: b.species!, kg: b.kg!, lineKg: g.lineKg, reelSpeed: g.reelSpeed, distance: Math.max(3, this.lineOut) });
     this.bite = null;
     this.fishPos.copy(this.bob);
+    this.floatAlong = 0;
     this.lastDist = this.fight.distance;
     this.setState('fighting');
     if (!shark) this.hookFish(b.species!, b.kg!);
@@ -883,26 +888,51 @@ export class FishingSystem extends createSystem({}) {
     H.u.uTime.value = time;
   }
 
-  /** While a fish is on, the float rides the line where it meets the water (up the line, out of it). */
-  private placeFloat(): void {
+  /**
+   * While a fish is on, the float rides the line just up from the hook: where the line comes up out
+   * of the water, or FISHING.floatUp up it if that's further (a fish that's out of the water, or
+   * gone down deeper, has it on the line over it, dragged under). Never further up the line than
+   * that: it's fixed on the line, so it can't go off along it toward you. It eases along the line
+   * to where it's going, so a fish breaking the surface doesn't flick it up the line.
+   */
+  private placeFloat(dt: number): void {
     if (this.state !== 'fighting' || !this.hooked) return;
     const ocean = fishingDeps.ocean!;
     const B = this.lineBuf;
     const n = B.length / 3 - 1;
+    // how far up the line it goes to: out of the water, or floatUp
+    const inSea = this.bob.y < ocean.heightAt(this.bob.x, this.bob.z);
+    let want: number = FISHING.floatUp;
     let along = 0;
+    let wet = B[n * 3 + 1] - ocean.heightAt(B[n * 3], B[n * 3 + 2]);
+    for (let i = n; i > 0 && inSea && along < want; i--) {
+      const o = (i - 1) * 3;
+      const seg = Math.hypot(B[o] - B[i * 3], B[o + 1] - B[i * 3 + 1], B[o + 2] - B[i * 3 + 2]);
+      const next = B[o + 1] - ocean.heightAt(B[o], B[o + 2]);
+      if (wet < -0.01 && next >= -0.01) want = Math.min(want, along + (seg * (-0.01 - wet)) / (next - wet));
+      along += seg;
+      wet = next;
+    }
+    this.floatAlong += (want - this.floatAlong) * (1 - Math.exp(-dt * 8));
+    // and that far up the line from the fish
+    along = 0;
     for (let i = n; i > 0; i--) {
-      const x = B[i * 3];
-      const y = B[i * 3 + 1];
-      const z = B[i * 3 + 2];
-      along += Math.hypot(B[i * 3 - 3] - x, B[i * 3 - 2] - y, B[i * 3 - 1] - z);
-      const w = ocean.heightAt(x, z);
-      // where the line comes up out of the water, or 0.45 m up it from a fish out of the water
-      if ((y >= w - 0.01 && this.bob.y < w) || (this.bob.y >= w && along >= 0.45)) {
+      const o = (i - 1) * 3;
+      const seg = Math.hypot(B[o] - B[i * 3], B[o + 1] - B[i * 3 + 1], B[o + 2] - B[i * 3 + 2]);
+      if (along + seg >= this.floatAlong || i === 1) {
+        const t = seg > 1e-6 ? Math.min(1, Math.max(0, (this.floatAlong - along) / seg)) : 0;
+        const x = B[i * 3] + (B[o] - B[i * 3]) * t;
+        const y = B[i * 3 + 1] + (B[o + 1] - B[i * 3 + 1]) * t;
+        const z = B[i * 3 + 2] + (B[o + 2] - B[i * 3 + 2]) * t;
+        const w = ocean.heightAt(x, z);
         this.bobber.position.set(x, Math.max(y, Math.min(w, y + 0.02)), z);
         return;
       }
+      along += seg;
     }
   }
+  /** how far up the line from the hook the float is while a fish is on (placeFloat) */
+  private floatAlong = 0;
 
   private startLanding(species: string, kg: number): void {
     // the fish that's been on the line (a fresh one if there wasn't: the shark's is its own)
@@ -1167,9 +1197,22 @@ export class FishingSystem extends createSystem({}) {
     this.retrieveSpeed = 0;
     switch (this.state) {
       case 'idle':
-      case 'windup':
+      case 'windup': {
         this.dangle(this.bob, this.bobVel, tip, FISHING.dangle, dt);
+        // it comes down on the boards (or the sand) under your feet, not through them: with the
+        // tip pushed down through the deck it lies on it, rather than hanging under the pier (where
+        // the line would go out over the rail to it, as to a fish under there)
+        const S = fishingDeps.surfaces;
+        if (S) {
+          const area = S.areaNear(this.bob.x, this.bob.z, this.player.position.y);
+          const floor = (area.kind === 'water' ? ocean.heightAt(this.bob.x, this.bob.z) : area.y) + BOBBER_R;
+          if (this.bob.y < floor) {
+            this.bob.y = floor;
+            if (this.bobVel.y < 0) this.bobVel.y = 0;
+          }
+        }
         break;
+      }
       case 'flying': {
         // ballistic with a little drag, capped by the rod's casting range (Tidewater)
         const prevY = this.bob.y;
@@ -1289,9 +1332,11 @@ export class FishingSystem extends createSystem({}) {
     const S = fishingDeps.surfaces;
     if (S) {
       const W = (this.wraps ??= new LineWraps(S));
-      if (this.state === 'idle' || this.state === 'windup') W.reset();
+      const dangling = this.state === 'idle' || this.state === 'windup';
+      if (dangling) W.reset();
       let end: Vector3 = b;
-      if (S.lineUnder(a, b, _edgeTop, _edgeUnder)) end = _edgeTop;
+      // (a float dangling off the tip is never a fish under the pier)
+      if (!dangling && S.lineUnder(a, b, _edgeTop, _edgeUnder)) end = _edgeTop;
       const m = W.lay(a, end);
       for (let k = 0; k <= m; k++) {
         for (let j = 0; j < W.restCounts[k]; j++) pts.push(W.rests[k][j]);
@@ -1305,6 +1350,11 @@ export class FishingSystem extends createSystem({}) {
     // that rests on something on its way the fish holds taut (drooping, it would come up to where
     // it rests from under it, through the timber)
     const spans = pts.length - 1;
+    // It comes down to a float or a fish in the sea, not down under it and back up: sagging into
+    // the water past it, a long line came up out of it metres short of the fish, and the float
+    // (placeFloat) went there.
+    const ocean = fishingDeps.ocean!;
+    const droop = b.y < ocean.heightAt(b.x, b.z) + 0.05 ? Math.min(sag, Math.max(0, (a.y - b.y) / 2)) : sag;
     let total = 0;
     for (let k = 1; k <= spans; k++) total += dist(pts[k], pts[k - 1]);
     let left = LINE_N;
@@ -1319,7 +1369,7 @@ export class FishingSystem extends createSystem({}) {
       const n = k === spans ? left : Math.max(1, Math.min(left - (spans - k), Math.round((LINE_N * len) / Math.max(total, 1e-6))));
       left -= n;
       _v.set((p.x + q.x) / 2, (p.y + q.y) / 2, (p.z + q.z) / 2);
-      if (spans === 1) _v.y -= S ? S.lineDroop(p, q, sag, this.wraps?.skip) : sag;
+      if (spans === 1) _v.y -= S ? S.lineDroop(p, q, droop, this.wraps?.skip) : droop;
       for (let j = 1; j <= n; j++) {
         const t = j / n;
         const u = 1 - t;
