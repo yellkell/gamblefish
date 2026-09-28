@@ -9,7 +9,7 @@
  * along z, facing into the platform); the top of the rail at y = `railTop`.
  */
 
-import { BoxGeometry, CylinderGeometry, Group, Mesh, MeshLambertMaterial, TorusGeometry } from 'three';
+import { BoxGeometry, CatmullRomCurve3, CylinderGeometry, Group, Mesh, MeshLambertMaterial, TorusGeometry, TubeGeometry, Vector3 } from 'three';
 
 const ORANGE = new MeshLambertMaterial({ color: 0xe8501e });
 const WHITE = new MeshLambertMaterial({ color: 0xf0ece0 });
@@ -38,18 +38,36 @@ export function lifeRing(railTop: number): Group {
     arc.rotation.z = (i * Math.PI) / 4 + Math.PI / 8;
     ring.add(arc);
   }
-  // the grab line: slack between four seizings, each a few turns round the ring
+  // the grab line: one rope all the way round, through four seizings on the ring's outside edge,
+  // sagging between them (outward, and down: the ring hangs upright, so the top loop lies back on
+  // the ring and the bottom one hangs clear)
+  const edge = R + tube + 0.006;
+  const pts: Vector3[] = [];
   for (let k = 0; k < 4; k++) {
     const a = (k * Math.PI) / 2 + Math.PI / 4;
-    const seize = new Mesh(new TorusGeometry(tube + 0.006, 0.007, 6, 12), LINE);
-    seize.position.set(Math.cos(a) * R, Math.sin(a) * R, 0);
-    seize.rotation.set(Math.PI / 2, 0, a);
-    ring.add(seize);
-    // the loop of line to the next seizing, sagging outward a little
-    const loop = new Mesh(new TorusGeometry(R + tube + 0.02, 0.0065, 5, 16, Math.PI / 2 - 0.12), LINE);
-    loop.rotation.z = a + 0.06;
-    ring.add(loop);
+    // a few turns of line round the ring's tube (its axis along the ring there)
+    for (const d of [-0.012, 0, 0.012]) {
+      const seize = new Mesh(new TorusGeometry(tube + 0.004, 0.0055, 6, 14), LINE);
+      const at = a + d / R;
+      seize.position.set(Math.cos(at) * R, Math.sin(at) * R, 0);
+      seize.quaternion.setFromUnitVectors(new Vector3(0, 0, 1), new Vector3(-Math.sin(at), Math.cos(at), 0));
+      ring.add(seize);
+    }
+    pts.push(new Vector3(Math.cos(a) * edge, Math.sin(a) * edge, 0));
+    // the slack to the next seizing: out from the ring, and down
+    for (const t of [0.25, 0.5, 0.75]) {
+      const b = a + (t * Math.PI) / 2;
+      const out = edge + 0.04 * Math.sin(t * Math.PI);
+      const drop = 0.03 * Math.sin(t * Math.PI);
+      const x = Math.cos(b) * out;
+      const y = Math.sin(b) * out - drop;
+      // never back inside the ring's tube
+      const r = Math.max(edge, Math.hypot(x, y));
+      const th = Math.atan2(y, x);
+      pts.push(new Vector3(Math.cos(th) * r, Math.sin(th) * r, 0));
+    }
   }
+  ring.add(new Mesh(new TubeGeometry(new CatmullRomCurve3(pts, true, 'centripetal'), 160, 0.0065, 6, true), LINE));
   g.add(ring);
 
   // the throwing line, coiled and hung on its own peg along the rail
