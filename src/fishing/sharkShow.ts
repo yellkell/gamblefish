@@ -29,7 +29,7 @@ import {
 } from 'three';
 import { MIX, shot, surfaceThrash, waterExitFish } from '../audio/samples.ts';
 import type { WaterFx } from '../fx/water.ts';
-import type { FishUniforms, Props } from './props.ts';
+import { swim, type FishUniforms, type Props } from './props.ts';
 import { SHARK_ID } from './shark.ts';
 
 const BEADS = 16;
@@ -173,8 +173,7 @@ export class SharkShow {
       m.position.copy(bob).addScaledVector(this.heading, -L * 0.5);
       m.position.y = water - L * 0.1;
       m.rotation.set(0.04, Math.atan2(this.heading.x, this.heading.z), Math.sin(time * 1.1) * 0.06);
-      this.u.uSwim.value = 0.05;
-      this.u.uFreq.value = 0.7;
+      swim(this.u, 0.05, 0.7, dt);
       // the mouth hangs a little open as it swims, as theirs do
       this.u.uJaw.value = 0.1 + 0.05 * Math.sin(time * 0.8);
       // a wake off the fin now and then
@@ -191,8 +190,7 @@ export class SharkShow {
       // nose up out of the water, level at the top, nose down onto its side coming back
       const pitch = -1.25 + k * 1.9;
       m.rotation.set(pitch, Math.atan2(this.heading.x, this.heading.z), this.rollSide * Math.max(0, k - 0.35) * 2.2);
-      this.u.uSwim.value = 0.1;
-      this.u.uFreq.value = 2.2;
+      swim(this.u, 0.1, 2.2, dt);
       // jaws wide as it comes out of the water, snapping shut at the top
       this.u.uJaw.value = k < 0.45 ? 0.2 + 0.6 * Math.min(1, k / 0.3) : Math.max(0.12, 0.8 - (k - 0.45) * 3);
       airborne = rise > 0.2;
@@ -219,8 +217,7 @@ export class SharkShow {
       m.position.copy(this.at);
       m.position.y = water - L * 0.2 + rise * L * 0.23 + Math.sin(time * 0.9) * 0.03;
       m.rotation.set(0.02, Math.atan2(this.heading.x, this.heading.z), this.rollSide * (0.55 + Math.sin(time * 0.7) * 0.08));
-      this.u.uSwim.value = 0.03;
-      this.u.uFreq.value = 0.5;
+      swim(this.u, 0.03, 0.5, dt);
       // spent, but it still works its jaws at you
       this.u.uJaw.value = 0.2 + 0.28 * Math.max(0, Math.sin(time * 1.3)) ** 3;
       if (Math.random() < dt * 1.5) this.fx()?.ripple(_v.copy(m.position).addScaledVector(this.heading, -L * 0.45), 0.8, 0, 1.4);
@@ -230,8 +227,7 @@ export class SharkShow {
       m.position.copy(this.from).addScaledVector(this.heading, k * k * 9);
       m.position.y = this.from.y - k * 2.6;
       m.rotation.set(0.25 * k, Math.atan2(this.heading.x, this.heading.z), 0.25 * (1 - k));
-      this.u.uSwim.value = 0.09;
-      this.u.uFreq.value = 1.6;
+      swim(this.u, 0.09, 1.6, dt);
       this.u.uJaw.value = 0.12;
       if (k >= 1) this.stop();
     }
