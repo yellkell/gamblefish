@@ -4,7 +4,7 @@
  *  THE PICKAXE   bought at the Jeweller's first window (village/gemWindows.ts). Once it's yours,
  *                walk up to a gem rock and it's in your hand (the rod goes over your shoulder), as
  *                the axe is among the trees.
- *  THE ROCKS     twenty-four, six on each kind of ground (mining/sites.ts), veined with lines of
+ *  THE ROCKS     thirty-two, eight on each kind of ground (mining/sites.ts), veined with lines of
  *                light in the colour of what's inside. Swing the pick's point into one: steel rings on
  *                stone, chips and sparks fly, a jolt in your hand, and the veins open wider and
  *                blaze. Six good blows and it bursts apart.

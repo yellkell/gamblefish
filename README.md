@@ -295,19 +295,20 @@ and the vendors.
     lantern on the slide's outer rail every 5 m, with a festoon of bulbs strung between them,
     so the whole tower is wound in a spiral of warm light you can see from the beach.
 - **The fire dancers' camps** (`src/camps/`): FIRE FIGHT 2's beach-party dancers (the glowstick
-  crowd round its bonfires, ff2's `src/arena/cove/`) have gone off into the wilds in **ten** little
+  crowd round its bonfires, ff2's `src/arena/cove/`) have gone off into the wilds in **twelve** little
   groups, each dancing round its own fire in a clearing with a chest beside it (the carpenter's
   sea chest, built so its lid opens: hollow inside, lined in red velvet, its logs lying in the
   bottom). None of them is on the chart and none can be seen from the
   start: they're over the ridges, down the hollows and round the far coasts, a long walk out
-  (two of them in the big forest behind the village, off to the left as you look up from the pier).
+  (two of them in the big forest behind the village, off to the left as you look up from the pier,
+  and two out on the far right, up the island's east coast).
   Listen for the drums, which carry further than the firelight: a little West African ensemble
   in 12/8 (bell, shaker, two bass drums and a djembe with a fill every fourth bar), each camp at
   its own tempo. `npm run check:camps` proves every
   one is hidden from the boardwalk, the pier and the beach, is level and standable, and can be
   reached on foot.
   - **Pleased to see you:** walk into a camp and its dancers throw their hands in the air, and gift
-    you everything in their chest (no pop-up: the chest's readout keeps the count, "2 of 10 camps
+    you everything in their chest (no pop-up: the chest's readout keeps the count, "2 of 12 camps
     found"). A hidden camp's gift is given once.
   - **The chest:** walk up to it and it opens by itself (or grip its lid). The lid swings up and the
     **chest pack** rises out of it: a tray like your backpack's, lined in the chest's red velvet and
@@ -319,10 +320,10 @@ and the vendors.
     Point at the logs to add them to your stack, or TAKE ALL. There's always a prize fish a tier up
     (the harder camps can hold a Gold). Walk away and the lid comes down; shut it with CLOSE and it stays shut till you've stepped away
     and come back.
-  - **The beach party:** find all ten and an eleventh group comes down to the main beach, west of the
+  - **The beach party:** find all twelve and a thirteenth group comes down to the main beach, west of the
     timber yard, and lights a fire there (the hidden camps' chests say so once you have). Their chest fills every day with a couple of nice fish
     (Silver or better) and a stack of logs, fresh at midnight. Which camps you've found, and what's left in each chest,
-    are saved. (A save that already had the beach party, from when there were eight to find,
+    are saved. (A save that already had the beach party, from when there were fewer to find,
     keeps it.)
 - **The gem rocks** (`src/mining/`): prospecting, with a pickaxe from the Jeweller.
   - **The Jeweller's windows** (`src/village/gemWindows.ts`): a second counter down the Jeweller's
@@ -331,8 +332,9 @@ and the vendors.
     it's yours) and nothing else: where the rocks are is yours to find out. **We Buy Gems**
     shows every kind in your pouch with a SELL for each, and SELL ALL; one of each kind you've
     ever found lies on a velvet pad under it.
-  - **The rocks** (`src/mining/sites.ts`, `src/mining/rock.ts`): twenty-four big boulders out in the
-    wilds, six on each kind of ground (a good few in the forest behind the village), none on the chart, veined with glowing lines in the colour of
+  - **The rocks** (`src/mining/sites.ts`, `src/mining/rock.ts`): thirty-two big boulders out in the
+    wilds, eight on each kind of ground (a good few in the forest behind the village and out on the
+    east side), none on the chart, veined with glowing lines in the colour of
     what's inside, breathing softly day and night. The bake clears the plants and Tidewater's own rocks round each. Own the
     pick and walk up to one and it's in your hand, the rod over your shoulder, as the axe is among
     the trees. Swing its point into the rock: steel rings on stone, chips and sparks fly, a jolt in

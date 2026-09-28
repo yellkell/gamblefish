@@ -1,13 +1,13 @@
 /**
- * THE FIRE DANCERS' CAMPS: FIRE FIGHT 2's beach party, hidden in ten little groups out in the
+ * THE FIRE DANCERS' CAMPS: FIRE FIGHT 2's beach party, hidden in twelve little groups out in the
  * wilds of the island (camps/sites.ts), each dancing round its fire with a chest beside it.
  *
  *  FINDING ONE   None is on the chart and none can be seen from the start (tools/camps-check.mjs
  *                proves it). Go and look: over the ridges, down the hollows. The drums carry
  *                further than the firelight (camps/sound.ts). Walk into a camp and its dancers are
  *                pleased to see you: they throw their hands in the air, and gift you everything
- *                in their chest (no pop-up: the chest's readout keeps the count, "2 of 10 camps found").
- *  THE BEACH     Find all ten and an eleventh group comes down to the main beach, west of the timber
+ *                in their chest (no pop-up: the chest's readout keeps the count, "2 of 12 camps found").
+ *  THE BEACH     Find all twelve and a thirteenth group comes down to the main beach, west of the timber
  *                yard, and lights a fire there. Their chest fills with a couple of nice fish and a
  *                stack of logs every day.
  *  THE CHEST     Walk up to it and it swings open by itself: THE CHEST PACK rises out of it, a tray like your backpack's with the dancers' fish lying in its slots
@@ -264,14 +264,14 @@ export class CampSystem extends createSystem({}) {
     campDeps.addBox?.({ tag: 'chest', walkable: false, solid: true, cx, cz, hx: 0.55, hz: 0.55, rotY: 0, top: c.at.y + CHEST_H, bottom: c.at.y - 1 });
   }
 
-  /** How many of the ten hidden camps you've found. */
+  /** How many of the twelve hidden camps you've found. */
   private foundCount(): number {
     return CAMPS.filter((s) => this.state.camps[s.id]?.found).length;
   }
 
   /**
-   * Once all ten are found, the eleventh sets up on the beach (the chests' readouts say so). A save
-   * that already has the beach party (from when there were eight to find) keeps it.
+   * Once all twelve are found, the thirteenth sets up on the beach (the chests' readouts say so). A save
+   * that already has the beach party (from when there were fewer to find) keeps it.
    */
   private checkBeach(): void {
     if (this.beachUp || !campDeps.state || (this.foundCount() < CAMPS.length && !this.state.camps[BEACH_CAMP.id])) return;
@@ -280,7 +280,7 @@ export class CampSystem extends createSystem({}) {
     this.colliders(this.beach);
   }
 
-  /** the camps you can go to: the hidden ten, and the beach party once it's there */
+  /** the camps you can go to: the hidden twelve, and the beach party once it's there */
   private get live(): Camp[] {
     return this.beachUp ? [...this.camps, this.beach] : this.camps;
   }
@@ -743,10 +743,10 @@ export class CampSystem extends createSystem({}) {
         L.text('Glad you found us.', 28, 108, 24, 'ink', 'left', 500);
         L.text('Please take these as a gift!', 28, 138, 24, 'accent', 'left', 700);
       }
-      // a hidden camp's chest keeps the count of the camps you've found, and once all ten are,
-      // where the eleventh is; the beach party's, its fill
+      // a hidden camp's chest keeps the count of the camps you've found, and once all twelve are,
+      // where the thirteenth is; the beach party's, its fill
       if (c.site.beach) L.text(`${used} / ${total} slots`, 28, 170, 18, 'dim', 'left', 600);
-      else if (found >= CAMPS.length) L.text('All ten found! A fire is lit for you on the main beach, west of the timber yard.', 28, 170, 18, 'accent', 'left', 600, 584);
+      else if (found >= CAMPS.length) L.text('All twelve found! A fire is lit for you on the main beach, west of the timber yard.', 28, 170, 18, 'accent', 'left', 600, 584);
       else L.text(`${found} of ${CAMPS.length} camps found`, 28, 170, 18, 'dim', 'left', 600);
     }
     L.end();

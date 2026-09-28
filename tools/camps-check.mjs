@@ -8,11 +8,11 @@
  * Reads the baked island through the same code the headset does (world/surfaces.ts,
  * camps/sites.ts, camps/stock.ts) and checks what a player would notice:
  *
- *   1. HIDDEN. None of the ten hidden camps can be seen from the start area: sight lines from the boardwalk, the pier
+ *   1. HIDDEN. None of the twelve hidden camps can be seen from the start area: sight lines from the boardwalk, the pier
  *      foot, along the pier to its head and the beach either side all hit the hills before the
  *      tops of the flames, the dancers' raised glowsticks or the chest.
- *      (The eleventh, the beach party, is in plain view on the main beach: it only sets up once the
- *      ten are found.)
+ *      (The thirteenth, the beach party, is in plain view on the main beach: it only sets up once the
+ *      twelve are found.)
  *   2. THERE TO STAND ON. Each plot is level, dry, clear of rocks, and you can teleport onto it and
  *      up to the chest.
  *   3. REACHABLE. Every camp can be walked to from the start, a hop at a time, without crossing
