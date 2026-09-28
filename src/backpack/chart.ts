@@ -51,6 +51,7 @@ export const KEY: Place[] = [
   { building: 'boathouse', text: 'Boatyard' },
   { building: 'N', text: 'Fortune teller' },
   { building: 'K', text: 'Taxidermist' },
+  { building: 'A', text: 'Jeweller' },
   { building: 'L', text: "Villa Mar: Coral's" },
   // at the counter's front (it faces +x), and among the east lot's trees by the log pile
   { at: YARD, stand: [YARD[0] + 2.6, YARD[1]], face: YARD, text: 'Timber yard' },
