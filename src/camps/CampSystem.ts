@@ -84,6 +84,8 @@ const CLOSE_R = 6;
 const BEACH_EARSHOT = 40;
 /** the camps are drawn only within this of the nearest one */
 const DRAW_R = 240;
+/** the chest pack's lining: the chest's red velvet, warm in the firelight at any hour */
+const CHEST_TRAY = { lining: 0x74182a, glow: 0.6 };
 /** the chest pack's tray, tipped toward you like the backpack's */
 const TILT = (35 * Math.PI) / 180;
 
@@ -206,7 +208,9 @@ export class CampSystem extends createSystem({}) {
     this.scene.add(this.toast.panel.mesh);
 
     // the chest pack
-    this.tray = new Tray();
+    // lined in the chest's own red velvet, and lit by the fire and the glow coming up out of the
+    // chest, not the sky (under the moon, the backpack's green felt went black behind the fish)
+    this.tray = new Tray(CHEST_TRAY);
     this.tray.build(...CHEST_GRID);
     this.scene.add(this.tray.group);
     this.info = new Panel([640, 220], [0.44, 0.15125]);
@@ -722,7 +726,8 @@ export class CampSystem extends createSystem({}) {
     // bark cloth printed with tapa bands, in a bamboo frame (ui/boards.ts)
     const L = this.infoLetters;
     L.begin();
-    L.title(c.site.name.toUpperCase(), 28, 72, 32, 'left', 380);
+    // no camp's name: the chest doesn't give away where you are (or where the others are)
+    L.title("THE DANCERS' CHEST", 28, 72, 32, 'left', 380);
     L.text(`worth $${worth}`, 612, 68, 24, 'accent', 'right', 700);
     // a hidden camp's chest keeps the count of the camps you've found; the beach party's, its fill
     L.text(c.site.beach ? `${used} / ${total} slots` : `${found} of ${CAMPS.length} camps found`, 28, 100, 21, 'dim', 'left', 600);

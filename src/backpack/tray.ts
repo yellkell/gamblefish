@@ -39,6 +39,15 @@ const WOOD = 0x7a5a3a;
 const WOOD_DARK = 0x4a3422;
 const FELT = 0x1d3a34;
 
+/** What the box is lined with, and the light it holds whatever the sky's doing (0 none). */
+export interface TrayLook {
+  lining: number;
+  /** each part's own colour, this much of it, lit from outside the sky (Lambert emissive) */
+  glow: number;
+}
+/** the backpack's: green felt, lit only by the day */
+const TACKLE_BOX: TrayLook = { lining: FELT, glow: 0 };
+
 export class Tray {
   readonly group = new Group();
   cols = 0;
@@ -48,7 +57,7 @@ export class Tray {
   readonly tiles: InstancedMesh;
   private readonly tileColour = new Color();
 
-  constructor() {
+  constructor(private readonly look: TrayLook = TACKLE_BOX) {
     this.group.name = 'backpack-tray';
     this.group.visible = false;
     this.group.add(this.body);
@@ -84,10 +93,12 @@ export class Tray {
     this.body.visible = this.gridShown;
     const w = this.width;
     const h = this.height;
-    const wood = new MeshLambertMaterial({ color: WOOD });
-    const dark = new MeshLambertMaterial({ color: WOOD_DARK });
-    // the floor of the box: felt
-    const floor = new Mesh(new BoxGeometry(w, 0.01, h), new MeshLambertMaterial({ color: FELT }));
+    const { lining, glow } = this.look;
+    const lit = (c: number): MeshLambertMaterial => new MeshLambertMaterial({ color: c, emissive: new Color(c).multiplyScalar(glow) });
+    const wood = lit(WOOD);
+    const dark = lit(WOOD_DARK);
+    // the floor of the box: its lining
+    const floor = new Mesh(new BoxGeometry(w, 0.01, h), lit(lining));
     floor.position.y = -0.005;
     this.body.add(floor);
     // the outer walls

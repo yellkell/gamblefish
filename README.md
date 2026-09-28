@@ -291,8 +291,10 @@ and the vendors.
     you everything in their chest (no pop-up: the chest's readout keeps the count, "2 of 8 camps
     found"). A hidden camp's gift is given once.
   - **The chest:** click OPEN THEIR GIFT over it (or grip its lid). The lid swings up and the
-    **chest pack** rises out of it: a tray like your backpack's, with the dancers' fish lying in its
-    slots and their logs beside it. Reach in and **click** a fish to pack it straight into your
+    **chest pack** rises out of it: a tray like your backpack's, lined in the chest's red velvet and
+    lit by the fire (never black under the moon), with the dancers' fish lying in its slots and
+    their logs beside it. Its readout says THE DANCERS' CHEST, never the camp's name, so no chest
+    gives away where it is. Reach in and **click** a fish to pack it straight into your
     backpack, or **grip** it to take it in your hand and put it in your backpack yourself (A).
     Point at the logs to add them to your stack, or TAKE ALL. There's always a prize fish a tier up
     (the harder camps can hold a Gold). Walk away and the lid comes down.
