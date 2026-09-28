@@ -173,8 +173,13 @@ export interface GameState {
   release(id: number): void;
   spend(amount: number): boolean;
   buy(key: string): unknown;
+  /** told of a change a frame or so later (deliver), with the others in turn */
   onChange(fn: (s: GameState) => void): () => void;
+  /** told of a change the moment it's made: only for what must hear at once, and is cheap */
+  onChangeNow(fn: (s: GameState) => void): () => void;
   emit(): void;
+  /** once a frame: tell the onChange listeners owed news, for up to budgetMs (at least one) */
+  deliver(budgetMs?: number): void;
   toJSON(): unknown;
   fromJSON(d: unknown): boolean;
   load(): boolean;
@@ -277,6 +282,38 @@ export function createGameState(): GameState {
     s.gems = readGems(d);
     s.journey = readJourney(d);
     return true;
+  };
+  // ~Two dozen boards round the island (the casino tables, the shop signs, the bank, the
+  // woodworks…) listen for changes, each repainting a canvas that then goes up to the GPU. All
+  // told at once, in the frame a fish came out of the water (or a chip went down), that was a
+  // hitch you could see. So they're told in turn, as many a frame as fit in a couple of
+  // milliseconds (deliver, from main.ts), in the order they asked; news that comes again before a
+  // board has heard is just the one repaint.
+  const now = new Set<(s: GameState) => void>();
+  const later = new Set<(s: GameState) => void>();
+  const owed = new Set<(s: GameState) => void>();
+  s.onChange = (fn) => {
+    later.add(fn);
+    return () => {
+      later.delete(fn);
+      owed.delete(fn);
+    };
+  };
+  s.onChangeNow = (fn) => {
+    now.add(fn);
+    return () => now.delete(fn);
+  };
+  s.emit = () => {
+    for (const fn of now) fn(s);
+    for (const fn of later) owed.add(fn);
+  };
+  s.deliver = (budgetMs = 2) => {
+    const t0 = performance.now();
+    for (const fn of owed) {
+      owed.delete(fn);
+      fn(s);
+      if (performance.now() - t0 >= budgetMs) break;
+    }
   };
   s.reset = () => {
     s.home = []; // first: Tidewater's reset saves and emits

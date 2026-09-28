@@ -8,7 +8,7 @@
  * with a rod in hand (fishing/FishingSystem.ts) and a wallet on each wrist.
  */
 
-import { launchXR, SessionMode, World } from '@iwsdk/core';
+import { createSystem, launchXR, SessionMode, World } from '@iwsdk/core';
 import { Vector3, type Camera, type PerspectiveCamera } from 'three';
 import { Music } from './audio/music.ts';
 import { ShoreSound } from './audio/shore.ts';
@@ -230,6 +230,14 @@ World.create(container, {
   const fx = new WaterFx((x, z) => ocean.heightAt(x, z), ocean.swell);
   scene.add(fx.group);
   const wallet = new WristWallet(game, [world.player.raySpaces.left, world.player.raySpaces.right]);
+  // the boards round the island hear about a change a few a frame, not all in one (fishing/tidewater.ts)
+  world.registerSystem(
+    class extends createSystem({}) {
+      update(): void {
+        game.deliver();
+      }
+    },
+  );
   const props = loadProps(propsBuf);
   // the silvery fish reflect the casinos' studio light (a soft, neutral room)
   props.setEnv(casinoEnv(world.renderer));
