@@ -27,6 +27,8 @@ const LOG_R = 0.017;
 const ROPE_R = 0.003;
 /** how far the rope stands off the bark (the logs' nine flats and their knots) */
 const ROPE_GAP = 0.0006;
+/** the pouch's neck, where its cord is drawn round it (m up from the tray) */
+const NECK = 0.074;
 /** the tags: canvas px and size (m) */
 const TAG_PX: [number, number] = [320, 120];
 const TAG_M: [number, number] = [0.13, 0.04875];
@@ -98,35 +100,34 @@ export class Stash {
     const b = new Batch();
     const velvet = M.cloth(renderer, '#4a1a66', 'velvet');
     const gold = M.gold(renderer);
-    const bag = turned(
-      [
-        [0, 0],
-        [0.024, 0.002],
-        [0.038, 0.011],
-        [0.045, 0.026],
-        [0.043, 0.043],
-        [0.034, 0.058],
-        [0.021, 0.068],
-        [0.016, 0.074],
-        [0.019, 0.08],
-        [0.025, 0.088],
-        [0.028, 0.094],
-        [0.025, 0.096],
-        [0.017, 0.089],
-        [0.012, 0.084],
-        [0, 0.083],
-      ],
-      54,
-    );
+    // (its outline, from the bottom up to the frill's lip and back down inside it)
+    const shape: [number, number][] = [
+      [0, 0],
+      [0.024, 0.002],
+      [0.038, 0.011],
+      [0.045, 0.026],
+      [0.043, 0.043],
+      [0.034, 0.058],
+      [0.021, 0.068],
+      [0.016, 0.074],
+      [0.019, 0.08],
+      [0.025, 0.088],
+      [0.028, 0.094],
+      [0.025, 0.096],
+      [0.017, 0.089],
+      [0.012, 0.084],
+      [0, 0.083],
+    ];
+    const bag = turned(shape, 54);
     // the pleats: the cloth gathered in folds, deep at the neck and frill, easing out over the belly
+    const gather = (y: number): number => Math.exp(-(((y - 0.078) / 0.018) ** 2));
     const pos = bag.getAttribute('position');
     for (let i = 0; i < pos.count; i++) {
       const x = pos.getX(i);
       const y = pos.getY(i);
       const z = pos.getZ(i);
       const th = Math.atan2(z, x);
-      const neck = Math.exp(-(((y - 0.078) / 0.018) ** 2));
-      const k = 1 + Math.cos(th * 9) * (0.02 + 0.13 * neck) + Math.cos(th * 5 + 1) * 0.02;
+      const k = 1 + Math.cos(th * 9) * (0.02 + 0.13 * gather(y)) + Math.cos(th * 5 + 1) * 0.02;
       pos.setXYZ(i, x * k, y, z * k);
     }
     bag.computeVertexNormals();
@@ -134,10 +135,37 @@ export class Stash {
     // the dark inside of its mouth
     b.at(M.cloth(renderer, '#12051a', 'velvet'), new CylinderGeometry(0.014, 0.014, 0.002, 18), 0, 0.0845, 0);
     // the cord drawn round the neck, a bow's two ends hanging down it, a tassel on each
-    b.at(gold, new TorusGeometry(0.0185, 0.0028, 6, 24).rotateX(Math.PI / 2), 0, 0.074, 0);
+    b.at(gold, new TorusGeometry(0.0185, 0.0028, 6, 24).rotateX(Math.PI / 2), 0, NECK, 0);
+    // the ends lie on the velvet, never in it: at each height, clear of the bag's widest there or
+    // above (its outline, the pleats at their fullest), so over the belly they drape and below it
+    // they hang straight
+    const outline = (y: number): number => {
+      for (let i = 1; i < shape.length; i++) {
+        const [r0, y0] = shape[i - 1];
+        const [r1, y1] = shape[i];
+        if (y <= y1) return r0 + ((r1 - r0) * (y - y0)) / (y1 - y0);
+      }
+      return 0;
+    };
+    const reach = (y: number): number => {
+      let r = 0;
+      for (let h = Math.max(0, y); h <= NECK; h += 0.0005) r = Math.max(r, outline(h) * (1.04 + 0.13 * gather(h)));
+      return r;
+    };
+    const cord = 0.0022;
+    const drop = 0.028;
     for (const s of [-1, 1]) {
-      const end = new Vector3(s * 0.02, 0.028, 0.038);
-      b.add(gold, stalk([new Vector3(s * 0.006, 0.074, 0.0185), new Vector3(s * 0.014, 0.062, 0.034), end], 0.0022, 0.0022, 5, 10));
+      const pts = [new Vector3(s * 0.006, NECK, 0.0185)];
+      for (let i = 1; i <= 8; i++) {
+        const t = i / 8;
+        const y = NECK + (drop - NECK) * t;
+        // (the last point holds the tassel, so it stands off by the tassel's width, not the cord's)
+        const r = i < 8 ? reach(y) + cord + 0.0008 : reach(y - 0.022) + 0.0068;
+        const th = s * (0.32 + 0.2 * t);
+        pts.push(new Vector3(Math.sin(th) * r, y, Math.cos(th) * r));
+      }
+      b.add(gold, stalk(pts, cord, cord, 5, 24));
+      const end = pts[pts.length - 1];
       b.at(gold, turned([[0, 0.012], [0.004, 0.008], [0.006, -0.01], [0, -0.012]], 10), end.x, end.y - 0.01, end.z);
     }
     this.pouch.add(b.group());
