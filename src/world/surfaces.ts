@@ -49,7 +49,7 @@ interface Deck {
   toGround: boolean;
 }
 
-interface Wall {
+export interface Wall {
   /** XZ corners (boxes) — four points, closed loop */
   pts: [number, number][] | null;
   /** posts */
@@ -83,13 +83,17 @@ const _n = { x: 0, y: 1, z: 0 };
 export class Surfaces {
   readonly decks: Deck[] = [];
   readonly walls: Wall[] = [];
+  /** the posts among them a fishing line goes round, not over (world/lineWrap.ts) */
+  readonly posts: Wall[] = [];
   readonly terrain: Heightfield;
 
   constructor(terrain: Heightfield, colliders: { boxes: BoxCollider[]; cylinders: CylinderCollider[] }) {
     this.terrain = terrain;
     for (const b of colliders.boxes) this.addBox(b);
     for (const c of colliders.cylinders) {
-      this.walls.push({ pts: null, x: c.x, z: c.z, r: c.r, sill: c.top, bottom: c.bottom, over: HOP_OVER.has(c.tag), tag: c.tag, bx: c.x, bz: c.z, br: c.r });
+      const w: Wall = { pts: null, x: c.x, z: c.z, r: c.r, sill: c.top, bottom: c.bottom, over: HOP_OVER.has(c.tag), tag: c.tag, bx: c.x, bz: c.z, br: c.r };
+      this.walls.push(w);
+      if (LINE_POSTS.has(c.tag)) this.posts.push(w);
     }
   }
 
@@ -118,6 +122,7 @@ export class Surfaces {
       ].map(([lx, lz]) => [b.cx + lx * cos + lz * sin, b.cz - lx * sin + lz * cos]);
       const w: Wall = { pts, x: 0, z: 0, r: 0, sill: b.top, bottom: b.bottom, over: HOP_OVER.has(b.tag), tag: b.tag, bx: b.cx, bz: b.cz, br: Math.hypot(b.hx, b.hz) };
       this.walls.push(w);
+      if (LINE_POSTS.has(b.tag)) this.posts.push(w);
       this.added.set(b, w);
     }
   }
@@ -137,6 +142,8 @@ export class Surfaces {
     }
     const j = this.walls.indexOf(o as Wall);
     if (j >= 0) this.walls.splice(j, 1);
+    const k = this.posts.indexOf(o as Wall);
+    if (k >= 0) this.posts.splice(k, 1);
   }
 
   /** decks by 4 m cell (for deckOver: the grass asks thousands of times per re-grow) */
@@ -400,10 +407,11 @@ export class Surfaces {
    * length, dropping the least of them on a long run over the sand), and their count returned.
    * `lift` is how far over a surface the line lies. Footprints are grown by LINE_PAD: the timber's
    * drawn a little proud of its collider (piles lean, rail tops and plank ends overhang), and a
-   * line resting on a collider's very edge cut the corner off what's drawn.
+   * line resting on a collider's very edge cut the corner off what's drawn. What's in `skip` it
+   * doesn't lie over (the posts it's gone round: world/lineWrap.ts).
    */
-  lineRests(a: Vec3, b: Vec3, out: Vec3[], lift = 0.02): number {
-    const n = this.lineSpan(a, b, 0.05, lift);
+  lineRests(a: Vec3, b: Vec3, out: Vec3[], skip: ReadonlySet<Wall> = NONE, lift = 0.02): number {
+    const n = this.lineSpan(a, b, 0.05, lift, 0, skip);
     if (n === 0 || out.length === 0) return 0;
     const dx = b.x - a.x;
     const dz = b.z - a.z;
@@ -515,12 +523,13 @@ export class Surfaces {
   /**
    * How far a line from `a` to `b` that rests on nothing may droop, at most `sag` (FishingSystem's
    * curve: the straight line let down by 2·t·(1 − t)·sag), before its belly comes down on what it
-   * passes over: a rail it clears taut, the deck's edge, the sand. It lies on it instead.
+   * passes over: a rail it clears taut, the deck's edge, the sand. It lies on it instead. (Not
+   * what's in `skip`, as lineRests.)
    */
-  lineDroop(a: Vec3, b: Vec3, sag: number, lift = 0.02): number {
+  lineDroop(a: Vec3, b: Vec3, sag: number, skip: ReadonlySet<Wall> = NONE, lift = 0.02): number {
     if (sag <= 0) return sag;
     // every 10 cm: a rail's footprint, grown, is 30 cm across
-    const n = this.lineSpan(a, b, 0.1, lift, sag);
+    const n = this.lineSpan(a, b, 0.1, lift, sag, skip);
     if (n === 0) return sag;
     const dx = b.x - a.x;
     const dz = b.z - a.z;
@@ -551,9 +560,9 @@ export class Surfaces {
    * (their count returned, 0 if it's too short to bother), the ground or a deck under each
    * (lineBase, `lift` over it), and the walls it passes near, each with the run of samples its
    * footprint (grown by LINE_PAD) could take in (lineWalls, lineI0, lineI1). Walls wholly under
-   * both ends (and `drop` more) can't be in its way.
+   * both ends (and `drop` more) can't be in its way, and those in `skip` are left out.
    */
-  private lineSpan(a: Vec3, b: Vec3, step: number, lift: number, drop = 0): number {
+  private lineSpan(a: Vec3, b: Vec3, step: number, lift: number, drop = 0, skip: ReadonlySet<Wall> = NONE): number {
     const dx = b.x - a.x;
     const dz = b.z - a.z;
     const L = Math.hypot(dx, dz);
@@ -571,7 +580,7 @@ export class Surfaces {
     const ux = dx / L;
     const uz = dz / L;
     for (const w of this.walls) {
-      if (w.sill + (LINE_TOP[w.tag] ?? 0) + lift <= lo) continue;
+      if (w.sill + (LINE_TOP[w.tag] ?? 0) + lift <= lo || skip.has(w)) continue;
       const r = w.br + pad;
       const px = w.bx - a.x;
       const pz = w.bz - a.z;
@@ -603,6 +612,13 @@ export class Surfaces {
 }
 
 /**
+ * Tall, slender things a fishing line swung against from the side goes round rather than climbing
+ * over (world/lineWrap.ts): the pier's lamp posts, and the walks' lantern posts.
+ */
+const LINE_POSTS = new Set(['lampPost']);
+const NONE: ReadonlySet<Wall> = new Set();
+
+/**
  * Where a collider's top differs from the top of the thing itself, for a fishing line lying over
  * it: the pier's rail colliders stand 10 cm over its top rail, the walks' 1.5 cm under theirs.
  */
@@ -619,7 +635,7 @@ const LINE_SAMPLES = 800;
 /** the most walls a line's laid over */
 const LINE_WALLS = 512;
 /** how far a fishing line keeps off the footprint of what it lies over (see lineRest) */
-const LINE_PAD = 0.06;
+export const LINE_PAD = 0.06;
 /** how far off a deck's edge a line hangs: past the plank ends, clear of LINE_PAD */
 const EDGE_CLEAR = LINE_PAD + 0.02;
 
