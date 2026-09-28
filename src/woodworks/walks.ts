@@ -6,7 +6,8 @@
  * PUT IN WOOD. Point and click: your logs fly out of your backpack into the crate one after
  * another (a thunk each), and the walk lays itself out, a bay at a time: its piles, cap beam and
  * stringers, then the planks dropping on, then the rails, a clap and two hammer taps per step.
- * Until the walk is finished a rope with a sign hangs across the gateway and the way is shut;
+ * Until the walk is finished a rope hangs across the gateway, tied to an eye bolt in a post at each
+ * side, with a painted board hung from it on two cords, and the way is shut;
  * with the last plank down it's unhooked, drops away, and the walk is open. Whatever of the
  * pier's own gear stood in the gateway (the deep walk's: a life ring and two rods on the rail) is
  * moved along the rail out of the way as it drops, and the crate and its board go with the rope.
@@ -28,6 +29,7 @@ import {
   BoxGeometry,
   BufferGeometry,
   CanvasTexture,
+  CatmullRomCurve3,
   Color,
   ConeGeometry,
   CylinderGeometry,
@@ -35,12 +37,13 @@ import {
   Group,
   Matrix4,
   Mesh,
-  MeshBasicMaterial,
   MeshLambertMaterial,
-  PlaneGeometry,
   Quaternion,
+  RepeatWrapping,
+  SphereGeometry,
   SRGBColorSpace,
   TorusGeometry,
+  TubeGeometry,
   Euler,
   Vector3,
   type Camera,
@@ -50,7 +53,8 @@ import {
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { logThunk, plankLay, uiDeny } from '../audio/sfx.ts';
 import type { GameState } from '../fishing/tidewater.ts';
-import { font, onFontsReady } from '../ui/fonts.ts';
+import { onFontsReady } from '../ui/fonts.ts';
+import { handLetter, plankBoard, serif, weather } from '../village/signs.ts';
 import type { BoxCollider } from '../world/data.ts';
 import { buildLamps } from '../world/lamps.ts';
 import { bucketAndRope } from './bucket.ts';
@@ -394,28 +398,30 @@ export class Walks {
     this.group.add(mesh);
 
     // the rope across the gateway, with its sign, until the walk is finished: then it's unhooked
-    // at one end and drops away (it swings down from the other, about `swing`)
+    // at one end and drops away (it swings down from the other, about `swing`). It's tied to an
+    // eye bolt in a post at each side of the gateway (the posts stay, where the pier's rail ends).
     const rope = new Group();
     const ropeSwing = new Group();
     const g = def.gate;
     const span = g.to - g.from;
+    const gateFrame = (o: Object3D): void => {
+      if (g.alongX) o.position.set((g.from + g.to) / 2, DECK + ROPE_Y, g.line);
+      else {
+        o.position.set(g.line, DECK + ROPE_Y, (g.from + g.to) / 2);
+        o.rotation.y = Math.PI / 2;
+      }
+    };
     {
-      const ropeMesh = new Mesh(new CylinderGeometry(0.018, 0.018, span, 6).rotateZ(Math.PI / 2), new MeshLambertMaterial({ color: 0xc8b48a }));
-      const sign = new Mesh(new PlaneGeometry(0.62, 0.3), new MeshBasicMaterial({ map: signTexture(def.id === 'reef' ? 'TO THE REEF' : 'TO THE DEEP'), toneMapped: false }));
-      sign.position.set(0, -0.2, 0);
-      const back = sign.clone();
-      back.rotation.y = Math.PI;
+      const posts = gatePosts(def, this.deps.pierWood);
+      gateFrame(posts);
+      this.group.add(posts);
       const hung = new Group();
       hung.position.x = span / 2;
-      hung.add(ropeMesh, sign, back);
+      hung.add(ropeAcross(span - 2 * EYE_OUT), hangingSign(def.id === 'reef' ? 'TO THE REEF' : 'TO THE DEEP', def.id === 'reef' ? 11 : 23, span - 2 * EYE_OUT));
       ropeSwing.position.x = -span / 2;
       ropeSwing.add(hung);
       rope.add(ropeSwing);
-      if (g.alongX) rope.position.set((g.from + g.to) / 2, DECK + 0.78, g.line);
-      else {
-        rope.position.set(g.line, DECK + 0.78, (g.from + g.to) / 2);
-        rope.rotation.y = Math.PI / 2;
-      }
+      gateFrame(rope);
       this.group.add(rope);
     }
     // while it's up the way is shut (the rail's own height: no hopping it)
@@ -689,34 +695,202 @@ function mesh3(g: BufferGeometry, m: MeshLambertMaterial, x: number, y: number, 
   return o;
 }
 
-function signTexture(text: string): CanvasTexture {
+/** the rope's height over the deck at the eye bolts, how far the eyes stand off the posts, its sag */
+const ROPE_Y = 0.8;
+const EYE_OUT = 0.03;
+const SAG = 0.11;
+/** the rope's height (below the eyes) at `x` along it, from the middle, on a rope `len` long */
+const sagAt = (x: number, len: number): number => -SAG * (1 - ((2 * x) / len) ** 2);
+
+/** the pier's rope: manila, laid in three strands (the twist painted on, repeating along it) */
+let ropeMat: MeshLambertMaterial | null = null;
+function ropeMaterial(): MeshLambertMaterial {
+  if (ropeMat) return ropeMat;
   const c = document.createElement('canvas');
-  c.width = 256;
-  c.height = 124;
-  const t = new CanvasTexture(c);
-  t.colorSpace = SRGBColorSpace;
-  const paint = (): void => paintSign(c.getContext('2d')!, text);
-  paint();
-  onFontsReady(() => {
-    paint();
-    t.needsUpdate = true;
-  });
-  return t;
+  c.width = 64;
+  c.height = 32;
+  const g = c.getContext('2d')!;
+  g.fillStyle = '#c8b48a';
+  g.fillRect(0, 0, 64, 32);
+  // three strands a turn, each a lay shaded dark at its edges
+  for (let k = -1; k < 4; k++) {
+    const x = k * 21.3;
+    const grad = g.createLinearGradient(x, 0, x + 21.3, 0);
+    grad.addColorStop(0, 'rgba(70,50,24,0.55)');
+    grad.addColorStop(0.3, 'rgba(255,240,200,0.12)');
+    grad.addColorStop(0.85, 'rgba(70,50,24,0.2)');
+    grad.addColorStop(1, 'rgba(70,50,24,0.6)');
+    g.fillStyle = grad;
+    g.beginPath();
+    g.moveTo(x, 0);
+    g.lineTo(x + 21.3, 0);
+    g.lineTo(x + 21.3 + 16, 32);
+    g.lineTo(x + 16, 32);
+    g.closePath();
+    g.fill();
+  }
+  const map = new CanvasTexture(c);
+  map.colorSpace = SRGBColorSpace;
+  map.wrapS = map.wrapT = RepeatWrapping;
+  return (ropeMat = new MeshLambertMaterial({ map }));
 }
 
-function paintSign(g: CanvasRenderingContext2D, text: string): void {
-  g.fillStyle = '#e8d8b0';
-  g.fillRect(0, 0, 256, 124);
-  g.strokeStyle = '#5a3a1a';
-  g.lineWidth = 8;
-  g.strokeRect(4, 4, 248, 116);
-  g.fillStyle = '#5a2a14';
-  g.textAlign = 'center';
-  g.textBaseline = 'middle';
-  g.font = font(700, 30);
-  g.fillText(text, 128, 44, 230);
-  g.font = font(600, 22);
-  g.fillText('bring wood to build', 128, 86, 230);
+/** A rope `len` long between two eyes, sagging, a knot at each end (the origin at its middle). */
+function ropeAcross(len: number): Group {
+  const o = new Group();
+  const pts: Vector3[] = [];
+  for (let i = 0; i <= 16; i++) {
+    const x = -len / 2 + (i / 16) * len;
+    pts.push(new Vector3(x, sagAt(x, len), 0));
+  }
+  const mat = ropeMaterial().clone();
+  mat.map = mat.map!.clone();
+  // one lay of the twist every 4 cm along it
+  mat.map.repeat.set(len / 0.04, 1);
+  mat.map.needsUpdate = true;
+  o.add(new Mesh(new TubeGeometry(new CatmullRomCurve3(pts), 40, 0.014, 7, false), mat));
+  // tied off round each eye: a knot, and the tail hanging from it
+  for (const s of [-1, 1]) {
+    const knot = new Mesh(new SphereGeometry(0.024, 8, 6).scale(1.3, 1, 1), mat);
+    knot.position.set((s * len) / 2 - s * 0.02, -0.004, 0);
+    o.add(knot);
+    const tail = new Mesh(new TubeGeometry(new CatmullRomCurve3([new Vector3((s * len) / 2 - s * 0.02, -0.01, 0.01), new Vector3((s * len) / 2 - s * 0.03, -0.07, 0.015), new Vector3((s * len) / 2 - s * 0.025, -0.13, 0.01)]), 8, 0.011, 6, false), mat);
+    o.add(tail);
+  }
+  return o;
+}
+
+/**
+ * The sign on the rope: a board of two painted planks, 2.5 cm thick, hand-lettered on both faces
+ * the way the village's signs are (village/signs.ts) and weathered like them, lit like everything
+ * round it. It hangs from the rope on two cords through screw eyes in its top edge.
+ */
+function hangingSign(text: string, seed: number, ropeLen: number): Group {
+  const W = 0.52;
+  const H = 0.27;
+  const T = 0.025;
+  const o = new Group();
+  const c = document.createElement('canvas');
+  c.width = 512;
+  c.height = Math.round((512 * H) / W);
+  const map = new CanvasTexture(c);
+  map.colorSpace = SRGBColorSpace;
+  map.anisotropy = 4;
+  const paint = (): void => {
+    const g = c.getContext('2d')!;
+    const w = c.width;
+    const h = c.height;
+    plankBoard(g, 0, 0, w, h, '#d9c69c', seed, 2);
+    // a painted border, a finger in from the edge
+    g.strokeStyle = 'rgba(92,48,22,0.85)';
+    g.lineWidth = 7;
+    g.strokeRect(14, 14, w - 28, h - 28);
+    handLetter(g, text, w / 2, h * 0.4, w - 70, serif(800, 62), '#5a2a14', 'rgba(40,20,8,0.25)', seed);
+    handLetter(g, 'bring wood to build', w / 2, h * 0.72, w - 110, serif(600, 34), '#6a3a1c', null, seed + 1);
+    weather(g, w, h, seed, 0.55);
+    map.needsUpdate = true;
+  };
+  paint();
+  onFontsReady(paint);
+  const face = new MeshLambertMaterial({ map, emissive: 0xffffff, emissiveMap: map, emissiveIntensity: 0.1 });
+  const edge = new MeshLambertMaterial({ color: 0x8a7658 });
+  const top = sagAt(0, ropeLen) - 0.09;
+  const board = new Mesh(new BoxGeometry(W, H, T), [edge, edge, edge, edge, face, face]);
+  board.position.y = top - H / 2;
+  o.add(board);
+  // two cords from the rope down through screw eyes in the board's top edge
+  const cord = ropeMaterial();
+  const steel = new MeshLambertMaterial({ color: 0x8a8e92 });
+  for (const s of [-1, 1]) {
+    const x = s * (W / 2 - 0.06);
+    const from = new Vector3(x, sagAt(x, ropeLen) - 0.008, 0);
+    const to = new Vector3(x, top + 0.014, 0);
+    const d = from.distanceTo(to);
+    const line = new Mesh(new CylinderGeometry(0.0035, 0.0035, d, 5), cord);
+    line.position.copy(from).add(to).multiplyScalar(0.5);
+    o.add(line);
+    // the loop round the rope
+    const loop = new Mesh(new TorusGeometry(0.018, 0.004, 5, 12), cord);
+    loop.position.copy(from).y += 0.004;
+    loop.rotation.y = Math.PI / 2;
+    o.add(loop);
+    const eye = new Mesh(new TorusGeometry(0.009, 0.0022, 5, 10), steel);
+    eye.position.set(x, top + 0.008, 0);
+    eye.rotation.y = Math.PI / 2;
+    o.add(eye);
+  }
+  return o;
+}
+
+/**
+ * A post at each side of a gateway, where the pier head's rail stops (the pier's own section,
+ * 12 cm, in its colours), each with an eye bolt on its face to tie the rope to. In the gateway's
+ * frame: x along the rail line from the gateway's middle, the eyes at y = 0.
+ */
+function gatePosts(def: WalkDef, wood: Mesh | null): Group {
+  const g = def.gate;
+  const span = g.to - g.from;
+  const [up, side] = pierTone(def, wood, 0.95, 0.995, 0.1);
+  const parts: BufferGeometry[] = [];
+  for (const s of [-1, 1]) {
+    // from the deck up under the top rail, which caps it
+    const box = new BoxGeometry(0.12, 0.95, 0.12).toNonIndexed();
+    box.translate(s * (span / 2 + 0.06), 0.475 - ROPE_Y, 0);
+    const n = box.getAttribute('normal');
+    const col = new Float32Array(n.count * 3);
+    for (let i = 0; i < n.count; i++) {
+      const c = Math.abs(n.getY(i)) > 0.7 ? up : side;
+      col.set([c.r, c.g, c.b], i * 3);
+    }
+    box.setAttribute('color', new Float32BufferAttribute(col, 3));
+    box.deleteAttribute('uv');
+    parts.push(box);
+  }
+  const o = new Group();
+  o.add(new Mesh(mergeGeometries(parts, false)!, new MeshLambertMaterial({ vertexColors: true })));
+  // the eye bolts: a galvanised ring on a shank into each post's face
+  const galv = new MeshLambertMaterial({ color: 0x9a9ea2 });
+  for (const s of [-1, 1]) {
+    const shank = new Mesh(new CylinderGeometry(0.006, 0.006, EYE_OUT, 6).rotateZ(Math.PI / 2), galv);
+    shank.position.set(s * (span / 2 - EYE_OUT / 2), 0, 0);
+    const eye = new Mesh(new TorusGeometry(0.02, 0.005, 6, 14), galv);
+    eye.position.set(s * (span / 2 - EYE_OUT), 0, 0);
+    o.add(shank, eye);
+  }
+  return o;
+}
+
+/**
+ * The pier's colours by a gateway, read off its baked rail either side of the gap between
+ * [y0, y1] over the deck, `t` either side of the rail line: a face looking up, and a side face (as
+ * Tidewater bakes them, shaded apart).
+ */
+function pierTone(def: WalkDef, wood: Mesh | null, y0: number, y1: number, t: number): [Color, Color] {
+  const g = def.gate;
+  const up = new Color();
+  const side = new Color();
+  let nu = 0;
+  let ns = 0;
+  if (wood) {
+    const P = wood.geometry.getAttribute('position');
+    const N = wood.geometry.getAttribute('normal');
+    const C = wood.geometry.getAttribute('color');
+    for (let i = 0; i < P.count; i++) {
+      const y = P.getY(i) - DECK;
+      if (y < y0 - 0.006 || y > y1 + 0.006) continue;
+      const [a, c] = g.alongX ? [P.getX(i), P.getZ(i)] : [P.getZ(i), P.getX(i)];
+      if (Math.abs(c - g.line) > t + 0.006) continue;
+      if (!((a > g.from - 0.6 && a < g.from + 0.01) || (a > g.to - 0.01 && a < g.to + 0.6))) continue;
+      const k = Math.abs(N.getY(i)) > 0.7;
+      (k ? up : side).r += C.getX(i);
+      (k ? up : side).g += C.getY(i);
+      (k ? up : side).b += C.getZ(i);
+      if (k) nu++;
+      else ns++;
+    }
+  }
+  const fallback = new Color(0x3a3128);
+  return [nu ? up.multiplyScalar(1 / nu) : fallback, ns ? side.multiplyScalar(1 / ns) : fallback];
 }
 
 /**
@@ -735,31 +909,7 @@ function gateRail(def: WalkDef, wood: Mesh | null): { mesh: Mesh; box: BoxCollid
   ];
   const parts: BufferGeometry[] = [];
   for (const [y0, y1, t] of rails) {
-    const up = new Color();
-    const side = new Color();
-    let nu = 0;
-    let ns = 0;
-    if (wood) {
-      const P = wood.geometry.getAttribute('position');
-      const N = wood.geometry.getAttribute('normal');
-      const C = wood.geometry.getAttribute('color');
-      for (let i = 0; i < P.count; i++) {
-        const y = P.getY(i) - DECK;
-        if (y < y0 - 0.006 || y > y1 + 0.006) continue;
-        const [a, c] = g.alongX ? [P.getX(i), P.getZ(i)] : [P.getZ(i), P.getX(i)];
-        if (Math.abs(c - g.line) > t + 0.006) continue;
-        if (!((a > g.from - 0.6 && a < g.from + 0.01) || (a > g.to - 0.01 && a < g.to + 0.6))) continue;
-        const k = Math.abs(N.getY(i)) > 0.7;
-        (k ? up : side).r += C.getX(i);
-        (k ? up : side).g += C.getY(i);
-        (k ? up : side).b += C.getZ(i);
-        if (k) nu++;
-        else ns++;
-      }
-    }
-    const fallback = new Color(0x3a3128);
-    const cu = nu ? up.multiplyScalar(1 / nu) : fallback;
-    const cs = ns ? side.multiplyScalar(1 / ns) : fallback;
+    const [cu, cs] = pierTone(def, wood, y0, y1, t);
     const box = new BoxGeometry(g.alongX ? L : t * 2, y1 - y0, g.alongX ? t * 2 : L).toNonIndexed();
     box.translate(g.alongX ? mid : g.line, DECK + (y0 + y1) / 2, g.alongX ? g.line : mid);
     const n = box.getAttribute('normal');

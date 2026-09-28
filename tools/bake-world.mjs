@@ -131,6 +131,27 @@ let stems = 0;
 let oarsIn = 0;
 /** how far each of the pier head's two rods was set back (see the rods' patch) */
 const rodBackLog = [];
+// The pier head's stack of lobster traps (Pier.js: three on the deck, two on top) had its top two
+// laid through each other, one of them crosswise, and each half into the ones below. The bake
+// sets them on the stack as they'd be left: one along the two below it, resting on both their
+// crests, and the other on the third, clear of it. [x, z] as Pier.js lays them → [x, z, turn].
+const TRAP_STACK = [
+  [[50.3, 38.8], [50.15, 38.825, 0.04]],
+  [[50.5, 38.75], [51.1, 38.6, -0.06]],
+];
+let trapsRestacked = 0;
+{
+  const { InstancedProps } = await import(url('world/Props.js'));
+  const add = InstancedProps.prototype.add;
+  InstancedProps.prototype.add = function (type, x, y, z, ry, ...rest) {
+    const fix = type === 'trap' && y > DK_PIER + 0.2 ? TRAP_STACK.find(([[fx, fz]]) => near(x, fx, 1e-3) && near(z, fz, 1e-3)) : null;
+    if (fix) {
+      [x, z, ry] = fix[1];
+      trapsRestacked++;
+    }
+    return add.call(this, type, x, y, z, ry, ...rest);
+  };
+}
 // the gateways the walks you build leave the pier head by (src/woodworks/gates.ts): the head's
 // rails stop either side of each
 const { WALKS } = await import('../src/woodworks/gates.ts');
@@ -731,6 +752,7 @@ for (const [key, b] of Object.entries(deepGear.batches)) {
   (groups.deepGear ??= []).push({ o: { geometry, matrixWorld: new E.Matrix4(), updateWorldMatrix() {} }, kind: key });
 }
 console.log(`rowboats' bows closed: ${stems}, oars laid inside them: ${oarsIn}`);
+console.log(`the pier head's lobster traps restacked: ${trapsRestacked} of ${TRAP_STACK.length}`);
 console.log(`the deep walk's rods set back off the rail: ${[...rodBackLog].map((b) => b.toFixed(2)).join(', ')} m`);
 console.log(`deep walk's gear moved off the pier: ${Object.values(deepGear.batches).reduce((n, b) => n + b.vcount, 0)} vertices`);
 village.group.traverse((o) => {
