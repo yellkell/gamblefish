@@ -165,11 +165,12 @@ export interface GameState {
   /** the journey (statue/): full helter skelter descents, and whether the golden statue is up */
   journey: JourneySave;
   /**
-   * The bait you've chosen to put on the hook at the bait shop, for its look (fishing/gear.ts
-   * baitOnHook): any you've bought, or null for your best. The bites always come as your best
-   * bait brings them.
+   * The gear you've chosen to use for its look, by track (fishing/gear.ts shownLevel): the rod in
+   * your hand (the tackle shop's rack) and the bait on your hook (the bait shop), any level you've
+   * bought. A track that isn't here shows your best. It's only the look: what the gear does is
+   * always your best's.
    */
-  baitLook: number | null;
+  looks: Record<string, number>;
   readonly stats: GearStats;
   readonly holdKg: number;
   readonly holdValue: number;
@@ -262,6 +263,15 @@ function readCamps(d: unknown): Record<string, CampSave> {
   return out;
 }
 
+/** Read the looks back: only a level of a track you've got (anything else shows your best). */
+function readLooks(d: unknown, upgrades: Record<string, number>): Record<string, number> {
+  const out: Record<string, number> = {};
+  const src = (d as { looks?: unknown }).looks;
+  if (!src || typeof src !== 'object') return out;
+  for (const [k, v] of Object.entries(src as Record<string, unknown>)) if (Number.isInteger(v) && (v as number) >= 0 && (v as number) < (upgrades[k] | 0)) out[k] = v as number;
+  return out;
+}
+
 export function createGameState(): GameState {
   const s = new (GameStateJs as unknown as new (storage: unknown) => GameState)(prefixedStorage());
   // our own field on Tidewater's save: the shack's things ride along in the same JSON (local and
@@ -272,12 +282,12 @@ export function createGameState(): GameState {
   s.coral = { thanked: [], visits: 0 };
   s.gems = freshGems();
   s.journey = freshJourney();
-  s.baitLook = null;
+  s.looks = {};
   const toJSON = s.toJSON.bind(s);
   const fromJSON = s.fromJSON.bind(s);
   const reset = s.reset.bind(s);
   // (baitGoop: this save's bait levels count goop bait: fishing/gear.ts baitShift)
-  s.toJSON = () => ({ ...(toJSON() as object), home: s.home, woodworks: s.woodworks, camps: s.camps, coral: s.coral, gems: s.gems, journey: s.journey, baitLook: s.baitLook, baitGoop: true });
+  s.toJSON = () => ({ ...(toJSON() as object), home: s.home, woodworks: s.woodworks, camps: s.camps, coral: s.coral, gems: s.gems, journey: s.journey, looks: s.looks, baitGoop: true });
   s.fromJSON = (d: unknown) => {
     if (!fromJSON(d)) return false;
     s.upgrades.bait = (s.upgrades.bait | 0) + baitShift(d as Parameters<typeof baitShift>[0]);
@@ -288,8 +298,7 @@ export function createGameState(): GameState {
     s.coral = readCoral(d, s.home);
     s.gems = readGems(d);
     s.journey = readJourney(d);
-    const look = (d as { baitLook?: unknown }).baitLook;
-    s.baitLook = Number.isInteger(look) && (look as number) >= 0 && (look as number) <= (s.upgrades.bait | 0) ? (look as number) : null;
+    s.looks = readLooks(d, s.upgrades);
     return true;
   };
   // ~Two dozen boards round the island (the casino tables, the shop signs, the bank, the
@@ -331,7 +340,7 @@ export function createGameState(): GameState {
     s.coral = { thanked: [], visits: 0 };
     s.gems = freshGems();
     s.journey = freshJourney();
-    s.baitLook = null;
+    s.looks = {};
     reset();
   };
   s.load();

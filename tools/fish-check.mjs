@@ -12,7 +12,7 @@
  */
 
 import { FISH, FISH_IDS, UPGRADES, createGameState, fishValue, fishLengthCm, pickSpecies } from '../src/fishing/tidewater.ts';
-import { baitOnHook } from '../src/fishing/gear.ts';
+import { shownLevel } from '../src/fishing/gear.ts';
 import { TIMED, biting } from '../src/fishing/timedFish.ts';
 import { TROPHY } from '../src/fishing/trophyFish.ts';
 import { SHARK_DEPTH, SHARK_ID, SharkFight, RUNS } from '../src/fishing/shark.ts';
@@ -132,24 +132,25 @@ console.log('\nthe great white');
   check(`its value is a bounty ($${fishValue(SHARK_ID, 700)})`, fishValue(SHARK_ID, 700) > 5000 && f.price > 0);
 }
 
-console.log('\nthe bait on your hook');
+console.log('\nthe gear you show (the bait on your hook, the rod in your hand)');
 {
-  const u = { bait: 4 };
-  check('with nothing picked, your best bait is on', baitOnHook(u, null) === 4);
-  check('any bait you have can go on (frozen shrimp too)', baitOnHook(u, 2) === 2 && baitOnHook(u, 0) === 0);
-  check("one you haven't got falls back to your best", baitOnHook(u, 5) === 4 && baitOnHook(u, -1) === 4);
+  const u = { bait: 4, rod: 2 };
+  check('with nothing picked, your best shows', shownLevel(u, {}, 'bait') === 4 && shownLevel(u, undefined, 'rod') === 2);
+  check('any level you have can show (frozen shrimp, the hand-me-down rod too)', shownLevel(u, { bait: 2 }, 'bait') === 2 && shownLevel(u, { bait: 0, rod: 0 }, 'bait') === 0 && shownLevel(u, { rod: 0 }, 'rod') === 0);
+  check("one you haven't got falls back to your best", shownLevel(u, { bait: 5 }, 'bait') === 4 && shownLevel(u, { rod: 3 }, 'rod') === 2 && shownLevel(u, { bait: -1 }, 'bait') === 4);
   const s = createGameState();
   s.upgrades.bait = 3;
-  s.baitLook = 1;
+  s.upgrades.rod = 2;
+  s.looks = { bait: 1, rod: 0 };
   const d = JSON.parse(JSON.stringify(s.toJSON()));
   const t = createGameState();
   t.fromJSON(d);
-  check('the pick is saved and read back', t.baitLook === 1, JSON.stringify(d.baitLook));
-  check('and the bites still go by your best bait', t.stats.biteMul === UPGRADES.bait.levels[3].biteMul, t.stats.biteMul);
-  t.fromJSON({ ...d, baitLook: 9 });
-  check("a pick beyond the save's bait is dropped", t.baitLook === null);
-  t.fromJSON({ ...d, baitLook: undefined });
-  check('an older save has none: your best goes on', t.baitLook === null);
+  check('the picks are saved and read back', t.looks.bait === 1 && t.looks.rod === 0, JSON.stringify(d.looks));
+  check('and the bites and the cast still go by your best', t.stats.biteMul === UPGRADES.bait.levels[3].biteMul && t.stats.castM === UPGRADES.rod.levels[2].castM, `${t.stats.biteMul}, ${t.stats.castM} m`);
+  t.fromJSON({ ...d, looks: { bait: 9, rod: 'x' } });
+  check("a pick beyond the save's gear is dropped", Object.keys(t.looks).length === 0);
+  t.fromJSON({ ...d, looks: undefined });
+  check('an older save has none: your best shows', Object.keys(t.looks).length === 0);
 }
 
 const failed = results.filter((r) => !r).length;

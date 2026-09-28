@@ -15,13 +15,14 @@
  * have (fishing/gear.ts gearEffect), and which trophy fish need it.
  *
  * At the bait shop every bait you've bought (and the frozen shrimp you started with) has a USE
- * button: that's the one that goes on your hook and hangs under the float. It's only the look:
- * the bites come as fast as your best bait brings them, whichever is on.
+ * button: that's the one that goes on your hook and hangs under the float. At the tackle shop a
+ * board by the rack of rods does the same for the rod in your hand. It's only the look: the
+ * bites come as fast as your best bait brings them, and you cast as far as your best rod.
  */
 
 import { Group, MeshBasicMaterial, SphereGeometry, TorusGeometry, Vector3, type Object3D } from 'three';
 import { uiClick, uiDeny, winFanfare } from '../audio/sfx.ts';
-import { baitOnHook, gearEffect, GEAR_SHOPS } from '../fishing/gear.ts';
+import { gearEffect, GEAR_SHOPS, LOOK_TRACKS, shownLevel } from '../fishing/gear.ts';
 import { FISH, UPGRADES, type GameState } from '../fishing/tidewater.ts';
 import { TROPHY } from '../fishing/trophyFish.ts';
 import { InteractivePanel, register } from '../ui/pointer.ts';
@@ -289,8 +290,8 @@ export class GearShopCounter {
       this.paint();
       return;
     }
-    // new bait goes straight on the hook
-    if (track === 'bait') this.state.baitLook = null;
+    // new gear goes straight on (a new bait on the hook, a new rod in your hand)
+    delete this.state.looks[track];
     // buy() spends, saves and tells everyone (the rod, the wallet, this board)
     if (!this.state.buy(track)) return;
     winFanfare(1);
@@ -300,17 +301,10 @@ export class GearShopCounter {
     this.paint();
   }
 
-  /** Put a bait you've bought on the hook (null: your best, so the next one you buy goes on). */
+  /** Put a bait you've bought on the hook. */
   private use(track: string, level: number): void {
-    const best = this.state.upgrades[track] | 0;
-    if (track !== 'bait' || level > best) return;
-    const was = baitOnHook(this.state.upgrades, this.state.baitLook);
-    this.state.baitLook = level === best ? null : level;
-    if (level !== was) {
-      uiClick();
-      this.state.save();
-      this.state.emit();
-    }
+    if (track !== 'bait' || !pickLook(this.state, track, level)) return;
+    const best = this.state.upgrades.bait | 0;
     const lv = UPGRADES.bait.levels;
     this.note = `On your hook: ${lv[level].label.toLowerCase()}.` + (level < best ? ` The fish bite as fast as for your ${lv[best].label.toLowerCase()}.` : '');
     this.noteColour = 'good';
@@ -325,7 +319,7 @@ export class GearShopCounter {
     L.title(role?.title ?? 'SHOP', 44, 82, 56, 'left', 620);
     const single = this.tracks.length === 1;
     const t0 = this.tracks[0];
-    const onHook = t0 === 'bait' ? baitOnHook(u, this.state.baitLook) : -1;
+    const onHook = t0 === 'bait' ? shownLevel(u, this.state.looks, 'bait') : -1;
     const sub = !single
       ? 'the big ones need big-game tackle'
       : t0 === 'bait'
@@ -366,6 +360,95 @@ export class GearShopCounter {
       L.button(`buy:${track}:${level}`, owned || maxed ? 'YOURS ✓' : next ? 'BUY' : 'NEXT', 906, y + 14 * k, 250, bh, st, Math.round((owned || maxed || !next ? 30 : 36) * k));
     });
     if (this.note) L.text(this.note, 44, BH - 38, 28, this.noteColour, 'left', 600, BW - 88);
+    L.end();
+  }
+}
+
+/**
+ * Show a level of a track you've bought (fishing/gear.ts LOOK_TRACKS): only its look. Your best
+ * clears the pick, so the next one you buy is the one you use. Saved and told if it changed.
+ */
+function pickLook(state: GameState, track: string, level: number): boolean {
+  const best = state.upgrades[track] | 0;
+  if (!LOOK_TRACKS.includes(track) || !Number.isInteger(level) || level < 0 || level > best) return false;
+  const was = shownLevel(state.upgrades, state.looks, track);
+  if (level === best) delete state.looks[track];
+  else state.looks[track] = level;
+  if (level !== was) {
+    uiClick();
+    state.save();
+    state.emit();
+  }
+  return true;
+}
+
+/* ── the tackle shop's rod rack: which rod's in your hand ─────────────── */
+
+const RW = 720;
+const RH = 560;
+
+/**
+ * A small board on the wall by the rack of rods: every rod, the ones you've bought with a USE
+ * button, the one in your hand ticked. You cast as far as your best rod, whichever you hold.
+ */
+export class RodRackBoard {
+  private readonly board: InteractivePanel;
+  private readonly letters: Lettering;
+  private readonly pics: (HTMLCanvasElement | undefined)[] = [];
+  private note = '';
+
+  constructor(
+    room: Interior,
+    private readonly state: GameState,
+    kit: Kit,
+  ) {
+    UPGRADES.rod.levels.forEach((_, lv) => (this.pics[lv] = thumbnail(kit.renderer, gearIcon(kit, 'rod', lv))));
+    this.board = new InteractivePanel([RW, RH], [0.66, (0.66 * RH) / RW]);
+    const look = lookFor(room.name);
+    this.letters = new Lettering(this.board, look, room.name.charCodeAt(0) * 3 + 1);
+    mount(this.board, look, { renderer: kit.renderer });
+    // on the left wall, between the rack and the door, facing into the room
+    this.board.mesh.position.set(-room.w / 2 + 0.02 + look.frame.d, 1.4, Math.min(room.d / 2 - 0.5, 1.15));
+    this.board.mesh.rotation.y = Math.PI / 2;
+    room.contents.add(this.board.mesh);
+    this.board.paint = () => this.paint();
+    this.board.onClick = (id) => this.click(id);
+    this.board.repaintOnFonts(() => this.paint());
+    register(this.board);
+    state.onChange(() => this.paint());
+    this.paint();
+  }
+
+  click(id: string): void {
+    const [act, track, lv] = id.split(':');
+    const level = Number(lv);
+    if (act !== 'use' || track !== 'rod' || !pickLook(this.state, 'rod', level)) return;
+    const best = this.state.upgrades.rod | 0;
+    const lvs = UPGRADES.rod.levels;
+    this.note = `In your hand: the ${lvs[level].label.toLowerCase()}.` + (level < best ? ` It casts as far as your ${lvs[best].label.toLowerCase()}.` : '');
+    this.paint();
+  }
+
+  private paint(): void {
+    const L = this.letters;
+    const u = this.state.upgrades;
+    const best = u.rod | 0;
+    const shown = shownLevel(u, this.state.looks, 'rod');
+    const lvs = UPGRADES.rod.levels;
+    L.begin();
+    L.title('YOUR ROD', 36, 70, 48, 'left', RW - 72);
+    L.text(shown < best ? `casts as far as your ${lvs[best].label}` : 'pick the one in your hand', 36, 108, 24, 'dim', 'left', 600, RW - 72);
+    const rowH = 90;
+    lvs.forEach((lv, i) => {
+      const y = 124 + i * rowH;
+      const owned = i <= best;
+      const on = i === shown;
+      L.thumb(this.pics[i], 32, y + 6, rowH - 14, !owned);
+      L.text(lv.label, 128, y + 40, 30, on ? 'ink' : 'dim', 'left', 700, 370);
+      L.text(owned ? `casts ${(lv as { castM?: number }).castM ?? ''} m` : `$${lv.cost.toLocaleString('en-US')} at the counter`, 128, y + 70, 22, 'dim', 'left', 500, 370);
+      if (owned) L.button(`use:rod:${i}`, on ? 'IN HAND ✓' : 'USE', 510, y + 12, 180, 64, on ? 'done' : 'go', on ? 24 : 30);
+    });
+    if (this.note) L.text(this.note, 36, RH - 36, 20, 'good', 'left', 600, RW - 72);
     L.end();
   }
 }
