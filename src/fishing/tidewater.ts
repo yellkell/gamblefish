@@ -164,6 +164,12 @@ export interface GameState {
   gems: GemSave;
   /** the journey (statue/): full helter skelter descents, and whether the golden statue is up */
   journey: JourneySave;
+  /**
+   * The bait you've chosen to put on the hook at the bait shop, for its look (fishing/gear.ts
+   * baitOnHook): any you've bought, or null for your best. The bites always come as your best
+   * bait brings them.
+   */
+  baitLook: number | null;
   readonly stats: GearStats;
   readonly holdKg: number;
   readonly holdValue: number;
@@ -266,11 +272,12 @@ export function createGameState(): GameState {
   s.coral = { thanked: [], visits: 0 };
   s.gems = freshGems();
   s.journey = freshJourney();
+  s.baitLook = null;
   const toJSON = s.toJSON.bind(s);
   const fromJSON = s.fromJSON.bind(s);
   const reset = s.reset.bind(s);
   // (baitGoop: this save's bait levels count goop bait: fishing/gear.ts baitShift)
-  s.toJSON = () => ({ ...(toJSON() as object), home: s.home, woodworks: s.woodworks, camps: s.camps, coral: s.coral, gems: s.gems, journey: s.journey, baitGoop: true });
+  s.toJSON = () => ({ ...(toJSON() as object), home: s.home, woodworks: s.woodworks, camps: s.camps, coral: s.coral, gems: s.gems, journey: s.journey, baitLook: s.baitLook, baitGoop: true });
   s.fromJSON = (d: unknown) => {
     if (!fromJSON(d)) return false;
     s.upgrades.bait = (s.upgrades.bait | 0) + baitShift(d as Parameters<typeof baitShift>[0]);
@@ -281,6 +288,8 @@ export function createGameState(): GameState {
     s.coral = readCoral(d, s.home);
     s.gems = readGems(d);
     s.journey = readJourney(d);
+    const look = (d as { baitLook?: unknown }).baitLook;
+    s.baitLook = Number.isInteger(look) && (look as number) >= 0 && (look as number) <= (s.upgrades.bait | 0) ? (look as number) : null;
     return true;
   };
   // ~Two dozen boards round the island (the casino tables, the shop signs, the bank, the
@@ -322,6 +331,7 @@ export function createGameState(): GameState {
     s.coral = { thanked: [], visits: 0 };
     s.gems = freshGems();
     s.journey = freshJourney();
+    s.baitLook = null;
     reset();
   };
   s.load();

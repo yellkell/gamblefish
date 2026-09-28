@@ -96,6 +96,16 @@ export function gearEffect(levels: Level[], track: string, level: number, have: 
  */
 export const baitShift = (d: { baitGoop?: unknown; upgrades?: { bait?: unknown } }): number => (d.baitGoop !== true && Number(d.upgrades?.bait) >= 1 ? 1 : 0);
 
+/**
+ * The bait on your hook, for its look: the one you picked at the bait shop if you still have it
+ * (`look`, any level you've bought, frozen shrimp included), else your best. Only the look: the
+ * bites come as your best bait brings them, whatever's on.
+ */
+export const baitOnHook = (upgrades: Record<string, number>, look: number | null | undefined): number => {
+  const best = upgrades.bait | 0;
+  return look !== null && look !== undefined && look >= 0 && look <= best ? look : best;
+};
+
 /** Which tracks each village shop sells (village/gearShop.ts). */
 export const GEAR_SHOPS: Record<string, string[]> = {
   S3: ['rod', 'reel', 'line', 'hooks'],

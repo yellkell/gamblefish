@@ -11,7 +11,8 @@
  *   node tools/fish-check.mjs
  */
 
-import { FISH, FISH_IDS, UPGRADES, fishValue, fishLengthCm, pickSpecies } from '../src/fishing/tidewater.ts';
+import { FISH, FISH_IDS, UPGRADES, createGameState, fishValue, fishLengthCm, pickSpecies } from '../src/fishing/tidewater.ts';
+import { baitOnHook } from '../src/fishing/gear.ts';
 import { TIMED, biting } from '../src/fishing/timedFish.ts';
 import { TROPHY } from '../src/fishing/trophyFish.ts';
 import { SHARK_DEPTH, SHARK_ID, SharkFight, RUNS } from '../src/fishing/shark.ts';
@@ -129,6 +130,26 @@ console.log('\nthe great white');
   const both = fight(true, true);
   check('two hands on it, reeling through the run is safe', both.state === 'caught', both.state);
   check(`its value is a bounty ($${fishValue(SHARK_ID, 700)})`, fishValue(SHARK_ID, 700) > 5000 && f.price > 0);
+}
+
+console.log('\nthe bait on your hook');
+{
+  const u = { bait: 4 };
+  check('with nothing picked, your best bait is on', baitOnHook(u, null) === 4);
+  check('any bait you have can go on (frozen shrimp too)', baitOnHook(u, 2) === 2 && baitOnHook(u, 0) === 0);
+  check("one you haven't got falls back to your best", baitOnHook(u, 5) === 4 && baitOnHook(u, -1) === 4);
+  const s = createGameState();
+  s.upgrades.bait = 3;
+  s.baitLook = 1;
+  const d = JSON.parse(JSON.stringify(s.toJSON()));
+  const t = createGameState();
+  t.fromJSON(d);
+  check('the pick is saved and read back', t.baitLook === 1, JSON.stringify(d.baitLook));
+  check('and the bites still go by your best bait', t.stats.biteMul === UPGRADES.bait.levels[3].biteMul, t.stats.biteMul);
+  t.fromJSON({ ...d, baitLook: 9 });
+  check("a pick beyond the save's bait is dropped", t.baitLook === null);
+  t.fromJSON({ ...d, baitLook: undefined });
+  check('an older save has none: your best goes on', t.baitLook === null);
 }
 
 const failed = results.filter((r) => !r).length;
