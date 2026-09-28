@@ -726,25 +726,27 @@ export class CampSystem extends createSystem({}) {
     // bark cloth printed with tapa bands, in a bamboo frame (ui/boards.ts)
     const L = this.infoLetters;
     L.begin();
-    // no camp's name: the chest doesn't give away where you are (or where the others are)
-    L.title("THE DANCERS' CHEST", 28, 72, 32, 'left', 380);
+    // the dancers' welcome (and no camp's name: the chest doesn't give away where you are)
+    L.title("We're happy to see you!", 28, 72, 32, 'left', 420);
     L.text(`worth $${worth}`, 612, 68, 24, 'accent', 'right', 700);
-    // a hidden camp's chest keeps the count of the camps you've found; the beach party's, its fill
-    L.text(c.site.beach ? `${used} / ${total} slots` : `${found} of ${CAMPS.length} camps found`, 28, 100, 21, 'dim', 'left', 600);
     if (h) {
-      L.text(TIERS[h.tier].toUpperCase(), 28, 128, 19, TIER_INK[h.tier], 'left', 700);
-      L.text(FISH[h.species].name, 28, 160, 30, 'ink', 'left', 700, 400);
-      L.text(`${Math.round(h.cm)} cm · ${h.kg.toFixed(2)} kg`, 28, 188, 21, 'dim', 'left', 500);
-      L.text(`$${h.value}`, 612, 160, 32, 'accent', 'right', 700);
-      L.text(backpackView.holding ? 'your hands are full' : 'click: backpack · grip: in hand', 612, 188, 19, backpackView.holding ? 'bad' : 'good', 'right', 600);
-    } else if (!e.fish.length && !e.logs) {
-      L.text(c.site.beach ? 'Empty. More fish and logs for you tomorrow.' : 'Empty. You have all they had to give.', 28, 156, 24, 'dim', 'left', 500);
+      L.text(TIERS[h.tier].toUpperCase(), 28, 106, 19, TIER_INK[h.tier], 'left', 700);
+      L.text(FISH[h.species].name, 28, 138, 30, 'ink', 'left', 700, 400);
+      L.text(`${Math.round(h.cm)} cm · ${h.kg.toFixed(2)} kg`, 28, 170, 21, 'dim', 'left', 500);
+      L.text(`$${h.value}`, 612, 138, 32, 'accent', 'right', 700);
+      if (backpackView.holding) L.text('your hands are full', 612, 170, 19, 'bad', 'right', 600);
     } else {
-      L.text(c.site.beach ? "TODAY'S GIFT FROM THE DANCERS" : 'A GIFT FROM THE DANCERS', 28, 134, 22, 'accent', 'left', 700);
-      L.text('Click a fish to pack it, grip to take it in hand, or point at the logs.', 28, 162, 20, 'ink', 'left', 500, 584);
+      if (!e.fish.length && !e.logs) L.text(c.site.beach ? 'More fish and logs for you tomorrow!' : "You have all we had to give. Thanks for coming!", 28, 112, 24, 'ink', 'left', 500, 584);
+      else {
+        L.text('Glad you found us.', 28, 108, 24, 'ink', 'left', 500);
+        L.text('Please take these as a gift!', 28, 138, 24, 'accent', 'left', 700);
+      }
+      // a hidden camp's chest keeps the count of the camps you've found, and once all eight are,
+      // where the ninth is; the beach party's, its fill
+      if (c.site.beach) L.text(`${used} / ${total} slots`, 28, 170, 18, 'dim', 'left', 600);
+      else if (found >= CAMPS.length) L.text('All eight found! A fire is lit for you on the main beach, west of the timber yard.', 28, 170, 18, 'accent', 'left', 600, 584);
+      else L.text(`${found} of ${CAMPS.length} camps found`, 28, 170, 18, 'dim', 'left', 600);
     }
-    // all eight found: where the ninth is
-    if (!h && !c.site.beach && found >= CAMPS.length) L.text('All eight found! A fire is lit for you on the main beach, west of the timber yard.', 28, 188, 18, 'accent', 'left', 600, 584);
     L.end();
   }
 
