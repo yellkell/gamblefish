@@ -13,9 +13,9 @@
  *    starts), and is scheduled to start on the sample this one ends: no gap, and no decode at
  *    the change. (Decoding at the change, then folding and measuring ~6 M samples in one go,
  *    stalled the frame on the headset every time the song changed.)
- *  - IN THE CASINOS, their own song (./casino), on a loop. Inside one you hear only that. Walking
- *    up to a casino, it spills out of the open door, muffled by the walls and placed at the door,
- *    and the rotation dips under it.
+ *  - IN THE CASINOS, their own songs (./casino), played the same way: one after another, round
+ *    and round. Inside one you hear only those. Walking up to a casino, they spill out of the
+ *    open door, muffled by the walls and placed at the door, and the rotation dips under them.
  *
  * The backpack's MUSIC button mutes both (the sea and the game's sounds carry on). The choice
  * is kept in this browser.
@@ -31,7 +31,7 @@ const byName = (files: Record<string, string>): string[] =>
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([, url]) => url);
 const ROTATION = byName(import.meta.glob('./songs/*.{mp3,m4a}', { eager: true, query: '?url', import: 'default' }) as Record<string, string>);
-const CASINO = byName(import.meta.glob('./casino/*.{mp3,m4a}', { eager: true, query: '?url', import: 'default' }) as Record<string, string>)[0];
+const CASINO = byName(import.meta.glob('./casino/*.{mp3,m4a}', { eager: true, query: '?url', import: 'default' }) as Record<string, string>);
 
 /** ff2's jukebox decode rate */
 const LOFI_RATE = 24000;
@@ -40,7 +40,7 @@ const LOFI_RATE = 24000;
  * masters sit 7 dB apart), then:
  *  - the rotation outdoors ~8 dB over a wash breaking 5 m away, ~14 dB over the distant surf
  *    (shore.ts levels, measured) and under a close splash;
- *  - the casino song a little fuller inside, and out of the door at the door (the panner then
+ *  - the casino songs a little fuller inside, and out of the door at the door (the panner then
  *    falls it off).
  */
 const NORM = -20;
@@ -173,7 +173,7 @@ export class Music {
       this.started = true;
       this.build(ctx, out);
       // one decode at a time: the rotation's first song, then the casinos'
-      void this.playRotation(ctx, 0).then(() => this.playCasino(ctx));
+      void this.playRotation(ctx).then(() => this.playCasino(ctx));
     }
     const t = ctx.currentTime;
     this.master!.gain.setTargetAtTime(musicView.muted || musicView.away ? 0 : 1, t, musicView.away ? 0.5 : 0.12);
@@ -205,7 +205,7 @@ export class Music {
 
   /**
    * rotation → master
-   * casino song → (inside: straight in) + (outside: walls' low-pass → the door, in 3-D) → master
+   * casino songs → (inside: straight in) + (outside: walls' low-pass → the door, in 3-D) → master
    * master (the mute) → SFX bus
    */
   private build(ctx: AudioContext, out: AudioNode): void {
@@ -231,60 +231,63 @@ export class Music {
     this.muffle.connect(this.panner).connect(this.outGain);
   }
 
+  /** The rotation outdoors (the dev hook reads which song is on). */
+  private playRotation(ctx: AudioContext): Promise<void> {
+    return this.rotate(ctx, ROTATION, [this.rotation!], 0, 0, null, (i) => (this.song = i));
+  }
+
+  /** The casinos' songs, one after another: straight in, and through the walls to the door. */
+  private playCasino(ctx: AudioContext): Promise<void> {
+    return this.rotate(ctx, CASINO, [this.inGain!, this.muffle!], 0);
+  }
+
   /**
-   * The rotation: this song, and while it plays the next one decoding, scheduled to follow it
-   * on the sample it ends; round and round.
+   * A playlist: this song, and while it plays the next one decoding, scheduled to follow it
+   * on the sample it ends; round and round (a playlist of one just loops).
    */
-  private async playRotation(ctx: AudioContext, i: number, at = 0, ready: Loaded | null = null): Promise<void> {
-    if (!ROTATION.length) return;
-    const loaded = ready ?? (await decode(ROTATION[i]));
-    const next = (i + 1) % ROTATION.length;
+  private async rotate(
+    ctx: AudioContext,
+    songs: string[],
+    into: AudioNode[],
+    i: number,
+    at = 0,
+    ready: Loaded | null = null,
+    onSong?: (i: number) => void,
+  ): Promise<void> {
+    if (!songs.length) return;
+    const loaded = ready ?? (await decode(songs[i]));
+    const next = (i + 1) % songs.length;
     if (!loaded) {
       // skip a song that won't decode (don't spin if none will)
-      if (next !== 0) void this.playRotation(ctx, next, at);
+      if (next !== 0) void this.rotate(ctx, songs, into, next, at, null, onSong);
       return;
     }
     const src = ctx.createBufferSource();
     src.buffer = loaded.buffer;
     const lv = ctx.createGain();
     lv.gain.value = loaded.level;
-    src.connect(lv).connect(this.rotation!);
+    src.connect(lv);
+    for (const n of into) lv.connect(n);
     // the first song decodes behind the boot intro's curtain and starts as it drops
     if (!at) await introDone();
     const start = Math.max(at, ctx.currentTime);
     src.start(start, loaded.head);
-    // (the dev hook reads which song is on)
-    window.setTimeout(() => (this.song = i), Math.max(0, (start - ctx.currentTime) * 1000));
-    if (ROTATION.length === 1) {
+    if (onSong) window.setTimeout(() => onSong(i), Math.max(0, (start - ctx.currentTime) * 1000));
+    if (songs.length === 1) {
       src.loop = true;
       src.loopStart = loaded.head;
       src.loopEnd = loaded.buffer.duration;
       return;
     }
     // the old buffer goes with its source, once it's played
-    src.onended = () => src.disconnect();
+    src.onended = () => {
+      src.disconnect();
+      lv.disconnect();
+    };
     const ends = start + loaded.buffer.duration - loaded.head;
     // decode the next a little after this one's under way (not on top of whatever started it)
     await new Promise((r) => setTimeout(r, Math.min(20, Math.max(0, (ends - ctx.currentTime) / 2)) * 1000));
-    const after = await decode(ROTATION[next]);
-    void this.playRotation(ctx, next, ends, after);
-  }
-
-  private async playCasino(ctx: AudioContext): Promise<void> {
-    if (!CASINO) return;
-    const loaded = await decode(CASINO);
-    if (!loaded) return;
-    const src = ctx.createBufferSource();
-    src.buffer = loaded.buffer;
-    src.loop = true;
-    src.loopStart = loaded.head;
-    src.loopEnd = loaded.buffer.duration;
-    const lv = ctx.createGain();
-    lv.gain.value = loaded.level;
-    await introDone();
-    src.connect(lv);
-    lv.connect(this.inGain!);
-    lv.connect(this.muffle!);
-    src.start(0, loaded.head);
+    const after = await decode(songs[next]);
+    void this.rotate(ctx, songs, into, next, ends, after, onSong);
   }
 }
