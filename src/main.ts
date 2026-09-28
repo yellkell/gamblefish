@@ -41,7 +41,8 @@ import { PointerSystem } from './ui/pointer.ts';
 import { buildInteriors, interiorAt, openColliders, type Interior } from './village/interiors.ts';
 import { HOME, HOME_SHOPS, HomeShopCounter, Shack, VILLA, VILLA_SHOPS } from './village/homeGoods.ts';
 import { GearShopCounter } from './village/gearShop.ts';
-import { GEAR_COUNTERS } from './village/interiors.ts';
+import { GEAR_COUNTERS, JEWELLER } from './village/interiors.ts';
+import { GemWindows } from './village/gemWindows.ts';
 import { Villa } from './village/villa.ts';
 import { Blink } from './fx/blink.ts';
 import { Vegetation } from './world/vegetation.ts';
@@ -53,6 +54,7 @@ import { WoodSystem, woodDeps, woodView } from './woodworks/woodSystem.ts';
 import { SkelterSystem, skelterDeps, skelterView } from './skelter/SkelterSystem.ts';
 import { SKELTER } from './skelter/site.ts';
 import { CampSystem, campDeps, campView } from './camps/CampSystem.ts';
+import { MiningSystem, mineDeps, mineView } from './mining/MiningSystem.ts';
 import { onFontsReady } from './ui/fonts.ts';
 import { drawLogo, drawLogoFish, hasLogoFish, setLogoFish } from './ui/logo.ts';
 import { thumbnail } from './ui/thumbnail.ts';
@@ -279,9 +281,10 @@ World.create(container, {
 
   // what bites, and when, follows the island's day
   fishingDeps.hour = () => sky.state.hour;
-  // indoors, with the axe out among the trees, up the helter skelter or at a dancers' open chest,
-  // the rod goes over your shoulder
-  fishingDeps.indoors = () => interiorAt(interiors, world.player.position.x, world.player.position.z) !== null || woodView.axeOut || skelterView.onTower || campView.busy;
+  // indoors, with the axe out among the trees or the pick by a gem rock, up the helter skelter or
+  // at a dancers' open chest or a broken rock's tray, the rod goes over your shoulder
+  fishingDeps.indoors = () =>
+    interiorAt(interiors, world.player.position.x, world.player.position.z) !== null || woodView.axeOut || mineView.pickOut || mineView.busy || skelterView.onTower || campView.busy;
 
   // the woodworks: the timber yard, the woodlot and the walks off the pier head
   Object.assign(woodDeps, {
@@ -319,6 +322,17 @@ World.create(container, {
   });
   world.registerSystem(CampSystem);
 
+  // the gem rocks out in the wilds, and the pickaxe from the Jeweller (mining/)
+  Object.assign(mineDeps, {
+    state: game,
+    ground: (x: number, z: number) => heightfield.heightAt(x, z),
+    addBox: (b: BoxCollider) => surfaces.addBox(b),
+    removeBox: (b: BoxCollider) => surfaces.removeBox(b),
+    env: casinoEnv(world.renderer),
+    busy: () => backpackView.open || skelterView.onTower || woodView.axeOut || campView.busy || interiorAt(interiors, world.player.position.x, world.player.position.z) !== null,
+  });
+  world.registerSystem(MiningSystem);
+
   // the village's people and counters
   const stall = frames.find((b) => b.name === 'stall');
   const market = stall ? new FishMarket(scene, stall, game) : null;
@@ -350,6 +364,9 @@ World.create(container, {
   const shack = room(HOME);
   if (shack) new Shack(shack, game, kit, (b) => surfaces.addBox(b));
   const homeShops = [...HOME_SHOPS, ...VILLA_SHOPS].map((n) => room(n)).filter((r): r is Interior => !!r).map((r) => new HomeShopCounter(r, game, kit));
+  // the Jeweller's second counter: the pickaxe, and the window that buys your gems
+  const jeweller = room(JEWELLER);
+  const gemWindows = jeweller ? new GemWindows(jeweller, game, kit) : null;
   // the fishing upgrades: tackle, bait and luck (fishing/gear.ts)
   const gearShops = GEAR_COUNTERS.map((n) => room(n)).filter((r): r is Interior => !!r).map((r) => new GearShopCounter(r, game, kit));
   // Coral at home, and what you've given her
@@ -374,7 +391,7 @@ World.create(container, {
   world.player.rotation.set(0, s.yaw, 0);
 
   // Dev hook: drive the rig without a headset (`__fish.move.to(x, z, yaw)`).
-  (window as unknown as { __fish: unknown }).__fish = { world, surfaces, move: teleportView, json, game, fishing: fishingView, vegetation, backpack: backpackView, interiors, tables, music, shore, sky, homeShops, gearShops, villa, fx, props: fishingDeps.props, wood: woodView, skelter: skelterView, camps: campView, spotFor };
+  (window as unknown as { __fish: unknown }).__fish = { world, surfaces, move: teleportView, json, game, fishing: fishingView, vegetation, backpack: backpackView, interiors, tables, music, shore, sky, homeShops, gearShops, villa, fx, props: fishingDeps.props, wood: woodView, skelter: skelterView, camps: campView, mining: mineView, gemWindows, spotFor };
 
   if (import.meta.env.DEV) void import('./dev/harness.ts').then((m) => m.installHarness(world));
 

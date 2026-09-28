@@ -541,6 +541,10 @@ for (const c of CAMPS) {
 }
 /** on a camp's plot (grown by `pad`) */
 const onCamp = (x, z, pad) => CAMPS.some((c) => Math.hypot(x - c.x, z - c.z) < CAMP_PLOT + pad);
+// The gem rocks (src/mining/sites.ts): nothing grows through them, and Tidewater's own rocks keep off
+const { ROCK_SITES, ROCK_R, ROCK_CLEAR, ROCK_CLEAR_TREES } = await import('../src/mining/sites.ts');
+/** near a gem rock (its footprint grown by `pad`) */
+const onGemRock = (x, z, pad) => ROCK_SITES.some((r) => Math.hypot(x - r.x, z - r.z) < ROCK_R * r.size + pad);
 // Where everything grows (Tidewater's own land-cover scatter, clear of the houses and paths)
 const vegSite = new VegSite(terrain, { footprints: village.getFootprints() });
 const veg = scatterVegetation(vegSite);
@@ -562,7 +566,7 @@ const grassMask = buildGrassMask(vegSite);
   }
 }
 // Rocks: Tidewater's placement; the emergent ones join the collision world as it does
-const rocks = Rocks.prototype._place.call({ terrainData: terrain, village }, mulberry32(4242)).filter((r) => !onPlot(r.x, r.z, 4) && !onCamp(r.x, r.z, 3));
+const rocks = Rocks.prototype._place.call({ terrainData: terrain, village }, mulberry32(4242)).filter((r) => !onPlot(r.x, r.z, 4) && !onCamp(r.x, r.z, 3) && !onGemRock(r.x, r.z, 3 + r.size));
 for (const r of rocks) {
   const top = r.y + r.size * r.sy * 0.8;
   if (r.size < 0.9 || top < -0.3) continue;
@@ -876,6 +880,14 @@ const cylinders = colliders.cylinders.map((c) => ({
     const list = veg[type];
     if (!Array.isArray(list)) continue;
     const keep = list.filter((p) => !onCamp(p.x, p.z, type === 'trees' || type === 'palms' ? 5 : 1.5));
+    cleared += list.length - keep.length;
+    veg[type] = keep;
+  }
+  // round the gem rocks: bare ground a few paces out, the trees' crowns kept off them
+  for (const type of Object.keys(veg)) {
+    const list = veg[type];
+    if (!Array.isArray(list)) continue;
+    const keep = list.filter((p) => !onGemRock(p.x, p.z, type === 'trees' || type === 'palms' ? ROCK_CLEAR_TREES : ROCK_CLEAR));
     cleared += list.length - keep.length;
     veg[type] = keep;
   }

@@ -408,3 +408,34 @@ export function plankLay(): void {
   clank(1600, 0.05, 0.08, 0.14);
   clank(1650, 0.05, 0.08, 0.26);
 }
+
+/* ── the gem rocks (mining/) ────────────────────────────────────────────── */
+
+/** Steel on stone: the pick's point ringing off the rock, a crunch of grit. `k` 0..1: how near it is to going. */
+export function pickClink(k = 0): void {
+  clank(1900 + Math.random() * 300 - k * 300, 0.12, 0.22);
+  tone({ freq: 220 - k * 60, to: 110, type: 'triangle', dur: 0.08, gain: 0.22 });
+  whooshNoise(0.07, 0.2, 4200, 1600);
+  // the gems inside ringing back, louder as the cracks open
+  if (k > 0.2) tone({ freq: 2093 + k * 400, type: 'sine', dur: 0.5, gain: 0.03 * k, delay: 0.05 });
+}
+
+/** The rock giving way: a crack, a rumble, stone tumbling, then the gems' glitter. */
+export function rockBreak(): void {
+  tone({ freq: 70, to: 30, type: 'sine', dur: 0.8, gain: 0.55 });
+  whooshNoise(0.6, 0.32, 2400, 500);
+  clank(620, 0.08, 0.25, 0.02);
+  for (let i = 0; i < 6; i++) tone({ freq: 160 + Math.random() * 120, to: 80, type: 'triangle', dur: 0.08, gain: 0.12, delay: 0.25 + i * 0.09 + Math.random() * 0.05 });
+  winShimmer(2);
+}
+
+/** A gem lifted out and into your pouch: a bright little bell run, higher for the rare ones. */
+export function gemChime(rare = false): void {
+  const steps = rare ? [0, 4, 7, 11, 14, 19] : [0, 4, 7, 12];
+  const root = rare ? 1318.5 : 1046.5;
+  steps.forEach((st, i) => {
+    const f = root * Math.pow(2, st / 12);
+    tone({ freq: f, type: 'sine', dur: 0.5, gain: 0.07, delay: i * 0.045 });
+    tone({ freq: f * 2.01, type: 'sine', dur: 0.18, gain: 0.02, delay: i * 0.045 });
+  });
+}

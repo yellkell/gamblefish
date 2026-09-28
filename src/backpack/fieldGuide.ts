@@ -11,9 +11,15 @@
  * natural history books. Opposite the title page is a chart of the bay (backpack/chart.ts) with
  * the reef, the drop-off, the pier and the village's places, and where you're standing. The
  * great white has the last page to itself. Point at the arrows in the page corners to turn.
+ *
+ * Once the Jeweller's pickaxe is yours, a last spread follows the fish: the island's eight gems,
+ * four to a page. One you haven't found is a shadow with no name, and the conditions to look for
+ * (the kind of ground, how high, what the stone looks like) and how rare it is; the first one
+ * you take out of a rock fills its entry in (its names, where it's found, how many you've had and
+ * your biggest, and a true fact), and the stone itself lies on the page, turning in the light.
  */
 
-import { Group, Mesh, MeshLambertMaterial, BoxGeometry, Vector3 } from 'three';
+import { Group, Mesh, MeshLambertMaterial, BoxGeometry, Vector3, type Points } from 'three';
 import type { WebGLRenderer } from 'three';
 import { uiClick } from '../audio/sfx.ts';
 import type { Props } from '../fishing/props.ts';
@@ -29,6 +35,8 @@ import { drawChart, KEY, CHART, type ChartSource, type Place } from './chart.ts'
 import { WALKS } from '../woodworks/gates.ts';
 import { PLINTH_RADIUS, TOWER_RADIUS } from '../skelter/constants.ts';
 import { SKELTER } from '../skelter/site.ts';
+import { gemMesh, twinkles } from '../mining/gemMesh.ts';
+import { GEM_IDS, GEMS, GROUNDS } from '../mining/gems.ts';
 
 /** a line or two about each one, in the book's voice */
 const NOTES: Record<string, string> = {
@@ -101,7 +109,17 @@ const WHEN: Record<string, string> = { day: 'by day', dawnDusk: 'at dawn and dus
 /** the big rare ones get a page each (the great white the very last) */
 const BIG = ['tarpon', ...Object.keys(TROPHY)];
 
-type Page = { kind: 'title' } | { kind: 'chart' } | { kind: 'pair'; ids: string[] } | { kind: 'big'; id: string } | { kind: 'last' };
+type Page = { kind: 'title' } | { kind: 'chart' } | { kind: 'pair'; ids: string[] } | { kind: 'big'; id: string } | { kind: 'last' } | { kind: 'gems'; ids: string[]; first: boolean };
+
+/** the gem spread, after the fish: four to a page */
+const GEM_PAGES: Page[] = [
+  { kind: 'gems', ids: GEM_IDS.slice(0, 4), first: true },
+  { kind: 'gems', ids: GEM_IDS.slice(4, 8), first: false },
+];
+/** a gem entry's height on its page, where the first starts, and its picture's size (px) */
+const GEM_ROW = 236;
+const GEM_TOP = 118;
+const GEM_PIC = 196;
 
 const PX: [number, number] = [900, 1170];
 const SIZE: [number, number] = [0.3, 0.39];
@@ -111,7 +129,11 @@ const INK_FADED = 'rgba(46, 34, 20, 0.55)';
 
 export class FieldGuide {
   readonly group = new Group();
-  private readonly pages: Page[];
+  /** the fish's pages (the gems' spread follows once the pickaxe is yours) */
+  private readonly fishPages: Page[];
+  /** the stones lying on the gem pages, turning */
+  private readonly stones = new Map<string, { holder: Group; sparkle: Points }>();
+  private readonly gemShadows = new Map<string, HTMLCanvasElement>();
   private readonly left: InteractivePanel;
   private readonly right: InteractivePanel;
   private spread = 0;
@@ -135,15 +157,16 @@ export class FieldGuide {
     private readonly skelter: (() => { at: [number, number]; face: [number, number] } | null) | null = null,
   ) {
     const regular = FISH_IDS.filter((id) => !BIG.includes(id) && id !== SHARK_ID);
-    this.pages = [{ kind: 'title' }, { kind: 'chart' }];
-    for (let i = 0; i < regular.length; i += 2) this.pages.push({ kind: 'pair', ids: regular.slice(i, i + 2) });
-    for (const id of BIG) if (FISH[id]) this.pages.push({ kind: 'big', id });
+    const pages: Page[] = [{ kind: 'title' }, { kind: 'chart' }];
+    this.fishPages = pages;
+    for (let i = 0; i < regular.length; i += 2) pages.push({ kind: 'pair', ids: regular.slice(i, i + 2) });
+    for (const id of BIG) if (FISH[id]) pages.push({ kind: 'big', id });
     // the great white alone on the last spread's right-hand page
     if (FISH[SHARK_ID]) {
-      if (this.pages.length % 2 === 0) this.pages.push({ kind: 'pair', ids: [] });
-      this.pages.push({ kind: 'last' });
+      if (pages.length % 2 === 0) pages.push({ kind: 'pair', ids: [] });
+      pages.push({ kind: 'last' });
     }
-    if (this.pages.length % 2) this.pages.push({ kind: 'pair', ids: [] });
+    if (pages.length % 2) pages.push({ kind: 'pair', ids: [] });
 
     // each species photographed side on (snout to +x, flank to the camera), and its shadow
     for (const id of FISH_IDS) {
@@ -153,6 +176,20 @@ export class FieldGuide {
       const pic = thumbnail(renderer, mesh, { w: 480, h: 200, dir: new Vector3(0.12, 0.18, 1).normalize() });
       this.pics.set(id, pic);
       this.shadows.set(id, silhouette(pic, 'rgba(70, 52, 32, 0.5)'));
+    }
+
+    // each gem: its shadow for the page (photographed once), and the stone that lies there once found
+    for (const id of GEM_IDS) {
+      const m = gemMesh(id, 0.1, 'thumb');
+      m.rotation.set(0.9, 0.4, 0);
+      this.gemShadows.set(id, silhouette(thumbnail(renderer, m, { w: 256, h: 256 }), 'rgba(70, 52, 32, 0.4)'));
+      const holder = new Group();
+      holder.add(gemMesh(id, 0.05, 'book'));
+      const sparkle = twinkles(3, 0.022, GEMS[id].colour, GEM_IDS.indexOf(id) + 21, 0.6);
+      holder.add(sparkle);
+      holder.visible = false;
+      this.group.add(holder);
+      this.stones.set(id, { holder, sparkle });
     }
 
     // the book: a leather board, and the two pages lying on it
@@ -179,6 +216,11 @@ export class FieldGuide {
     return p;
   }
 
+  /** every page: the fish's, then (once the pickaxe is yours) the gems' spread */
+  private get pages(): Page[] {
+    return this.state.gems?.pick ? [...this.fishPages, ...GEM_PAGES] : this.fishPages;
+  }
+
   get open(): boolean {
     return this.group.visible;
   }
@@ -188,9 +230,16 @@ export class FieldGuide {
     if (on) this.paint();
   }
 
-  /** per frame while open: repaint when a catch has filled something in */
+  /** per frame while open: repaint when a catch has filled something in; the stones turn */
   update(): void {
     if (this.open && this.dirty) this.paint();
+    if (!this.open) return;
+    const t = performance.now() / 1000;
+    let i = 0;
+    for (const { holder } of this.stones.values()) {
+      if (holder.visible) holder.rotation.set(-0.5 + 0.12 * Math.sin(t * 0.8 + i), t * 0.5 + i * 1.3, 0.1 * Math.cos(t * 0.6 + i));
+      i++;
+    }
   }
 
   /** the places on the chart page you can point at to go to, by button id */
@@ -213,6 +262,9 @@ export class FieldGuide {
 
   private paint(): void {
     this.dirty = false;
+    // (the gem pages can go, if the save's reset under an open book)
+    this.spread = Math.min(this.spread, this.pages.length / 2 - 1);
+    for (const { holder } of this.stones.values()) holder.visible = false;
     this.paintPage(this.left, this.spread * 2, 'left');
     this.paintPage(this.right, this.spread * 2 + 1, 'right');
   }
@@ -237,6 +289,7 @@ export class FieldGuide {
     else if (page?.kind === 'last') this.lastPage(c);
     else if (page?.kind === 'pair') page.ids.forEach((id, i) => this.entry(c, id, 36 + i * 520, i === 0 && page.ids.length > 1));
     else if (page?.kind === 'big') this.bigEntry(c, page.id);
+    else if (page?.kind === 'gems') this.gemPage(c, page, side);
     // the folio and the corner arrow
     c.textAlign = 'center';
     c.font = font(600, 28);
@@ -290,6 +343,76 @@ export class FieldGuide {
     c.fillStyle = INK_FADED;
     const lines = ['Two to a page; the big, rare ones', 'have a page to themselves, at the back.', 'Each fills itself in the first time you land one.'];
     lines.forEach((l, i) => c.fillText(l, W / 2, 860 + i * 44));
+    // and the gems, once you're after them
+    if (this.state.gems?.pick) {
+      const gems = GEM_IDS.filter((id) => this.state.gems.log[id]).length;
+      c.font = font(700, 36);
+      c.fillStyle = '#5a2a6a';
+      c.fillText(`◆ ${gems} of ${GEM_IDS.length} gems, at the back`, W / 2, 1020);
+    }
+  }
+
+  /** Four gems down a page; each found one's stone lies on the page over its entry. */
+  private gemPage(c: CanvasRenderingContext2D, page: Extract<Page, { kind: 'gems' }>, side: 'left' | 'right'): void {
+    const [W, H] = PX;
+    const log = this.state.gems.log;
+    c.textAlign = 'center';
+    c.fillStyle = '#5a2a6a';
+    c.font = font(700, 40);
+    c.fillText(page.first ? '◆  GEMS OF THE ISLAND  ◆' : '◆  GEMS, CONTINUED  ◆', W / 2, 66);
+    c.font = `italic ${font(500, 24)}`;
+    c.fillStyle = INK_FADED;
+    const found = GEM_IDS.filter((id) => log[id]).length;
+    c.fillText(page.first ? 'broken out of the rocks with the Prospector’s Pickaxe' : `${found} of ${GEM_IDS.length} found · the Jeweller buys them by the carat`, W / 2, 98, W - 80);
+    page.ids.forEach((id, i) => {
+      const y = GEM_TOP + i * GEM_ROW;
+      const g = GEMS[id];
+      const e = log[id];
+      const px = 40;
+      const py = y + 12;
+      if (e) {
+        // a soft pool of the stone's colour under it
+        const glow = c.createRadialGradient(px + GEM_PIC / 2, py + GEM_PIC / 2, 10, px + GEM_PIC / 2, py + GEM_PIC / 2, GEM_PIC / 2);
+        glow.addColorStop(0, `${g.colour}88`);
+        glow.addColorStop(1, `${g.colour}00`);
+        c.fillStyle = glow;
+        c.fillRect(px, py, GEM_PIC, GEM_PIC);
+        // and the stone itself, on the page over it
+        const st = this.stones.get(id)!;
+        st.holder.visible = true;
+        const pageX = side === 'left' ? -SIZE[0] / 2 - 0.002 : SIZE[0] / 2 + 0.002;
+        st.holder.position.set(pageX + ((px + GEM_PIC / 2) / W - 0.5) * SIZE[0], 0.024, ((py + GEM_PIC / 2) / H - 0.5) * SIZE[1]);
+      } else {
+        const sh = this.gemShadows.get(id);
+        if (sh) c.drawImage(sh, px + 20, py + 20, GEM_PIC - 40, GEM_PIC - 40);
+      }
+      const tx = px + GEM_PIC + 24;
+      const tw = W - tx - 40;
+      c.textAlign = 'left';
+      c.fillStyle = e ? INK_BROWN : INK_FADED;
+      c.font = font(700, 38);
+      c.fillText(e ? g.name : '? ? ?', tx, y + 46, tw);
+      c.font = `italic ${font(500, 22)}`;
+      c.fillStyle = INK_FADED;
+      // not found yet: no name, no colour, just the conditions to look for, and how rare it is
+      const rare = g.rarity < 0.5;
+      c.fillText(e ? g.mineral : rare ? 'not yet found  ·  rare: only now and then' : 'not yet found  ·  the common one there', tx, y + 74, tw);
+      c.font = font(600, 21);
+      c.fillStyle = INK_BROWN;
+      c.fillText(`Found in ${GROUNDS[g.where].where}`, tx, y + 102, tw);
+      if (e) {
+        c.fillText(`${e.count} found  ·  biggest ${e.bestCt.toFixed(2)} ct  ·  $${g.perCt}/ct`, tx, y + 128, tw);
+        this.fact(c, id, tx, y + 140, tw, 3, 19, g.fact);
+      } else this.fact(c, id, tx, y + 118, tw, 3, 19, GROUNDS[g.where].signs, 'WHERE TO LOOK');
+      if (i < page.ids.length - 1) {
+        c.strokeStyle = 'rgba(90, 60, 30, 0.25)';
+        c.lineWidth = 2;
+        c.beginPath();
+        c.moveTo(100, y + GEM_ROW - 2);
+        c.lineTo(W - 100, y + GEM_ROW - 2);
+        c.stroke();
+      }
+    });
   }
 
   private caught(id: string): boolean {
@@ -323,24 +446,25 @@ export class FieldGuide {
   }
 
   /** A true fact, in a ruled box: "Did you know?" and up to `lines` lines. */
-  private fact(c: CanvasRenderingContext2D, id: string, x: number, y: number, w: number, lines: number, size: number): void {
-    const text = FACTS[id];
+  private fact(c: CanvasRenderingContext2D, id: string, x: number, y: number, w: number, lines: number, size: number, own?: string, heading = 'DID YOU KNOW?'): void {
+    const text = own ?? FACTS[id];
     if (!text) return;
     const lh = size * 1.22;
     // size the box to the lines the fact really takes
     c.font = `italic ${font(500, size)}`;
     const used = Math.min(lines, measureLines(c, text, w - 36));
-    const h = 44 + used * lh;
+    const h = (own ? 36 : 44) + used * lh;
     c.fillStyle = 'rgba(154, 106, 26, 0.1)';
     c.fillRect(x, y, w, h);
     c.fillStyle = '#9a6a1a';
     c.fillRect(x, y, 5, h);
     c.textAlign = 'left';
     c.font = font(700, size - 2);
-    c.fillText('DID YOU KNOW?', x + 20, y + 30);
+    const head = own ? 24 : 30;
+    c.fillText(heading, x + 20, y + head);
     c.font = `italic ${font(500, size)}`;
     c.fillStyle = INK_BROWN;
-    wrap(c, text, x + 20, y + 30 + lh, w - 36, lh, lines);
+    wrap(c, text, x + 20, y + head + lh, w - 36, lh, lines);
   }
 
   private entry(c: CanvasRenderingContext2D, id: string, y: number, rule: boolean): void {
