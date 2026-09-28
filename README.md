@@ -222,7 +222,8 @@ and the vendors.
   where you're standing. Point at a marker, a line of the key or a finished walk's platform and
   you're there: inside a room a step in from its door, or in front of the place, looking at it. The
   backpack shuts behind you. (Not with a fish on the line.) The great white has the last page.
-  Point at the corner arrows to turn the pages.
+  Point at the corner arrows to turn the pages, or point at the book and flick the thumbstick
+  left or right.
 - **Winning at the casinos** (`src/casino/celebrate.ts`): every win flashes light, sends
   a ring across the table and throws confetti and glints, which settle on the felt. The
   amount rises in gold, and both controllers buzz. All of it scales with the win.

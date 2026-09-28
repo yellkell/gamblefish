@@ -89,6 +89,28 @@ const paintLogo = (): void => {
 paintLogo();
 onFontsReady(paintLogo);
 
+/**
+ * The loading bar, 0 to 1, and it never goes back. index.html creeps it along on its own until the
+ * code is in; from the first call here it's the real thing: the code (to 0.2), the island's files
+ * (to 0.7), then the build (to 1).
+ */
+let shown = 0;
+const progress = (f: number): void => {
+  if (bar.style.animation !== 'none') {
+    // take over from the creep where it's got to
+    const t = getComputedStyle(bar).transform;
+    shown = t.startsWith('matrix(') ? parseFloat(t.slice(7)) || 0 : 0;
+    bar.style.animation = 'none';
+  }
+  shown = Math.max(shown, Math.min(1, f));
+  bar.style.transform = `scaleX(${shown})`;
+};
+/** A build step's done: move the bar and let the page draw before the next (one long block froze the splash) */
+const built = (f: number): Promise<void> => {
+  progress(0.7 + 0.3 * f);
+  return new Promise((r) => window.setTimeout(r, 0));
+};
+
 async function fetchBuffer(path: string, onProgress: (f: number) => void): Promise<ArrayBuffer> {
   const res = await fetch(import.meta.env.BASE_URL + path);
   if (!res.ok || !res.body) throw new Error(`${path}: HTTP ${res.status}`);
@@ -129,28 +151,32 @@ World.create(container, {
   world.renderer.xr.setFoveation(FOVEATION);
 
   status.textContent = 'Loading the island…';
-  const progress = { terrain: 0, village: 0, props: 0, veg: 0 };
-  const show = (): void => {
-    bar.style.width = `${Math.round(((progress.terrain + progress.village + progress.props + progress.veg) / 4) * 100)}%`;
-  };
+  progress(0.2);
+  const got = { terrain: 0, village: 0, props: 0, veg: 0 };
+  const show = (): void => progress(0.2 + 0.5 * ((got.terrain + got.village + got.props + got.veg) / 4));
   const [json, terrainBuf, villageBuf, propsBuf, vegBuf] = await Promise.all([
     fetch(import.meta.env.BASE_URL + 'world/world.json').then((r) => r.json() as Promise<WorldJson>),
-    fetchBuffer('world/terrain.bin', (f) => ((progress.terrain = f), show())),
-    fetchBuffer('world/village.bin', (f) => ((progress.village = f), show())),
-    fetchBuffer('props/props.bin', (f) => ((progress.props = f), show())),
-    fetchBuffer('world/veg.bin', (f) => ((progress.veg = f), show())),
+    fetchBuffer('world/terrain.bin', (f) => ((got.terrain = f), show())),
+    fetchBuffer('world/village.bin', (f) => ((got.village = f), show())),
+    fetchBuffer('props/props.bin', (f) => ((got.props = f), show())),
+    fetchBuffer('world/veg.bin', (f) => ((got.veg = f), show())),
   ]);
 
-  status.textContent = 'Building…';
+  status.textContent = 'Building the island…';
+  await built(0);
   const grid = decodeTerrain(json, terrainBuf);
   const scene = world.scene;
+  // not drawn while it's half built (the splash covers it, and the frames between the steps come quicker)
+  scene.visible = false;
   const sky = createSky(scene);
   scene.add(buildTerrain(grid));
+  await built(0.05);
   scene.add(buildVillage(villageBuf, sky.state.night));
   const lamps = buildLamps((json as unknown as { lamps?: [number, number, number, string][] }).lamps ?? [], sky.state.night);
   scene.add(lamps);
   const signs = new VillageSigns((json as unknown as { buildings: BuildingFrame[] }).buildings ?? [], (json as unknown as { pierSign?: [number, number, number] | null }).pierSign ?? null);
   scene.add(signs.group);
+  await built(0.1);
   const vegetation = new Vegetation(vegBuf);
   scene.add(vegetation.group);
   const grass = vegetation.grassMask ? new Grass(vegetation.atlas, vegetation.grassMask, vegetation.grassRes, new Heightfield(grid), grid) : null;
@@ -178,13 +204,20 @@ World.create(container, {
   const heightfield = new Heightfield(grid);
   // the walk-in buildings: their bodies open up (walls, a door gap, a floor) and get a room inside
   const frames = (json as unknown as { buildings: BuildingFrame[] }).buildings ?? [];
+  await built(0.15);
   const interiors = buildInteriors(frames);
   for (const i of interiors) scene.add(i.group);
+  await built(0.25);
   // (the pier head's rails open at the gateways of the walks you can build: woodworks/gates.ts)
   const surfaces = new Surfaces(heightfield, { boxes: cutGates(openColliders(json.colliders.boxes, frames)), cylinders: json.colliders.cylinders });
   locomotion.surfaces = surfaces;
   if (grass) grass.floorOver = (x, z, m) => surfaces.deckOver(x, z, m);
   world.registerSystem(TeleportSystem);
+  // Tidewater's start: the boardwalk up from the pier foot, looking down it (set now, so the
+  // systems see you there through the rest of the build)
+  const s = json.layout.start;
+  world.player.position.set(s.x, surfaces.floorYAt(s.x, s.z, 10), s.z);
+  world.player.rotation.set(0, s.yaw, 0);
 
   // the fishing: Tidewater's rules and save, the rod in your hand, the wallet on your wrists
   const game = createGameState();
@@ -199,6 +232,7 @@ World.create(container, {
   const props = loadProps(propsBuf);
   // the silvery fish reflect the casinos' studio light (a soft, neutral room)
   props.setEnv(casinoEnv(world.renderer));
+  await built(0.35);
   // the mark's leaping fish: the sailfish, sail up, mid-thrash, photographed side on
   {
     const { mesh, uniforms } = props.makeFish('sailfish');
@@ -210,6 +244,7 @@ World.create(container, {
     mesh.material.dispose();
     paintLogo();
   }
+  await built(0.45);
   Object.assign(fishingDeps, { props, state: game, ocean, terrain: heightfield, surfaces, layout: json.layout, wallet, fx });
   // point-and-click panels first: a hand on a button claims its trigger before fishing sees it
   world.registerSystem(PointerSystem);
@@ -272,6 +307,7 @@ World.create(container, {
     return null;
   };
   world.registerSystem(BackpackSystem);
+  await built(0.55);
 
   // stepping through a doorway: a blink hides the door you can't see open
   const blink = new Blink(world.camera);
@@ -299,6 +335,7 @@ World.create(container, {
     buysLogs: () => (game.woodworks.built.skelter ?? 0) >= SKELTER.cost,
   });
   world.registerSystem(WoodSystem);
+  await built(0.6);
 
   // the helter skelter at the back of the village: raised with wood once the deep walk's done
   Object.assign(skelterDeps, {
@@ -321,6 +358,7 @@ World.create(container, {
     hour: () => sky.state.hour,
   });
   world.registerSystem(CampSystem);
+  await built(0.65);
 
   // the gem rocks out in the wilds, and the pickaxe from the Jeweller (mining/)
   Object.assign(mineDeps, {
@@ -332,6 +370,7 @@ World.create(container, {
     busy: () => backpackView.open || skelterView.onTower || woodView.axeOut || campView.busy || interiorAt(interiors, world.player.position.x, world.player.position.z) !== null,
   });
   world.registerSystem(MiningSystem);
+  await built(0.7);
 
   // the village's people and counters
   const stall = frames.find((b) => b.name === 'stall');
@@ -363,13 +402,17 @@ World.create(container, {
   const kit = { renderer: world.renderer, props: fishingDeps.props! };
   const shack = room(HOME);
   if (shack) new Shack(shack, game, kit, (b) => surfaces.addBox(b));
+  await built(0.75);
   const homeShops = [...HOME_SHOPS, ...VILLA_SHOPS].map((n) => room(n)).filter((r): r is Interior => !!r).map((r) => new HomeShopCounter(r, game, kit));
   // the Jeweller's second counter: the pickaxe, and the window that buys your gems
+  await built(0.85);
   const jeweller = room(JEWELLER);
   const gemWindows = jeweller ? new GemWindows(jeweller, game, kit) : null;
   // the fishing upgrades: tackle, bait and luck (fishing/gear.ts)
+  await built(0.9);
   const gearShops = GEAR_COUNTERS.map((n) => room(n)).filter((r): r is Interior => !!r).map((r) => new GearShopCounter(r, game, kit));
   // Coral at home, and what you've given her
+  await built(0.95);
   const villaRoom = room(VILLA);
   const villa = villaRoom ? new Villa(villaRoom, game, kit, (b) => surfaces.addBox(b), () => sky.state.night.value) : null;
   villageTick = (dt) => {
@@ -385,11 +428,6 @@ World.create(container, {
     blink.update(dt);
   };
 
-  // Tidewater's start: the boardwalk up from the pier foot, looking down it.
-  const s = json.layout.start;
-  world.player.position.set(s.x, surfaces.floorYAt(s.x, s.z, 10), s.z);
-  world.player.rotation.set(0, s.yaw, 0);
-
   // Dev hook: drive the rig without a headset (`__fish.move.to(x, z, yaw)`).
   (window as unknown as { __fish: unknown }).__fish = { world, surfaces, move: teleportView, json, game, fishing: fishingView, vegetation, backpack: backpackView, interiors, tables, music, shore, sky, homeShops, gearShops, villa, fx, props: fishingDeps.props, wood: woodView, skelter: skelterView, camps: campView, mining: mineView, gemWindows, spotFor };
 
@@ -398,6 +436,8 @@ World.create(container, {
   // the curtain goes up the moment the session starts, before the island's first frame in it
   world.renderer.xr.addEventListener('sessionstart', () => runBootIntro(world.camera as PerspectiveCamera, world.scene));
 
+  progress(1);
+  scene.visible = true;
   status.textContent = navigator.xr ? 'Ready.' : 'WebXR not available in this browser: desktop preview only.';
   enter.disabled = !navigator.xr;
   enter.addEventListener('click', () => {

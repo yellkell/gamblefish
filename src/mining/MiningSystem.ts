@@ -151,6 +151,9 @@ export class MiningSystem extends createSystem({}) {
   private readonly lastTip = new Vector3();
   private tipSpeed = 0;
   private toast!: Toast;
+  /** the gems the pop-up's counting, and when it last counted one */
+  private gotten = 0;
+  private gottenAt = 0;
   private chips!: InstancedMesh;
   private chipList: { p: Vector3; v: Vector3; age: number; c: Color; s: number }[] = [];
   private sparks!: InstancedMesh;
@@ -631,11 +634,10 @@ export class MiningSystem extends createSystem({}) {
     if (!r) return;
     const s = this.state;
     r.stock = r.stock.filter((k) => k !== gem);
-    const { first, best } = pocket(s.gems, gem);
+    pocket(s.gems, gem);
     s.save();
     s.emit();
-    const info = GEMS[gem.id];
-    const rare = info.rarity < 0.5;
+    const rare = GEMS[gem.id].rarity < 0.5;
     const stone = this.stones.get(gem);
     if (stone) {
       this.stones.delete(gem);
@@ -649,8 +651,7 @@ export class MiningSystem extends createSystem({}) {
     if (!quiet) {
       gemChime(rare);
       pulseHand(this.renderer.xr.getSession() ?? undefined, hand, 0.45, 45);
-      const tag = `${info.name} · ${gem.ct.toFixed(2)} ct`;
-      this.toast.show(first ? `${tag}. New! It's in your field guide` : best ? `${tag}. Your biggest yet!` : tag, first ? 3.2 : 2.2, first || best ? INK.good : INK.hot);
+      this.gotGems(1);
     }
     this.infoKey = '';
     this.paintButtons();
@@ -663,10 +664,17 @@ export class MiningSystem extends createSystem({}) {
       return;
     }
     const all = [...r.stock];
-    const news = all.filter((g) => !this.state.gems.log[g.id]).map((g) => g.id);
-    all.forEach((g, i) => this.take(g, 'right', i > 0));
+    all.forEach((g) => this.take(g, 'right', true));
     gemChime(all.some((g) => GEMS[g.id].rarity < 0.5));
-    this.toast.show(`${all.length} stone${all.length === 1 ? '' : 's'} into your pouch${news.length ? `. New in your field guide: ${[...new Set(news)].map((id) => GEMS[id].name).join(', ')}` : ''}`, 3, INK.good);
+    this.gotGems(all.length);
+  }
+
+  /** The pop-up, as the logs have it: just how many (stones taken one after another add up). */
+  private gotGems(n: number): void {
+    const now = performance.now();
+    this.gotten = now - this.gottenAt < 2400 ? this.gotten + n : n;
+    this.gottenAt = now;
+    this.toast.show(`+${this.gotten} gem${this.gotten === 1 ? '' : 's'}`, 2.4, INK.good);
   }
 
   private animateFlights(dt: number): void {

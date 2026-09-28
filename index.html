@@ -34,7 +34,12 @@
         gap: 22px;
         background: #000;
         cursor: pointer;
-        animation: presents-out 0.45s ease 3s forwards;
+        /* two animations, not one: the fade is opacity alone, so it runs off the page's main thread
+           and still happens while the island is being built (visibility can't, and with it in the
+           same keyframes the black card sat there, text gone, until the build let go) */
+        animation:
+          presents-out 0.45s ease 3s forwards,
+          presents-gone 0s linear 3.45s forwards;
       }
       #presents .pub,
       #presents .sub {
@@ -59,7 +64,10 @@
         100% { opacity: 0; }
       }
       @keyframes presents-out {
-        to { opacity: 0; visibility: hidden; }
+        to { opacity: 0; }
+      }
+      @keyframes presents-gone {
+        to { visibility: hidden; }
       }
 
       /* 2. The splash: the mark over a night sea, breathing in its glow, the loader and the
@@ -142,11 +150,17 @@
         overflow: hidden;
         margin: 10px 0 18px;
       }
+      /* The bar moves from the first frame: until the game's code is in and can report real
+         progress (main.ts takes it from there), it creeps along on its own, off the main thread. */
       #bar-fill {
         height: 100%;
-        width: 0;
         background: linear-gradient(90deg, #3fd6c6, #ffc93a);
-        transition: width 0.15s;
+        transform: scaleX(0);
+        transform-origin: left;
+        animation: bar-creep 14s cubic-bezier(0.1, 0.6, 0.3, 1) forwards;
+      }
+      @keyframes bar-creep {
+        to { transform: scaleX(0.2); }
       }
       /* The button: a sea-glass neon edge on a dark plate, breathing with the mark. */
       #enter-vr {
@@ -238,7 +252,7 @@
         <canvas id="logo-fish" width="1280" height="640" aria-hidden="true"></canvas>
       </div>
       <div class="dock">
-        <div id="status">Starting…</div>
+        <div id="status">Loading…</div>
         <div id="bar"><div id="bar-fill"></div></div>
         <button id="enter-vr" disabled>ENTER VR</button>
         <p class="controls">

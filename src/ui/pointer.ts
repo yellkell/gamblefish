@@ -60,8 +60,11 @@ export function unregister(p: InteractivePanel): void {
   panels.delete(p);
 }
 
-/** Which hands' triggers the UI took this frame. */
-export const pointerView: { claimed: Record<Hand, boolean> } = { claimed: { left: false, right: false } };
+/** Which hands' triggers the UI took this frame, and the panel each hand's ray is on (button or not). */
+export const pointerView: { claimed: Record<Hand, boolean>; over: Record<Hand, InteractivePanel | null> } = {
+  claimed: { left: false, right: false },
+  over: { left: null, right: null },
+};
 
 const _o = new Vector3();
 const _d = new Vector3();
@@ -96,12 +99,14 @@ export class PointerSystem extends createSystem({}) {
   update(): void {
     if (introActive()) {
       for (const c of Object.values(this.cursors)) c.dot.visible = c.beam.visible = false;
+      pointerView.over.left = pointerView.over.right = null;
       return;
     }
     const hovered = new Map<InteractivePanel, string | null>();
     for (const hand of ['left', 'right'] as const) {
       const cur = this.cursors[hand];
       pointerView.claimed[hand] = false;
+      pointerView.over[hand] = null;
       const pad = this.input.xr.gamepads[hand];
       const t = pad?.getButtonValue(InputComponent.Trigger) ?? 0;
       const down = !this.trig[hand] && t > 0.6;
@@ -136,6 +141,7 @@ export class PointerSystem extends createSystem({}) {
         cur.beam.visible = false;
         continue;
       }
+      pointerView.over[hand] = best.p;
       cur.dot.visible = true;
       cur.dot.position.copy(_best);
       cur.beam.visible = true;
