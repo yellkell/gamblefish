@@ -6,7 +6,8 @@
  * Each trophy fish (fishing/trophyFish.ts) never bites without every piece of gear it needs and
  * its depth of water, does bite with them, and bites more with a luck charm. The great white
  * (fishing/shark.ts) waits for a full field guide and deep water, and is only beaten by holding
- * its runs two-handed.
+ * its runs two-handed. A fish hooked straight under the rod off the pier (fishing/fight.ts) still
+ * runs, and doesn't come in until it's tired.
  *
  *   node tools/fish-check.mjs
  */
@@ -16,6 +17,7 @@ import { shownLevel } from '../src/fishing/gear.ts';
 import { TIMED, biting } from '../src/fishing/timedFish.ts';
 import { TROPHY } from '../src/fishing/trophyFish.ts';
 import { SHARK_DEPTH, SHARK_ID, SharkFight, RUNS } from '../src/fishing/shark.ts';
+import { FishFight, LAND_AT } from '../src/fishing/fight.ts';
 
 const results = [];
 const check = (name, ok, detail) => {
@@ -130,6 +132,45 @@ console.log('\nthe great white');
   const both = fight(true, true);
   check('two hands on it, reeling through the run is safe', both.state === 'caught', both.state);
   check(`its value is a bounty ($${fishValue(SHARK_ID, 700)})`, fishValue(SHARK_ID, 700) > 5000 && f.price > 0);
+}
+
+console.log('\nthe fight, dropped straight down off the pier (3 m of line, a steady hand on the reel)');
+{
+  // reel while the tension's low, ease off when it climbs
+  const fight = (species, kg, lineKg = 7, reelSpeed = 1.1) => {
+    const f = new FishFight({ species, kg, lineKg, reelSpeed, distance: 3, rng });
+    let t = 0;
+    let far = f.distance;
+    while (f.state === 'fighting' && t < 300) {
+      f.update(1 / 72, f.tension < 0.7);
+      t += 1 / 72;
+      far = Math.max(far, f.distance);
+    }
+    return { f, t, far };
+  };
+  const small = fight('sergeant', 0.2);
+  const jack = fight('jack', 6, 13, 1.6);
+  const tarpon = fight('tarpon', 30, 90, 3);
+  check('a sergeant major runs a little, and comes in within a few seconds', small.f.state === 'caught' && small.far > 4 && small.t < 8, `out to ${small.far.toFixed(1)} m, ${small.t.toFixed(1)} s`);
+  check('a crevalle jack takes line well out on its first run', jack.f.state === 'caught' && jack.far > 9 && jack.t > 7, `out to ${jack.far.toFixed(1)} m, ${jack.t.toFixed(1)} s`);
+  check('a tarpon on the best gear still fights, however fast the reel', tarpon.f.state === 'caught' && tarpon.far > 12 && tarpon.t > 10, `out to ${tarpon.far.toFixed(1)} m, ${tarpon.t.toFixed(1)} s, bolted ${tarpon.f.bolts}×`);
+  let early = 0;
+  let caught = 0;
+  for (const id of FISH_IDS) {
+    if (id === SHARK_ID) continue;
+    const [lo, hi] = FISH[id].kg;
+    for (let i = 0; i < 20; i++) {
+      const { f } = fight(id, lo + (hi - lo) * rng(), 90, 3);
+      if (f.state !== 'caught') continue;
+      caught++;
+      if (f.stamina > LAND_AT) early++;
+    }
+  }
+  check(`no fish comes to the rod before it's tired (stamina ${LAND_AT} or less)`, caught > 0 && early === 0, `${caught} landed, ${early} fresh`);
+  const f = new FishFight({ species: 'jack', kg: 8, lineKg: 90, reelSpeed: 3, distance: 3, rng });
+  f.run = 0;
+  for (let t = 0; t < 1.5 && f.state === 'fighting'; t += 1 / 72) f.update(1 / 72, true);
+  check('a fresh fish reeled right in bolts again', f.state === 'fighting' && f.bolts > 0, `${f.bolts} bolt(s), ${f.distance.toFixed(1)} m out`);
 }
 
 console.log('\nthe gear you show (the bait on your hook, the rod and reel in your hand)');

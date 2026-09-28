@@ -22,7 +22,7 @@ whole.
 | **Rod out / away** | **B** puts it in your right hand, **Y** in your left. It starts in your right hand. |
 | **Cast** | Hold the **trigger** (your finger on the line), swing the rod and let go. |
 | **Strike** | When the bobber goes under, yank the rod back or pull the trigger. |
-| **Fight** | Reel with the **trigger** (pressure sets the speed), or grip the reel handle with your other hand and crank. Keep the tension in the green. |
+| **Fight** | Reel with the **trigger** (pressure sets the speed), or grip the reel handle with your other hand and crank. Keep the tension in the green. A hooked fish runs first, and won't come in until it's tired. |
 | **Wallet** | Look at either wrist: a rolling counter shows your money. |
 
 ## Running
