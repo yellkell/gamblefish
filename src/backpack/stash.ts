@@ -12,7 +12,7 @@
  * Both sit in the tray's frame (X across, Y up out of the tray, Z down it toward you).
  */
 
-import { CylinderGeometry, Group, Mesh, MeshLambertMaterial, SphereGeometry, TorusGeometry, Vector3, type Points, type WebGLRenderer } from 'three';
+import { BufferGeometry, CatmullRomCurve3, CylinderGeometry, Group, Mesh, MeshLambertMaterial, SphereGeometry, TorusGeometry, TubeGeometry, Vector3, type Points, type WebGLRenderer } from 'three';
 import type { GameState } from '../fishing/tidewater.ts';
 import { dropTwinkles, gemMesh, twinkles } from '../mining/gemMesh.ts';
 import { GEMS } from '../mining/gems.ts';
@@ -22,6 +22,11 @@ import { Batch, M, stalk, turned } from '../village/craft.ts';
 
 /** the most logs drawn in the bundle */
 const MAX_LOGS = 6;
+/** a log's radius (its thick end a touch more), and the rope's */
+const LOG_R = 0.017;
+const ROPE_R = 0.003;
+/** how far the rope stands off the bark (the logs' nine flats and their knots) */
+const ROPE_GAP = 0.0006;
 /** the tags: canvas px and size (m) */
 const TAG_PX: [number, number] = [320, 120];
 const TAG_M: [number, number] = [0.13, 0.04875];
@@ -29,7 +34,11 @@ const TAG_M: [number, number] = [0.13, 0.04875];
 export class Stash {
   readonly group = new Group();
   private readonly logs: Mesh[] = [];
-  /** the rope round the bundle (gone with the last log) */
+  /** the logs, lifted onto the rope that runs under them */
+  private readonly bundle = new Group();
+  /** the log centres across the bundle's end (x, y), in stacking order */
+  private readonly centres: [number, number][] = [];
+  /** the rope round the bundle, two turns (gone with the last log but one) */
   private readonly bands: Mesh[] = [];
   private readonly logTag: Panel;
   private readonly logLetters: Lettering;
@@ -48,7 +57,7 @@ export class Stash {
     // the logs: a pyramid of three, two, one lying across, bound with rope
     const bark = new MeshLambertMaterial({ color: 0x7a5636 });
     const cut = new MeshLambertMaterial({ color: 0xe2c496 });
-    const r = 0.017;
+    const r = LOG_R;
     const len = 0.1;
     const logGeo = new CylinderGeometry(r, r * 1.06, len, 9).rotateX(Math.PI / 2);
     const stack: [number, number][] = [
@@ -59,21 +68,21 @@ export class Stash {
       [0.5, 1],
       [0, 2],
     ];
-    const bundle = new Group();
+    const bundle = this.bundle;
     stack.forEach(([x, row], i) => {
       const m = new Mesh(logGeo, [bark, cut, cut]);
       m.position.set(x * r * 2.05, r + row * r * 1.75, (i % 2 ? 1 : -1) * 0.004);
+      this.centres.push([m.position.x, m.position.y]);
       m.rotation.z = i * 1.3;
       bundle.add(m);
       this.logs.push(m);
     });
-    // the rope round them, and the rings on the cut ends of the front row
+    // the rope round them, drawn tight round however many there are (update)
     const rope = new MeshLambertMaterial({ color: 0xc8b07a });
     for (const z of [-0.028, 0.028]) {
-      const band = new Mesh(new TorusGeometry(0.043, 0.003, 5, 20), rope);
+      const band = new Mesh(undefined, rope);
       this.bands.push(band);
-      band.scale.set(1, 0.95, 1);
-      band.position.set(0, 0.043, z);
+      band.position.z = z;
       bundle.add(band);
     }
     bundle.rotation.y = Math.PI / 2;
@@ -155,8 +164,16 @@ export class Stash {
       this.logKey = logKey;
       const shown = Math.min(MAX_LOGS, n);
       this.logs.forEach((m, i) => (m.visible = i < shown));
-      // a rope round two or more; nothing to tie round none
-      for (const b of this.bands) b.visible = shown >= 2;
+      // a rope round two or more, pulled tight round the stack; nothing to tie round one
+      const tied = shown >= 2;
+      for (const b of this.bands) b.visible = tied;
+      if (tied) {
+        const geo = ropeRound(this.centres.slice(0, shown));
+        this.bands[0].geometry.dispose();
+        for (const b of this.bands) b.geometry = geo;
+      }
+      // the rope runs under the bottom row: the logs sit on it
+      this.bundle.position.y = tied ? LOG_R * 0.06 + ROPE_GAP + 2 * ROPE_R : 0;
       const L = this.logLetters;
       L.begin();
       L.title(n ? `${n} LOG${n === 1 ? '' : 'S'}` : 'NO LOGS', TAG_PX[0] / 2, 84, 56, 'center', TAG_PX[0] - 30);
@@ -198,4 +215,50 @@ export class Stash {
     }
     this.stones.forEach((st, i) => (st.holder.rotation.y = time * 0.6 + i * 2.1));
   }
+}
+
+/**
+ * A rope pulled tight round logs lying side by side: round the outside of the stack (the hull of
+ * the logs' circles), in the bundle's end plane. Straight across between the outermost logs,
+ * following each one's curve where it turns a corner.
+ */
+function ropeRound(centres: [number, number][]): BufferGeometry {
+  const R = LOG_R * 1.06 + ROPE_GAP + ROPE_R;
+  // the hull of the centres, anticlockwise (Andrew's monotone chain; points in a line drop out)
+  const pts = [...centres].sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  const cross = (o: [number, number], a: [number, number], b: [number, number]): number => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+  const lower: [number, number][] = [];
+  const upper: [number, number][] = [];
+  for (const p of pts) {
+    while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], p) <= 1e-12) lower.pop();
+    lower.push(p);
+  }
+  for (const p of [...pts].reverse()) {
+    while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], p) <= 1e-12) upper.pop();
+    upper.push(p);
+  }
+  const hull = [...lower.slice(0, -1), ...upper.slice(0, -1)];
+  // round each corner on its log, a few points along each straight between
+  const path: Vector3[] = [];
+  const n = hull.length;
+  for (let i = 0; i < n; i++) {
+    const [px, py] = hull[(i + n - 1) % n];
+    const [cx, cy] = hull[i];
+    const [nx, ny] = hull[(i + 1) % n];
+    // outward, the right-hand side of each edge (the hull runs anticlockwise)
+    const a0 = Math.atan2(-(cx - px), cy - py);
+    let a1 = Math.atan2(-(nx - cx), ny - cy);
+    while (a1 < a0) a1 += Math.PI * 2;
+    const steps = Math.max(1, Math.ceil((a1 - a0) / (Math.PI / 10)));
+    for (let k = 0; k <= steps; k++) {
+      const a = a0 + ((a1 - a0) * k) / steps;
+      path.push(new Vector3(cx + Math.cos(a) * R, cy + Math.sin(a) * R, 0));
+    }
+    // the straight to the next log
+    const e = path[path.length - 1];
+    const tx = nx - cx;
+    const ty = ny - cy;
+    for (const f of [0.25, 0.5, 0.75]) path.push(new Vector3(e.x + tx * f, e.y + ty * f, 0));
+  }
+  return new TubeGeometry(new CatmullRomCurve3(path, true, 'centripetal'), path.length * 2, ROPE_R, 5, true);
 }

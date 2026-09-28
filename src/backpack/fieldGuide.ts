@@ -10,7 +10,8 @@
  * and when it bites, how many you've had and your best, and a true fact about it from the
  * natural history books. Opposite the title page is a chart of the bay (backpack/chart.ts) with
  * the reef, the drop-off, the pier and the village's places, and where you're standing. The
- * great white has the last page to itself. Point at the arrows in the page corners to turn.
+ * great white has the last page to itself. Point at the arrows in the page corners to turn, or
+ * point anywhere on the book and flick the thumbstick left or right.
  *
  * Once the Jeweller's pickaxe is yours, a last spread follows the fish: the island's eight gems,
  * four to a page. One you haven't found is a shadow with no name, and the conditions to look for
@@ -251,7 +252,13 @@ export class FieldGuide {
     if (place) this.travel?.(place);
   }
 
-  private turn(d: number): void {
+  /** Is this panel one of the book's pages? */
+  isPage(p: InteractivePanel | null): boolean {
+    return p === this.left || p === this.right;
+  }
+
+  /** Back a spread (-1) or on one (1). */
+  turn(d: number): void {
     const n = this.pages.length / 2;
     const s = Math.max(0, Math.min(n - 1, this.spread + d));
     if (s === this.spread) return;

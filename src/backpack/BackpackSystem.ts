@@ -639,16 +639,22 @@ export class BackpackSystem extends createSystem({}) {
       else if (t < 0.3) this.trig[h] = false;
       if (g > 0.6) this.grip[h] = true;
       else if (g < 0.3) this.grip[h] = false;
-      // the field guide is out: the triggers are for its pages (the pointer), not the slots
-      if (this.tab === 'guide') continue;
+      // a sideways flick: turns the fish in your hand, or, pointing at the field guide, its page
+      let flick = 0;
       const ax = pad?.getAxesValues(InputComponent.Thumbstick);
       if (ax) {
         if (Math.abs(ax.x) < 0.3) this.stick[h] = true;
         else if (this.stick[h] && Math.abs(ax.x) > 0.7) {
           this.stick[h] = false;
-          if (this.held) this.turn(ax.x > 0 ? 1 : 3);
+          flick = ax.x > 0 ? 1 : -1;
         }
       }
+      // the field guide is out: the triggers are for its pages (the pointer), not the slots
+      if (this.tab === 'guide') {
+        if (flick && this.guide.isPage(pointerView.over[h])) this.guide.turn(flick);
+        continue;
+      }
+      if (flick && this.held) this.turn(flick > 0 ? 1 : 3);
       if (this.held && this.held.hand === h && tDown && !this.target) this.place();
       else if (!this.held && (gDown || tDown)) this.lift(h);
     }
