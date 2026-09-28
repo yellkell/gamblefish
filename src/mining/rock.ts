@@ -17,7 +17,6 @@ import {
   BoxGeometry,
   BufferGeometry,
   Color,
-  ConeGeometry,
   CylinderGeometry,
   Float32BufferAttribute,
   Group,
@@ -307,31 +306,26 @@ export function buildPickaxe(env: Texture | null): Group {
   const hickory = new MeshStandardMaterial({ color: 0xb08a58, roughness: 0.6, envMap: env, envMapIntensity: 0.6 });
   const leather = new MeshStandardMaterial({ color: 0x5a2a18, roughness: 0.85 });
   const steel = new MeshStandardMaterial({ color: 0x5e6268, roughness: 0.32, metalness: 0.9, envMap: env, envMapIntensity: 1.2 });
-  const bright = new MeshStandardMaterial({ color: 0xe8ecf0, roughness: 0.15, metalness: 1, envMap: env, envMapIntensity: 1.6 });
   const brass = new MeshStandardMaterial({ color: 0xd8a848, roughness: 0.3, metalness: 1, envMap: env, envMapIntensity: 1.3 });
-  const haft = new Mesh(new CylinderGeometry(0.017, 0.022, 0.7, 10).rotateX(Math.PI / 2), hickory);
-  haft.position.z = -0.23;
+  // the haft, from the butt up into the eye (it ends inside it: nothing pokes out the far side)
+  const haft = new Mesh(new CylinderGeometry(0.017, 0.022, 0.68, 10).rotateX(Math.PI / 2), hickory);
+  haft.position.z = -0.22;
   const grip = new Mesh(new CylinderGeometry(0.024, 0.024, 0.18, 10).rotateX(Math.PI / 2), leather);
   grip.position.z = 0.03;
-  // the eye: a collar of steel round the haft's end, a brass ferrule under it
+  // the head, forged in one: the eye round the haft's end, and both arms grown out of its middle
+  // so they meet inside it with no seam or gap
+  const EYE = new Vector3(0, 0, -0.54);
   const eye = new Mesh(new BoxGeometry(0.05, 0.075, 0.06), steel);
-  eye.position.set(0, 0, -0.54);
+  eye.position.copy(EYE);
   const ferrule = new Mesh(new CylinderGeometry(0.025, 0.025, 0.03, 12).rotateX(Math.PI / 2), brass);
   ferrule.position.z = -0.495;
-  // the point: curving down and a touch back toward you, tapering to a bright tip
-  const point = new Mesh(
-    stalk([new Vector3(0, -0.02, -0.54), new Vector3(0, -0.1, -0.545), new Vector3(0, -0.18, -0.54), new Vector3(0, -0.245, -0.525)], 0.021, 0.004, 8, 14, true),
-    steel,
-  );
-  const tip = new Mesh(new ConeGeometry(0.0045, 0.018, 8).rotateX(Math.PI), bright);
-  tip.position.copy(PICK_TIP).add(new Vector3(0, 0.004, 0.002));
-  // the chisel: up the other way, flattening to a broad edge
-  const chisel = new Mesh(
-    stalk([new Vector3(0, 0.02, -0.54), new Vector3(0, 0.1, -0.545), new Vector3(0, 0.17, -0.54)], 0.02, 0.012, 8, 10, true).scale(1.5, 1, 0.7),
-    steel,
-  );
-  const edge = new Mesh(new BoxGeometry(0.05, 0.01, 0.012), bright);
-  edge.position.set(0, 0.176, -0.54);
-  g.add(haft, grip, eye, ferrule, point, tip, chisel, edge);
+  // the point: down from the eye, curving a touch toward the haft, tapering to PICK_TIP
+  const point = new Mesh(stalk([EYE.clone(), new Vector3(0, -0.09, -0.549), new Vector3(0, -0.18, -0.548), PICK_TIP.clone()], 0.022, 0.0015, 8, 16, true), steel);
+  // the chisel: up the other way, broadening side to side and thinning to an edge (flattened about
+  // its own line through the eye, so it stays on the head)
+  const blade = stalk([EYE.clone(), new Vector3(0, 0.09, -0.546), new Vector3(0, 0.17, -0.542)], 0.021, 0.011, 8, 12, true);
+  blade.translate(0, 0, -EYE.z).scale(1.7, 1, 0.55).translate(0, 0, EYE.z);
+  const chisel = new Mesh(blade, steel);
+  g.add(haft, grip, eye, ferrule, point, chisel);
   return g;
 }
