@@ -352,7 +352,7 @@ World.create(container, {
   const gearShops = GEAR_COUNTERS.map((n) => room(n)).filter((r): r is Interior => !!r).map((r) => new GearShopCounter(r, game, kit));
   // Coral at home, and what you've given her
   const villaRoom = room(VILLA);
-  const villa = villaRoom ? new Villa(villaRoom, game, kit, (b) => surfaces.addBox(b)) : null;
+  const villa = villaRoom ? new Villa(villaRoom, game, kit, (b) => surfaces.addBox(b), () => sky.state.night.value) : null;
   villageTick = (dt) => {
     // a room is drawn only when you could see into it: from inside, or through its doorway
     // (from across the village, its dozens of little draws were most of the frame)

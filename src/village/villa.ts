@@ -4,53 +4,35 @@
  * outside (village/characters.ts), waving when you come in — among her own few
  * things: a sofa under the window, a rug, a sideboard, palms in pots. Everything you buy her at
  * the JEWELLER and the BOUTIQUE (village/homeGoods.ts) is delivered to its own spot here, and
- * the board over the sofa keeps count in hearts, with a word from her for each new one.
+ * she tells you what she thinks of it when you come in, in a speech bubble over her head
+ * (village/coral.ts), her heart filling one gift at a time.
  */
 
 import { Group, Mesh, PlaneGeometry, TorusGeometry, type Camera } from 'three';
 import type { GameState } from '../fishing/tidewater.ts';
-import { font } from '../ui/fonts.ts';
-import { INK, Panel, roundRect } from '../ui/panel.ts';
 import type { BoxCollider } from '../world/data.ts';
 import { Character } from './characters.ts';
+import { CoralTalk } from './coral.ts';
 import { Batch, M, rounded, turned } from './craft.ts';
 import { GOODS, rugPaint, Shack, VILLA_SHOPS, type Kit } from './homeGoods.ts';
 import type { Interior } from './interiors.ts';
 import { mergeStatic } from './merge.ts';
 import { turnedLeg } from './wares/builder.ts';
 import { kentia } from './wares/florist.ts';
-import { LOVE_INTEREST } from './roles.ts';
-
-/** what she says as the gifts come in (by how many she has) */
-const WORDS = [
-  'Oh — hello. You’re the one who fishes off the pier?',
-  'You didn’t have to. …But I’m glad you did.',
-  'People are starting to talk about us, you know.',
-  'Stay for a drink? The sunset’s better from here.',
-  'I told my mother about you.',
-  'You remembered what I said about the sea. Nobody remembers.',
-  'You’ve made this place feel like a home.',
-  'Stay a little longer tonight?',
-  'Nobody’s ever spoiled me like this.',
-  'Every time the door opens, I hope it’s you.',
-  'Ask me. You know what I’ll say.',
-];
-
-const PAGE: [number, number] = [900, 300];
 
 export class Villa {
   private readonly coral: Character;
-  private readonly board = new Panel(PAGE, [1.5, 0.5]);
-  private readonly gifts: string[];
-  private said = -1;
+  private readonly talk: CoralTalk;
 
   constructor(
     private readonly room: Interior,
-    private readonly state: GameState,
+    state: GameState,
     kit: Kit,
     addCollider: (b: BoxCollider) => void,
+    /** how dark it is outside (0 day, 1 night): she says good evening */
+    night: () => number = () => 0,
   ) {
-    this.gifts = GOODS.filter((g) => (VILLA_SHOPS as readonly string[]).includes(g.shop)).map((g) => g.id);
+    const gifts = GOODS.filter((g) => (VILLA_SHOPS as readonly string[]).includes(g.shop)).map((g) => g.id);
     const d = room.d;
     // her own things: the sofa (a collider in interiors.ts FURNITURE), a rug, a sideboard, palms
     const own = new Group();
@@ -123,58 +105,20 @@ export class Villa {
     this.coral = new Character(`${import.meta.env.BASE_URL}models/characters/marta.glb`, at.x, at.y, at.z, room.frame.yaw, kit.renderer);
     room.group.parent?.add(this.coral.group);
 
-    // the hearts, over the sofa
-    this.board.mesh.position.set(0, 2.35, -d / 2 + 0.03);
-    room.contents.add(this.board.mesh);
-    this.board.repaintOnFonts(() => this.paint(true));
-    state.onChange(() => this.paint());
-    this.paint();
-  }
-
-  /** how many of the villa's things you've given her */
-  private count(): number {
-    return this.gifts.filter((id) => this.state.home.includes(id)).length;
-  }
-
-  private paint(force = false): void {
-    const n = this.count();
-    if (n === this.said && !force) return;
-    // a new gift: she's pleased to see you (the wave), and says so
-    if (this.said >= 0 && n > this.said) this.coral.talking = true;
-    this.said = n;
-    const c = this.board.ctx;
-    const [W, H] = PAGE;
-    this.board.clear();
-    roundRect(c, 6, 6, W - 12, H - 12, 24);
-    c.fillStyle = 'rgba(40, 14, 22, 0.9)';
-    c.fill();
-    c.lineWidth = 5;
-    c.strokeStyle = '#e8506a';
-    c.stroke();
-    c.textBaseline = 'alphabetic';
-    c.textAlign = 'center';
-    c.font = font(700, 40);
-    c.fillStyle = '#ffd8de';
-    c.fillText(`${LOVE_INTEREST.name.toUpperCase()}’S HEART`, W / 2, 62);
-    const total = this.gifts.length;
-    c.font = font(700, 56);
-    const hearts = Array.from({ length: total }, (_, i) => (i < n ? '♥' : '♡')).join(' ');
-    c.fillStyle = '#e8506a';
-    c.fillText(hearts, W / 2, 140, W - 60);
-    c.font = font(600, 28);
-    c.fillStyle = INK.hot;
-    c.fillText(`“${WORDS[Math.min(n, WORDS.length - 1)]}”`, W / 2, 206, W - 60);
-    c.font = font(500, 22);
-    c.fillStyle = INK.dim;
-    c.fillText(n < total ? 'the JEWELLER and the BOUTIQUE deliver here' : 'every gift given', W / 2, 256);
-    this.board.commit();
+    // what she says, over her head (the tail's tip just above her hair)
+    this.talk = new CoralTalk(state, this.coral, gifts, night);
+    this.talk.bubble.anchor.set(at.x, at.y + 1.95, at.z);
+    room.group.parent?.add(this.talk.bubble.mesh);
   }
 
   /** per frame, while the villa can be seen */
   update(dt: number, camera: Camera): void {
+    const e = camera.matrixWorld.elements;
+    // she keeps track of your comings and goings even while the room isn't drawn
+    this.talk.update(dt, camera, this.room.inside(e[12], e[14]));
     this.coral.group.visible = this.room.group.visible;
+    this.talk.bubble.mesh.visible &&= this.room.group.visible;
     if (!this.room.group.visible) return;
     this.coral.update(dt, camera);
-    if (this.coral.talking && !this.room.inside(camera.matrixWorld.elements[12], camera.matrixWorld.elements[14])) this.coral.talking = false;
   }
 }

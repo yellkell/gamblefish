@@ -147,8 +147,19 @@ and the vendors.
   crystal chandelier, a vanity with a jewellery box, pearls on a velvet bust, a
   ring under a glass cloche and a mermaid's tiara. The Boutique sells a velvet chaise
   longue, a gilded cheval mirror, silk drapes, a baby grand and a painted silk screen. Coral is at home (`src/village/villa.ts`), lit like the
-  room around her rather than by the sky outside, and a board
-  over her sofa counts your gifts in hearts, with a new line from her for each one.
+  room around her rather than by the sky outside.
+- **Coral talks to you** (`src/village/coral.ts`), in a speech bubble over her head
+  (`src/ui/speechBubble.ts`) that pops up when you come in, turns to face you and shrinks away
+  when she's done:
+  - Her heart is the gifts you've given her, one heart each, shown in the bubble. How she greets
+    you moves through five stages as it fills (a stranger, warming, fond, close, yours), with
+    her own lines after dark.
+  - Anything delivered since your last visit she thanks you for in person, by name, one line
+    each, a heart filling with a chime; then a word on where the two of you are now.
+  - Early on, with nothing new, she hints at the Jeweller and the Boutique. Straight back in:
+    "Back so soon?" Walking out: a goodbye, seen back through the doorway.
+  - What she's thanked you for and how often you've called are saved (`coral` in the save); an
+    older save counts everything already in her villa as thanked.
 - **Fishing upgrades** (`src/fishing/gear.ts`, `src/village/gearShop.ts`), on
   Tidewater's own upgrade tracks:
   - The **Tackle Shop** sells rods (cast distance), reels (reel speed) and line
