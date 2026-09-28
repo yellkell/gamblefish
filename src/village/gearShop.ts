@@ -16,8 +16,9 @@
  *
  * At the bait shop every bait you've bought (and the frozen shrimp you started with) has a USE
  * button: that's the one that goes on your hook and hangs under the float. At the tackle shop a
- * board by the rack of rods does the same for the rod in your hand. It's only the look: the
- * bites come as fast as your best bait brings them, and you cast as far as your best rod.
+ * board by the rack of rods does the same for the rod in your hand and the reel on it. It's only
+ * the look: the bites come as fast as your best bait brings them, you cast as far as your best
+ * rod and reel in as fast as your best reel.
  */
 
 import { Group, MeshBasicMaterial, SphereGeometry, TorusGeometry, Vector3, type Object3D } from 'three';
@@ -384,17 +385,24 @@ function pickLook(state: GameState, track: string, level: number): boolean {
 
 /* ── the tackle shop's rod rack: which rod's in your hand ─────────────── */
 
-const RW = 720;
+const RW = 1240;
 const RH = 560;
 
+/** the board's two columns: what each track's pick is called, and what its number is */
+const RACK: { track: 'rod' | 'reel'; on: string; stat: (lv: Record<string, unknown>) => string; same: string; you: string }[] = [
+  { track: 'rod', on: 'IN HAND ✓', stat: (lv) => `casts ${lv.castM} m`, same: 'casts as far as', you: 'cast as far as' },
+  { track: 'reel', on: 'ON ROD ✓', stat: (lv) => `reels in ${lv.reelSpeed} m/s`, same: 'reels in as fast as', you: 'reel in as fast as' },
+];
+
 /**
- * A small board on the wall by the rack of rods: every rod, the ones you've bought with a USE
- * button, the one in your hand ticked. You cast as far as your best rod, whichever you hold.
+ * A board on the wall by the rack of rods: every rod and every reel, the ones you've bought with
+ * a USE button, the ones you fish with ticked. You cast as far as your best rod and reel in as
+ * fast as your best reel, whichever you use.
  */
 export class RodRackBoard {
   private readonly board: InteractivePanel;
   private readonly letters: Lettering;
-  private readonly pics: (HTMLCanvasElement | undefined)[] = [];
+  private readonly pics = new Map<string, HTMLCanvasElement>();
   private note = '';
 
   constructor(
@@ -402,13 +410,14 @@ export class RodRackBoard {
     private readonly state: GameState,
     kit: Kit,
   ) {
-    UPGRADES.rod.levels.forEach((_, lv) => (this.pics[lv] = thumbnail(kit.renderer, gearIcon(kit, 'rod', lv))));
-    this.board = new InteractivePanel([RW, RH], [0.66, (0.66 * RH) / RW]);
+    for (const { track } of RACK) UPGRADES[track].levels.forEach((_, lv) => this.pics.set(`${track}:${lv}`, thumbnail(kit.renderer, gearIcon(kit, track, lv))));
+    const W = 1.0;
+    this.board = new InteractivePanel([RW, RH], [W, (W * RH) / RW]);
     const look = lookFor(room.name);
     this.letters = new Lettering(this.board, look, room.name.charCodeAt(0) * 3 + 1);
     mount(this.board, look, { renderer: kit.renderer });
     // on the left wall, between the rack and the door, facing into the room
-    this.board.mesh.position.set(-room.w / 2 + 0.02 + look.frame.d, 1.4, Math.min(room.d / 2 - 0.5, 1.15));
+    this.board.mesh.position.set(-room.w / 2 + 0.02 + look.frame.d, 1.4, Math.min(room.d / 2 - W / 2 - 0.12, 1.15));
     this.board.mesh.rotation.y = Math.PI / 2;
     room.contents.add(this.board.mesh);
     this.board.paint = () => this.paint();
@@ -422,31 +431,35 @@ export class RodRackBoard {
   click(id: string): void {
     const [act, track, lv] = id.split(':');
     const level = Number(lv);
-    if (act !== 'use' || track !== 'rod' || !pickLook(this.state, 'rod', level)) return;
-    const best = this.state.upgrades.rod | 0;
-    const lvs = UPGRADES.rod.levels;
-    this.note = `In your hand: the ${lvs[level].label.toLowerCase()}.` + (level < best ? ` It casts as far as your ${lvs[best].label.toLowerCase()}.` : '');
+    const col = RACK.find((c) => c.track === track);
+    if (act !== 'use' || !col || !pickLook(this.state, track, level)) return;
+    const best = this.state.upgrades[track] | 0;
+    const lvs = UPGRADES[track].levels;
+    this.note = `${track === 'rod' ? 'In your hand' : 'On your rod'}: the ${lvs[level].label.toLowerCase()}.` + (level < best ? ` It ${col.same} your ${lvs[best].label.toLowerCase()}.` : '');
     this.paint();
   }
 
   private paint(): void {
     const L = this.letters;
     const u = this.state.upgrades;
-    const best = u.rod | 0;
-    const shown = shownLevel(u, this.state.looks, 'rod');
-    const lvs = UPGRADES.rod.levels;
     L.begin();
-    L.title('YOUR ROD', 36, 70, 48, 'left', RW - 72);
-    L.text(shown < best ? `casts as far as your ${lvs[best].label}` : 'pick the one in your hand', 36, 108, 24, 'dim', 'left', 600, RW - 72);
+    L.title('YOUR ROD AND REEL', 36, 70, 48, 'left', RW - 72);
+    const behind = RACK.filter((c) => shownLevel(u, this.state.looks, c.track) < (u[c.track] | 0)).map((c) => `${c.you} your ${UPGRADES[c.track].levels[u[c.track] | 0].label}`);
+    L.text(behind.length ? `you still ${behind.join(' and ')}` : 'pick the ones you fish with: only the look changes', 36, 108, 24, 'dim', 'left', 600, RW - 72);
     const rowH = 90;
-    lvs.forEach((lv, i) => {
-      const y = 124 + i * rowH;
-      const owned = i <= best;
-      const on = i === shown;
-      L.thumb(this.pics[i], 32, y + 6, rowH - 14, !owned);
-      L.text(lv.label, 128, y + 40, 30, on ? 'ink' : 'dim', 'left', 700, 370);
-      L.text(owned ? `casts ${(lv as { castM?: number }).castM ?? ''} m` : `$${lv.cost.toLocaleString('en-US')} at the counter`, 128, y + 70, 22, 'dim', 'left', 500, 370);
-      if (owned) L.button(`use:rod:${i}`, on ? 'IN HAND ✓' : 'USE', 510, y + 12, 180, 64, on ? 'done' : 'go', on ? 24 : 30);
+    RACK.forEach((c, k) => {
+      const x0 = 32 + k * 604;
+      const best = u[c.track] | 0;
+      const shown = shownLevel(u, this.state.looks, c.track);
+      UPGRADES[c.track].levels.forEach((lv, i) => {
+        const y = 124 + i * rowH;
+        const owned = i <= best;
+        const on = i === shown;
+        L.thumb(this.pics.get(`${c.track}:${i}`), x0, y + 6, rowH - 14, !owned);
+        L.text(lv.label, x0 + 94, y + 40, 28, on ? 'ink' : 'dim', 'left', 700, 300);
+        L.text(owned ? c.stat(lv) : `$${lv.cost.toLocaleString('en-US')} at the counter`, x0 + 94, y + 70, 22, 'dim', 'left', 500, 300);
+        if (owned) L.button(`use:${c.track}:${i}`, on ? c.on : 'USE', x0 + 404, y + 12, 164, 64, on ? 'done' : 'go', on ? 22 : 30);
+      });
     });
     if (this.note) L.text(this.note, 36, RH - 36, 20, 'good', 'left', 600, RW - 72);
     L.end();

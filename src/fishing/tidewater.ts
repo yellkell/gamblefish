@@ -166,7 +166,7 @@ export interface GameState {
   journey: JourneySave;
   /**
    * The gear you've chosen to use for its look, by track (fishing/gear.ts shownLevel): the rod in
-   * your hand (the tackle shop's rack) and the bait on your hook (the bait shop), any level you've
+   * your hand and the reel on it (the tackle shop's rack board) and the bait on your hook (the bait shop), any level you've
    * bought. A track that isn't here shows your best. It's only the look: what the gear does is
    * always your best's.
    */

@@ -1133,7 +1133,7 @@ export class FishingSystem extends createSystem({}) {
   private dressGear(): void {
     const u = fishingDeps.state!.upgrades;
     const looks = fishingDeps.state!.looks;
-    this.rod.dress({ rod: shownLevel(u, looks, 'rod'), reel: u.reel | 0, line: u.line | 0 });
+    this.rod.dress({ rod: shownLevel(u, looks, 'rod'), reel: shownLevel(u, looks, 'reel'), line: u.line | 0 });
     this.bait.setGear(shownLevel(u, looks, 'bait'), u.hooks | 0);
     const line = Math.max(0, Math.min(LINE.length - 1, u.line | 0));
     if (line !== this.lineLevel) {

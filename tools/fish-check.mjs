@@ -132,7 +132,7 @@ console.log('\nthe great white');
   check(`its value is a bounty ($${fishValue(SHARK_ID, 700)})`, fishValue(SHARK_ID, 700) > 5000 && f.price > 0);
 }
 
-console.log('\nthe gear you show (the bait on your hook, the rod in your hand)');
+console.log('\nthe gear you show (the bait on your hook, the rod and reel in your hand)');
 {
   const u = { bait: 4, rod: 2 };
   check('with nothing picked, your best shows', shownLevel(u, {}, 'bait') === 4 && shownLevel(u, undefined, 'rod') === 2);
@@ -141,12 +141,13 @@ console.log('\nthe gear you show (the bait on your hook, the rod in your hand)')
   const s = createGameState();
   s.upgrades.bait = 3;
   s.upgrades.rod = 2;
-  s.looks = { bait: 1, rod: 0 };
+  s.upgrades.reel = 3;
+  s.looks = { bait: 1, rod: 0, reel: 1 };
   const d = JSON.parse(JSON.stringify(s.toJSON()));
   const t = createGameState();
   t.fromJSON(d);
-  check('the picks are saved and read back', t.looks.bait === 1 && t.looks.rod === 0, JSON.stringify(d.looks));
-  check('and the bites and the cast still go by your best', t.stats.biteMul === UPGRADES.bait.levels[3].biteMul && t.stats.castM === UPGRADES.rod.levels[2].castM, `${t.stats.biteMul}, ${t.stats.castM} m`);
+  check('the picks are saved and read back', t.looks.bait === 1 && t.looks.rod === 0 && t.looks.reel === 1, JSON.stringify(d.looks));
+  check('and the bites, the cast and the reeling still go by your best', t.stats.biteMul === UPGRADES.bait.levels[3].biteMul && t.stats.castM === UPGRADES.rod.levels[2].castM && t.stats.reelSpeed === UPGRADES.reel.levels[3].reelSpeed, `${t.stats.biteMul}, ${t.stats.castM} m, ${t.stats.reelSpeed} m/s`);
   t.fromJSON({ ...d, looks: { bait: 9, rod: 'x' } });
   check("a pick beyond the save's gear is dropped", Object.keys(t.looks).length === 0);
   t.fromJSON({ ...d, looks: undefined });

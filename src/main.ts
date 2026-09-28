@@ -420,7 +420,7 @@ World.create(container, {
   // the fishing upgrades: tackle, bait and luck (fishing/gear.ts)
   await built(0.9);
   const gearShops = GEAR_COUNTERS.map((n) => room(n)).filter((r): r is Interior => !!r).map((r) => new GearShopCounter(r, game, kit));
-  // and at the tackle shop, a board by the rack of rods: which of your rods is in your hand
+  // and at the tackle shop, a board by the rack of rods: which of your rods and reels you fish with
   const tackle = room('S3');
   const rodRack = tackle ? new RodRackBoard(tackle, game, kit) : null;
   // Coral at home, and what you've given her
