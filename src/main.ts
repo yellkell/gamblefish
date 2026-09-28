@@ -435,6 +435,8 @@ World.create(container, {
     goods: GOODS.map((g) => g.id),
     // not while you're up the helter skelter or have a fish on: it waits for you
     hold: () => skelterView.onTower || ['fighting', 'landing'].includes(fishingView.state?.() ?? ''),
+    // the game clock runs while you're in the headset
+    playing: () => !!world.session,
   });
   villageTick = (dt) => {
     // a room is drawn only when you could see into it: from inside, or through its doorway

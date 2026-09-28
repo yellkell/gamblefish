@@ -15,6 +15,9 @@
  *                (statue/site.ts), to a fanfare and a word wherever you are; then it's on the
  *                field guide's chart. Once up it's saved (GameState.journey.unveiled) and stands
  *                there every visit.
+ *  THE CLOCK     the game clock runs while you're in the headset (not through the intro, nor while
+ *                the page is asleep), and the moment the last leg's done its reading is kept
+ *                (GameState.journey.time) for the field guide's title page.
  *
  * Built only once it's earned: the gold (one draw, fish, splash and trim together), the stone,
  * the bronze and the plaque's face, and one draw of twinkles.
@@ -64,12 +67,18 @@ export interface StatueDeps {
   goods: readonly string[];
   /** not now: up the helter skelter, or a fish on the line (it waits till you're free) */
   hold: () => boolean;
+  /** is the game being played (in the headset)? the clock runs only then */
+  playing: () => boolean;
 }
 
 /** the gold: warm, polished, a little deeper in the shadows of the fish's markings */
 const GOLD = '#ffc53d';
 /** the plaque's frame: bronze, darker than the gold */
 const BRONZE = '#a8743a';
+/** a frame longer than this (s) is the page asleep, not play: the clock skips it */
+const CLOCK_GAP = 0.5;
+/** how often the clock goes into the save, if nothing else has saved it (s) */
+const CLOCK_SAVE = 60;
 /** how long it takes to rise out of the sand (s) */
 const RISE_S = 6;
 /** the fish, bill to tail, as modelled (m: STATUE.scale stands it up bigger) */
@@ -89,6 +98,9 @@ export class Statue {
   private built = false;
   private rise = -1;
   private poll = 0;
+  /** the clock's last tick (performance.now, ms; 0: stopped), and play since it last saved (s) */
+  private lastTick = 0;
+  private unsaved = 0;
   private base = 0;
   private box: BoxCollider | null = null;
   private gold!: MeshStandardMaterial;
@@ -118,6 +130,7 @@ export class Statue {
   }
 
   update(dt: number, camera: Camera): void {
+    this.tick();
     this.toast.update(dt, camera);
     if (this.built) this.party.update(dt, camera);
     if ((this.poll -= dt) <= 0) {
@@ -143,10 +156,37 @@ export class Statue {
     }
   }
 
+  /**
+   * The game clock: wall time while you play (dt's clamped for the physics; a speedrun's clock
+   * isn't), a long gap skipped as the page asleep. Into the save with everything else, and once a
+   * minute on its own.
+   */
+  private tick(): void {
+    const now = performance.now();
+    if (!this.d.playing() || introActive()) {
+      this.lastTick = 0;
+      return;
+    }
+    const s = this.lastTick ? (now - this.lastTick) / 1000 : 0;
+    this.lastTick = now;
+    if (s <= 0 || s > CLOCK_GAP) return;
+    this.d.state.journey.played += s;
+    if ((this.unsaved += s) >= CLOCK_SAVE) {
+      this.unsaved = 0;
+      this.d.state.save();
+    }
+  }
+
   /** Up if it's been earned (and unveiled), not if it hasn't (a save that's been reset). */
   private reconcile(): void {
     const j = this.d.state.journey;
-    if (!j.unveiled && journeyDone(this.d.state, this.d.goods) && !this.d.hold() && !introActive()) {
+    const done = !j.unveiled && journeyDone(this.d.state, this.d.goods);
+    // the clock stops the moment the last leg's done, even if the statue waits for you to be free
+    if (done && j.time === null) {
+      j.time = j.played;
+      this.d.state.save();
+    }
+    if (done && !this.d.hold() && !introActive()) {
       j.unveiled = true;
       this.d.state.save();
       this.d.state.emit();

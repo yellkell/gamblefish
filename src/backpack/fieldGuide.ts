@@ -18,6 +18,9 @@
  * (the kind of ground, how high, what the stone looks like) and how rare it is; the first one
  * you take out of a rock fills its entry in (its names, where it's found, how many you've had and
  * your biggest, and a true fact), and the stone itself lies on the page, turning in the light.
+ *
+ * Once the golden statue's up, the title page carries one more line, small, over the title: how
+ * long the journey took on the game clock (statue/save.ts), for the speedrunners.
  */
 
 import { Group, Mesh, MeshLambertMaterial, BoxGeometry, Vector3, type Points } from 'three';
@@ -37,6 +40,7 @@ import { WALKS } from '../woodworks/gates.ts';
 import { PLINTH_RADIUS, TOWER_RADIUS } from '../skelter/constants.ts';
 import { SKELTER } from '../skelter/site.ts';
 import { STATUE, STATUE_STAND } from '../statue/site.ts';
+import { clock } from '../statue/save.ts';
 import { gemMesh, twinkles } from '../mining/gemMesh.ts';
 import { GEM_IDS, GEMS, GROUNDS } from '../mining/gems.ts';
 
@@ -322,6 +326,13 @@ export class FieldGuide {
     const found = FISH_IDS.filter((id) => this.caught(id)).length;
     const trophies = BIG.filter((id) => this.caught(id)).length;
     c.textAlign = 'center';
+    // once the golden statue's up: how long the journey took, on the game clock (statue/statue.ts)
+    const j = this.state.journey;
+    if (j?.unveiled && j.time !== null) {
+      c.fillStyle = '#8a6414';
+      c.font = font(600, 30);
+      c.fillText(`★  Journey complete in ${clock(j.time)}  ★`, W / 2, 130);
+    }
     c.fillStyle = INK_BROWN;
     c.font = font(700, 96);
     c.fillText('FIELD GUIDE', W / 2, 260);
