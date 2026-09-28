@@ -14,8 +14,9 @@
  *  FIGHT            Tidewater's line-tension fight. Reel with the TRIGGER (pressure = speed), or
  *                   grab the reel's handle with your OTHER hand (grip) and crank it round. Keep
  *                   the tension in the green; ease off when it runs, or the line snaps. The rod
- *                   bows and the controller shakes with every surge. Teleport is closed until
- *                   it's over.
+ *                   bows and the controller shakes with every surge. Hooked, it runs first, and
+ *                   it won't come to the rod until it's tired (fishing/fight.ts). Teleport is
+ *                   closed until it's over.
  *  LAND             The fish swings up out of the water and hangs off your rod tip, thrashing,
  *                   with its card beside it; it goes in the cooler (trigger or B/Y, or wait).
  *  REEL IN          With nothing biting, reel (trigger or crank) to skim the bobber back. Let go
@@ -53,6 +54,7 @@ import { LineWraps } from '../world/lineWrap.ts';
 import type { Surfaces, Vec3 } from '../world/surfaces.ts';
 import type { Kit } from '../village/craft.ts';
 import { BaitRig } from './baitRig.ts';
+import { FishFight } from './fight.ts';
 import { shownLevel } from './gear.ts';
 import { CatchCard, Toast } from './hud.ts';
 import { CLAMP_Y, RodGauge } from './rodGauge.ts';
@@ -63,7 +65,6 @@ import { SHARK_ID, SharkFight, sharkUnlocked, RUNS } from './shark.ts';
 import { GRIP_Y, SharkShow } from './sharkShow.ts';
 import {
   biteDelay,
-  CatchMinigame,
   FISH,
   FISH_IDS,
   fishLengthCm,
@@ -196,7 +197,7 @@ export class FishingSystem extends createSystem({}) {
   private wraps: LineWraps | null = null;
 
   private bite: Bite | null = null;
-  private fight: CatchMinigame | null = null;
+  private fight: FishFight | SharkFight | null = null;
   private readonly fishPos = new Vector3();
   /** the fish on the line, from the strike until it's landed (or gone): hooked by the mouth at
    * `bob`, its head along `yaw`; `run` eases 0..1 as it turns away to run, `slip` how long it's
@@ -611,7 +612,7 @@ export class FishingSystem extends createSystem({}) {
     const shark = b.species === SHARK_ID;
     this.fight = shark
       ? Object.assign(new SharkFight(b.kg!, Math.max(3, this.lineOut)), { reelSpeed: g.reelSpeed })
-      : new CatchMinigame({ species: b.species!, kg: b.kg!, lineKg: g.lineKg, reelSpeed: g.reelSpeed, distance: Math.max(3, this.lineOut) });
+      : new FishFight({ species: b.species!, kg: b.kg!, lineKg: g.lineKg, reelSpeed: g.reelSpeed, distance: Math.max(3, this.lineOut) });
     this.bite = null;
     this.fishPos.copy(this.bob);
     this.floatAlong = 0;
@@ -1322,6 +1323,8 @@ export class FishingSystem extends createSystem({}) {
         // the fish runs about at the fight's distance, the bobber dragged under near it
         this.wander += dt * (0.4 + f.surge * 1.5);
         _v.copy(this.fishPos).sub(tip).setY(0);
+        // (hooked straight under the tip, off the pier: it runs out the way you're facing)
+        if (_v.lengthSq() < 0.25) _v.copy(tip).sub(this.camera.getWorldPosition(_w)).setY(0);
         const d0 = _v.length() || 1;
         _v.multiplyScalar(1 / d0);
         const side = _x.set(-_v.z, 0, _v.x).multiplyScalar(Math.sin(this.wander) * 0.9 * dt * (1 + f.surge));
