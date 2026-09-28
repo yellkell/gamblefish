@@ -7,10 +7,15 @@
  * for a big fish), the bail flips open while your finger's on the line, the crank and rotor turn
  * as line comes in, the spool slips back when a fish takes drag. What's new is that the pose
  * isn't animated: it IS your hand, so the tip's speed is real and the cast and the strike read it.
+ *
+ * It's painted for the gear you've bought (fishing/rodLook.ts): the blank, grips, wraps and
+ * metalwork for your rod, the reel's body and trim for your reel, the line on the spool and
+ * through the guides for your line.
  */
 
-import { Matrix4, Mesh, Quaternion, Vector3, type Object3D } from 'three';
-import { bendAt, bendPower, BODY_Y, CRANK, REEL_Z, ROD_L, SEAT_Y, type Props, type RodUniforms } from './props.ts';
+import { BufferAttribute, Color, Matrix4, Mesh, Quaternion, Vector3, type Object3D } from 'three';
+import { bendAt, bendPower, BODY_Y, CRANK, REEL_Z, ROD_L, SEAT_Y, type Props, type RodTags, type RodUniforms } from './props.ts';
+import { rodPaint, type GearLevels } from './rodLook.ts';
 
 /** The rod rides this far up from the controller's pointing axis (a relaxed wrist). */
 const ROD_TILT = 0.38;
@@ -64,11 +69,47 @@ export class Rod {
   crankRate = 0;
   lineFill = 1;
 
+  private readonly tags: RodTags | null;
+  /** the colours as baked (Tidewater's), and the ones it wears now */
+  private readonly baked: Uint8Array;
+  private readonly paint: BufferAttribute;
+  private dressed = '';
+
   constructor(props: Props) {
     const { mesh, uniforms } = props.makeRod();
     this.mesh = mesh;
     this.u = uniforms;
     this.mesh.visible = false;
+    this.tags = props.rodTags;
+    // its own colours, so repainting it leaves the shared geometry alone
+    const col = mesh.geometry.getAttribute('color') as BufferAttribute;
+    this.baked = (col.array as Uint8Array).slice();
+    this.paint = new BufferAttribute((col.array as Uint8Array).slice(), 3, true);
+    mesh.geometry = mesh.geometry.clone();
+    mesh.geometry.setAttribute('color', this.paint);
+  }
+
+  /** Paint it for these gear levels (cheap to call every frame: it only repaints on a change). */
+  dress(g: GearLevels): void {
+    const key = `${g.rod}/${g.reel}/${g.line}`;
+    if (key === this.dressed || !this.tags) return;
+    this.dressed = key;
+    const { names, mat, reel } = this.tags;
+    // each material's colour on the rod and on the reel, as the vertex colours hold them (linear)
+    const lut = new Map<number, [number, number, number] | null>();
+    const c = new Color();
+    const out = this.paint.array as Uint8Array;
+    for (let i = 0; i < mat.length; i++) {
+      const k = mat[i] * 2 + reel[i];
+      let rgb = lut.get(k);
+      if (rgb === undefined) {
+        const hex = rodPaint(names[mat[i]], reel[i] === 1, g);
+        rgb = hex ? (c.set(hex), [c.r, c.g, c.b].map((v) => Math.round(Math.min(1, v) * 255)) as [number, number, number]) : null;
+        lut.set(k, rgb);
+      }
+      for (let j = 0; j < 3; j++) out[i * 3 + j] = rgb ? rgb[j] : this.baked[i * 3 + j];
+    }
+    this.paint.needsUpdate = true;
   }
 
   /**

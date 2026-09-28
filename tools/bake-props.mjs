@@ -3,7 +3,9 @@
  *
  *   rod      the 7 ft spinning combo (game/FishingRod.js buildRodGeometry): blank, guides,
  *            grips, reel with rotor / bail / crank / spool. Per vertex: linear colour and the
- *            animated-part tag the reel shader reads (1 rotor, 2 bail, 3 crank, 4 spool, 5 braid).
+ *            animated-part tag the reel shader reads (1 rotor, 2 bail, 3 crank, 4 spool, 5 braid);
+ *            and which of its materials it is, and whether it's the reel's, so the rod in your
+ *            hand can be repainted for the gear you've bought (src/fishing/rodLook.ts).
  *   bobber   the red-and-white float (buildBobberGeometry).
  *   fish     all 18 catchable species (world/fish/FishGeometry.js fishGeometry, total length 1,
  *            snout at +z), counter-shaded into vertex colour from world/fish/FishSpecies.js SKIN
@@ -83,13 +85,86 @@ function putGeoKit(name, g) {
   return { vertices: n, triangles: idx.length / 3 };
 }
 
+/**
+ * FishingRod.js's materials, by the roughness and metalness it gives each (all different), so the
+ * rod in your hand can be repainted for the gear you've bought (src/fishing/rodLook.ts).
+ */
+const ROD_MATS = {
+  blank: [0.42, 0.15],
+  wrap: [0.35, 0],
+  trim: [0.3, 0.4],
+  eva: [0.82, 0],
+  rubber: [0.8, 0],
+  gun: [0.32, 0.85],
+  seat: [0.45, 0.2],
+  knurl: [0.35, 0.9],
+  frame: [0.25, 1],
+  insert: [0.12, 0.3],
+  stainless: [0.16, 1],
+  champ: [0.24, 1],
+  black: [0.4, 0.3],
+  braid: [0.7, 0],
+  line: [0.6, 0],
+};
+
+/**
+ * Per rod vertex: `rod.mat`, its material (an index into the names returned), and `rod.reel`, 1
+ * where it's part of the reel rather than the rod. The gunmetal and the champagne trim are on
+ * both (the seat's hoods and the winding checks; the reel's body and trims), so that goes by the
+ * piece: each piece the builder merged is its own island of triangles, and a piece whose middle
+ * hangs below the seat (z < −2 cm), or that turns with the reel, is the reel's.
+ */
+function rodTags(g) {
+  const names = Object.keys(ROD_MATS);
+  const n = g.attributes.position.count;
+  const P = g.attributes.position.array;
+  const aux = g.attributes.aux.array;
+  const mat = new Uint8Array(n);
+  for (let i = 0; i < n; i++) {
+    const k = names.findIndex((m) => Math.abs(ROD_MATS[m][0] - aux[i * 4]) < 0.005 && Math.abs(ROD_MATS[m][1] - aux[i * 4 + 1]) < 0.005);
+    if (k < 0) throw new Error(`bake-props: a rod material we don't know (rough ${aux[i * 4]}, metal ${aux[i * 4 + 1]})`);
+    mat[i] = k;
+  }
+  // the pieces: union the vertices of every triangle
+  const up = new Int32Array(n).map((_, i) => i);
+  const find = (i) => {
+    while (up[i] !== i) i = up[i] = up[up[i]];
+    return i;
+  };
+  const idx = g.index.array;
+  for (let t = 0; t < idx.length; t += 3) {
+    const a = find(idx[t]);
+    up[find(idx[t + 1])] = a;
+    up[find(idx[t + 2])] = a;
+  }
+  const sumZ = new Float64Array(n);
+  const count = new Uint32Array(n);
+  const turns = new Uint8Array(n);
+  for (let i = 0; i < n; i++) {
+    const r = find(i);
+    sumZ[r] += P[i * 3 + 2];
+    count[r]++;
+    if (aux[i * 4 + 3] > 0) turns[r] = 1;
+  }
+  const reel = new Uint8Array(n);
+  for (let i = 0; i < n; i++) {
+    const r = find(i);
+    reel[i] = turns[r] || sumZ[r] / count[r] < -0.02 ? 1 : 0;
+  }
+  arrays['rod.mat'] = mat;
+  arrays['rod.reel'] = reel;
+  return names;
+}
+
 function toInt8(a) {
   const o = new Int8Array(a.length);
   for (let i = 0; i < a.length; i++) o[i] = Math.round(Math.max(-1, Math.min(1, a[i])) * 127);
   return o;
 }
 
-meta.rod = putGeoKit('rod', rodMod.buildRodGeometry());
+const rodGeo = rodMod.buildRodGeometry();
+meta.rod = putGeoKit('rod', rodGeo);
+meta.rodMats = rodTags(rodGeo);
 meta.bobber = putGeoKit('bobber', rodMod.buildBobberGeometry());
 
 /* ── fish ─────────────────────────────────────────────────────────────── */

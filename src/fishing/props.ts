@@ -76,8 +76,17 @@ export function swim(u: FishUniforms, amp: number, freq: number, dt: number): vo
   u.uPhase.value = (u.uPhase.value + freq * dt) % 1;
 }
 
+/** Per rod vertex, from the bake: its material (an index into `names`) and whether it's the reel's. */
+export interface RodTags {
+  names: string[];
+  mat: Uint8Array;
+  reel: Uint8Array;
+}
+
 export interface Props {
   rodGeometry: BufferGeometry;
+  /** null from a bake that's older than the tags (the rod then keeps Tidewater's colours) */
+  rodTags: RodTags | null;
   bobberGeometry: BufferGeometry;
   makeRod(): { mesh: Mesh; uniforms: RodUniforms };
   makeBobber(): Mesh;
@@ -204,11 +213,14 @@ export function loadProps(buf: ArrayBuffer): Props {
   let env: Texture | null = null;
   const fishMats = new Set<MeshStandardMaterial>();
   const rodGeometry = geometry(arrays, 'rod', { anim: [1, false] });
+  const rodMats = (meta as { rodMats?: string[] }).rodMats;
+  const rodTags: RodTags | null = rodMats && arrays['rod.mat'] && arrays['rod.reel'] ? { names: rodMats, mat: arrays['rod.mat'] as Uint8Array, reel: arrays['rod.reel'] as Uint8Array } : null;
   const bobberGeometry = geometry(arrays, 'bobber');
   const fishGeo = new Map<string, BufferGeometry>();
 
   return {
     rodGeometry,
+    rodTags,
     bobberGeometry,
 
     makeRod() {
