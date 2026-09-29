@@ -30,7 +30,7 @@ import { InteractivePanel, register } from '../ui/pointer.ts';
 import { thumbnail } from '../ui/thumbnail.ts';
 import { Lettering, lookFor, mount, type InkName } from '../ui/boards.ts';
 import { Batch, M, rng, rounded, stalk, turned, type Kit } from './craft.ts';
-import { shopCounter, type Interior } from './interiors.ts';
+import { FORTUNE_TABLE, shopCounter, type Interior } from './interiors.ts';
 import { mergeStatic } from './merge.ts';
 import { ROLES } from './roles.ts';
 import { curtain } from './wares/boutique.ts';
@@ -133,10 +133,12 @@ function fortuneDecor(k: Kit, room: Interior, top: number, cz: number): Group {
   // velvet on the side walls, falling in folds
   const velvet = M.cloth(k.renderer, '#3a1a5a', 'velvet');
   for (const sx of [-1, 1]) b.at(velvet, curtain(room.d - 0.4, room.h - 0.1, 6, 0, -9, 0.06), sx * (room.w / 2 - 0.1), room.h - 0.05, 0, 0, (sx * Math.PI) / 2, 0);
-  // her little round table: a floor-length cloth, the crystal ball on a gold stand
-  b.at(M.cloth(k.renderer, '#5a3a8a', 'velvet'), turned([[0, 0.76], [0.46, 0.76], [0.5, 0.72], [0.52, 0.4], [0.55, 0.02], [0.54, 0], [0.4, 0]], 32), 1.4, 0, 0.6);
-  b.at(M.gold(k.renderer), turned([[0, 0], [0.09, 0], [0.1, 0.02], [0.06, 0.04], [0.07, 0.08], [0.05, 0.09]], 20), 1.4, 0.76, 0.6);
-  b.at(M.glass(k.renderer, '#d8c8ff', 0.35), new SphereGeometry(0.13, 28, 20), 1.4, 0.97, 0.6);
+  // her little round table: a floor-length cloth, the crystal ball on a gold stand (the cloth's
+  // profile runs up from the floor and in over the top, so its faces look out: drawn the other
+  // way round they face in, and from the room the table is see-through)
+  b.at(M.cloth(k.renderer, '#5a3a8a', 'velvet'), turned([[0, 0.002], [0.54, 0.002], [0.55, 0.02], [0.52, 0.4], [0.5, 0.72], [0.46, 0.76], [0, 0.76]], 32), FORTUNE_TABLE[0], 0, FORTUNE_TABLE[1]);
+  b.at(M.gold(k.renderer), turned([[0, 0], [0.09, 0], [0.1, 0.02], [0.06, 0.04], [0.07, 0.08], [0.05, 0.09]], 20), FORTUNE_TABLE[0], 0.76, FORTUNE_TABLE[1]);
+  b.at(M.glass(k.renderer, '#d8c8ff', 0.35), new SphereGeometry(0.13, 28, 20), FORTUNE_TABLE[0], 0.97, FORTUNE_TABLE[1]);
   // tarot cards fanned on the cloth
   const r = rng(4);
   for (let i = 0; i < 5; i++) b.at(M.painted(k.renderer, `tarot${i % 3}`, 64, 112, (c, w, h) => {
@@ -180,7 +182,7 @@ function fortuneDecor(k: Kit, room: Interior, top: number, cz: number): Group {
   const glow = new MeshBasicMaterial({ color: 0xb89aff, transparent: true, opacity: 0.55, toneMapped: false, depthWrite: false });
   const lights = new Batch();
   for (const x of [-1.05, 1.05]) for (const [dx, h] of [[0, 0.2], [0.06, 0.13], [-0.05, 0.1]] as const) lights.at(flame, turned([[0, 0], [0.008, 0.01], [0.006, 0.02], [0, 0.034]], 8), x + dx, top + h + 0.008, cz + (dx ? 0.04 : 0));
-  lights.at(glow, new SphereGeometry(0.07, 20, 14), 1.4, 0.97, 0.6);
+  lights.at(glow, new SphereGeometry(0.07, 20, 14), FORTUNE_TABLE[0], 0.97, FORTUNE_TABLE[1]);
   g.add(lights.group());
   return g;
 }

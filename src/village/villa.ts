@@ -65,16 +65,31 @@ export class Villa {
     side.add(sb.group());
     side.position.set(room.w / 2 - 0.32, 0, 0.2);
     side.rotation.y = -Math.PI / 2;
-    own.add(b.group(), side);
+    own.add(b.group());
     // a kentia palm in each back corner, a size up from the florist's
+    const palms: Group[] = [];
     for (const [x, z] of [[-room.w / 2 + 0.45, -d / 2 + 0.45], [room.w / 2 - 0.45, -d / 2 + 0.45]]) {
       const palm = kentia(kit);
       palm.scale.setScalar(1.45);
       palm.position.set(x, 0, z);
       palm.rotation.y = x;
-      own.add(palm);
+      const at = new Group();
+      at.add(palm);
+      palms.push(at);
     }
+    own.add(palms[0]);
     room.contents.add(mergeStatic(own));
+    // the sideboard stands where the piano goes, and the right-hand palm where the chaise goes:
+    // each steps aside when its gift comes, so the room fills up without crowding
+    const sideboard = mergeStatic(side);
+    const palmR = mergeStatic(palms[1]);
+    room.contents.add(sideboard, palmR);
+    const makeRoom = (): void => {
+      sideboard.visible = !state.home.includes('piano');
+      palmR.visible = !state.home.includes('chaise');
+    };
+    makeRoom();
+    state.onChange(makeRoom);
     const rug = new Mesh(
       new PlaneGeometry(2.6, 1.7).rotateX(-Math.PI / 2),
       rugPaint(512, 336, (g, w, h) => {

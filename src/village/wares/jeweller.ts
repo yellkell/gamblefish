@@ -5,7 +5,7 @@
  */
 
 import { CylinderGeometry, OctahedronGeometry, SphereGeometry, TorusGeometry, Vector3, type BufferGeometry, type Object3D } from 'three';
-import { Batch, M, rounded, stalk, turned, type Kit } from '../craft.ts';
+import { Batch, M, rounded, stalk, tassel, turned, type Kit } from '../craft.ts';
 
 /** a brilliant-cut stone, table up: crown and pavilion, faceted (flat shaded) */
 export function brilliant(r: number, facets = 8): BufferGeometry {
@@ -302,7 +302,7 @@ export function tiara(k: Kit): Object3D {
   b.at(velvet, rounded(0.26, 0.07, 0.26, 0.03, 3), 0, Y + 0.035, 0, 0, Math.PI / 4, 0);
   for (let i = 0; i < 4; i++) {
     const a = (i / 4) * Math.PI * 2;
-    b.at(gold, turned([[0, 0], [0.008, -0.004], [0.012, -0.03], [0, -0.034]], 8), Math.cos(a) * 0.18, Y + 0.035, Math.sin(a) * 0.18);
+    tassel(b, gold, Math.cos(a) * 0.18, Y + 0.035, Math.sin(a) * 0.18, 0.036);
   }
   // the tiara: a band of silver waves rising to a crest, set with pearls and aquamarines
   const silver = M.silver(k.renderer);

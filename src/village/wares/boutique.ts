@@ -4,8 +4,8 @@
  * silk folding screen.
  */
 
-import { BoxGeometry, BufferGeometry, DoubleSide, ExtrudeGeometry, Group, Float32BufferAttribute, Shape, TorusGeometry, Vector3, type Object3D } from 'three';
-import { Batch, M, rng, rounded, stalk, turned, welded, type Kit } from '../craft.ts';
+import { BoxGeometry, BufferGeometry, DoubleSide, ExtrudeGeometry, Group, Float32BufferAttribute, Path, Shape, TorusGeometry, Vector3, type Object3D } from 'three';
+import { Batch, M, rng, rounded, stalk, tassel, turned, welded, type Kit } from '../craft.ts';
 import { turnedLeg } from './builder.ts';
 
 /* ── the chaise longue ──────────────────────────────────────────────── */
@@ -42,7 +42,7 @@ export function chaise(k: Kit): Object3D {
   b.at(gold, new TorusGeometry(0.03, 0.008, 5, 16), -0.36, 0.72, -L / 2 + 0.14, 0, Math.PI / 2, 0);
   // a bolster with gold tassel ends
   b.at(M.cloth(k.renderer, '#f4ead6', 'velvet'), turned([[0, -0.26], [0.07, -0.25], [0.08, -0.22], [0.08, 0.22], [0.07, 0.25], [0, 0.26]], 20), 0.02, 0.53, -L / 2 + 0.22, 0, 0, Math.PI / 2);
-  for (const sx of [-1, 1]) b.at(gold, turned([[0, 0], [0.015, -0.005], [0.02, -0.05], [0, -0.055]], 8), sx * 0.29, 0.52, -L / 2 + 0.22);
+  for (const sx of [-1, 1]) tassel(b, gold, sx * 0.29, 0.52, -L / 2 + 0.22, 0.06);
   // gilt turned feet
   for (const sx of [-1, 1]) for (const sz of [-1, 1]) b.at(gold, turned(turnedLeg(0.22, 0.03), 12), sx * 0.3, 0, sz * (L / 2 - 0.08));
   return b.group();
@@ -85,13 +85,37 @@ export function chevalMirror(k: Kit): Object3D {
 
 /* ── the silk drapes ────────────────────────────────────────────────── */
 
+const CURTAIN_ROWS = 18;
+
+/** How far a curtain panel spreads (its x and z, min and max) `drop` m below its rod, between its rows. */
+function curtainBounds(g: BufferGeometry, drop: number): { x0: number; x1: number; z0: number; z1: number } {
+  const pos = g.getAttribute('position');
+  const cols = pos.count / (CURTAIN_ROWS + 1);
+  const h = -pos.getY(CURTAIN_ROWS * cols);
+  const f = Math.min(CURTAIN_ROWS - 1e-6, (drop / h) * CURTAIN_ROWS);
+  const j = Math.floor(f);
+  const t = f - j;
+  const out = { x0: Infinity, x1: -Infinity, z0: Infinity, z1: -Infinity };
+  for (let i = 0; i < cols; i++) {
+    const a = j * cols + i;
+    const c = a + cols;
+    const x = pos.getX(a) + (pos.getX(c) - pos.getX(a)) * t;
+    const z = pos.getZ(a) + (pos.getZ(c) - pos.getZ(a)) * t;
+    out.x0 = Math.min(out.x0, x);
+    out.x1 = Math.max(out.x1, x);
+    out.z0 = Math.min(out.z0, z);
+    out.z1 = Math.max(out.z1, z);
+  }
+  return out;
+}
+
 /**
  * A curtain panel: `w` wide at the rod, hanging `h`, folded in `folds` soft pleats, gathered in
  * toward `tieX` at the tie-back height `tieY` (then falling out again to the floor).
  */
 export function curtain(w: number, h: number, folds: number, tieX: number, tieY: number, depth: number): BufferGeometry {
   const nu = folds * 6;
-  const nv = 18;
+  const nv = CURTAIN_ROWS;
   const pos: number[] = [];
   const uv: number[] = [];
   const idx: number[] = [];
@@ -138,14 +162,37 @@ export function drapes(k: Kit): Object3D {
   // the rod, its rings and its finials
   b.at(gold, turned([[0.02, -0.72], [0.02, 0.72]], 12), 0, top, 0.05, 0, 0, Math.PI / 2);
   for (const s of [-1, 1]) b.at(gold, turned([[0, 0], [0.03, 0.01], [0.04, 0.04], [0.02, 0.07], [0.03, 0.09], [0, 0.12]], 14), s * 0.72, top, 0.05, 0, 0, (-s * Math.PI) / 2);
-  // two panels, each caught back toward its own side
+  // two panels, each caught back toward its own side by a tie-back a third of the way up: a gold
+  // cord round the gathered silk and back to a rosette on the wall, a tassel hanging off it
+  const TIE = 1.1;
+  const drop = top - 0.02 - TIE;
   for (const s of [-1, 1]) {
-    const g = curtain(0.72, top - 0.02, 5, s * 0.22, 1.15, 0.035);
-    b.at(silk, g, s * 0.34, top - 0.02, 0.05);
+    const px = s * 0.34;
+    const pz = 0.05;
+    const g = curtain(0.72, top - 0.02, 5, s * 0.22, drop, 0.035);
+    b.at(silk, g, px, top - 0.02, pz);
     for (let i = 0; i < 8; i++) b.at(gold, new TorusGeometry(0.028, 0.005, 5, 12), s * (0.04 + i * 0.085), top, 0.05);
-    // the tie-back: a gold cord looped round, a tassel hanging
-    b.at(gold, new TorusGeometry(0.07, 0.01, 6, 20).scale(1, 0.5, 1), s * (0.34 + 0.2) - s * 0.08, 1.15, 0.12, Math.PI / 2 - 0.2, 0, 0);
-    b.at(gold, turned([[0, 0], [0.018, -0.01], [0.028, -0.1], [0, -0.11]], 10), s * 0.47, 1.1, 0.16);
+    // the silk where it's tied (a little clear of it, so the cord sits on it, not in it)
+    const t = curtainBounds(g, drop);
+    const cx = px + (t.x0 + t.x1) / 2;
+    const cz = pz + (t.z0 + t.z1) / 2;
+    const rx = (t.x1 - t.x0) / 2 + 0.028;
+    const rz = (t.z1 - t.z0) / 2 + 0.028;
+    // the rosette on the wall (its spot in the villa stands the drapes 8 cm out from it), beyond the gathered edge
+    const wall = -0.08;
+    const hx = cx + s * (rx + 0.08);
+    b.at(gold, turned([[0, 0], [0.03, 0], [0.034, 0.008], [0.022, 0.018], [0.012, 0.02], [0, 0.024]], 16), hx, TIE, wall, Math.PI / 2, 0, 0);
+    // the cord: from the rosette once round the silk (outer side, front, inner side, behind) and back
+    const loop: Vector3[] = [new Vector3(hx, TIE + 0.006, wall + 0.012)];
+    for (let i = 0; i <= 20; i++) {
+      const a = 0.35 + (i / 20) * (Math.PI * 2 - 0.7);
+      loop.push(new Vector3(cx + s * rx * Math.cos(a), TIE - 0.006 * Math.max(0, Math.sin(a)), cz + rz * Math.sin(a)));
+    }
+    loop.push(new Vector3(hx, TIE - 0.006, wall + 0.012));
+    b.add(gold, stalk(loop, 0.01, 0.01, 6, 64));
+    // the tassel, on a short drop of cord from the rosette
+    b.add(gold, stalk([new Vector3(hx, TIE - 0.01, wall + 0.028), new Vector3(hx, TIE - 0.05, wall + 0.034)], 0.004, 0.004, 5, 2));
+    tassel(b, gold, hx, TIE - 0.045, wall + 0.034, 0.17);
   }
   // a swagged pelmet across the top
   const pel = curtain(1.5, 0.28, 3, 0, 0.28, 0.03);
@@ -154,6 +201,10 @@ export function drapes(k: Kit): Object3D {
 }
 
 /* ── the baby grand ─────────────────────────────────────────────────── */
+
+/** the lid's front edge, back from the keyboard (m), clear of the music desk; and how far it's propped open (rad) */
+const LID_FRONT = 0.2;
+const LID_UP = 0.5;
 
 export function piano(k: Kit): Object3D {
   const b = new Batch();
@@ -170,10 +221,6 @@ export function piano(k: Kit): Object3D {
   outline.bezierCurveTo(-0.08, -1.3, -0.2, -D, -W / 2 + 0.3, -D);
   outline.quadraticCurveTo(-W / 2, -D, -W / 2, -D + 0.25);
   outline.lineTo(-W / 2, 0);
-  const caseG = welded(new ExtrudeGeometry(outline, { depth: 0.28, bevelEnabled: true, bevelThickness: 0.012, bevelSize: 0.012, bevelSegments: 2, curveSegments: 24 }));
-  // extruded along +z: lay it down so it stands 0.28 tall (its plan in x, z)
-  caseG.rotateX(Math.PI / 2);
-  b.at(black, caseG, 0, 0.98, 0);
   // inside: the gold iron frame and the strings, seen under the open lid
   const inner = new Shape();
   inner.moveTo(-W / 2 + 0.06, -0.12);
@@ -183,25 +230,58 @@ export function piano(k: Kit): Object3D {
   inner.bezierCurveTo(-0.12, -1.26, -0.22, -D + 0.06, -W / 2 + 0.32, -D + 0.06);
   inner.quadraticCurveTo(-W / 2 + 0.06, -D + 0.06, -W / 2 + 0.06, -D + 0.3);
   inner.lineTo(-W / 2 + 0.06, -0.12);
+  // the case is a rim round that (not a solid block: the frame and strings sit down inside it),
+  // closed underneath by a bottom board
+  const rim = new Shape(outline.getPoints(24));
+  rim.holes.push(new Path(inner.getPoints(24)));
+  const caseG = welded(new ExtrudeGeometry(rim, { depth: 0.28, bevelEnabled: true, bevelThickness: 0.012, bevelSize: 0.012, bevelSegments: 2, curveSegments: 24 }));
+  // extruded along +z: lay it down so it stands 0.28 tall (its plan in x, z)
+  caseG.rotateX(Math.PI / 2);
+  b.at(black, caseG, 0, 0.98, 0);
+  const bottom = welded(new ExtrudeGeometry(outline, { depth: 0.02, bevelEnabled: false, curveSegments: 24 }));
+  bottom.rotateX(Math.PI / 2);
+  b.at(black, bottom, 0, 0.72, 0);
   const plate = welded(new ExtrudeGeometry(inner, { depth: 0.01, bevelEnabled: false, curveSegments: 24 }));
   plate.rotateX(Math.PI / 2);
-  b.at(M.metal(k.renderer, '#b8903a', 0.4), plate, 0, 0.95, 0);
+  b.at(M.metal(k.renderer, '#b8903a', 0.4), plate, 0, 0.9, 0);
+  // the strings run back from the pins to the frame's far edge, each one stopping short of it
+  const edge = inner.getPoints(48);
+  const farEdge = (x: number): number => {
+    let far = 0;
+    for (let i = 0; i < edge.length - 1; i++) {
+      const a = edge[i];
+      const c = edge[i + 1];
+      if ((a.x - x) * (c.x - x) > 0 || a.x === c.x) continue;
+      far = Math.min(far, a.y + ((x - a.x) / (c.x - a.x)) * (c.y - a.y));
+    }
+    return far;
+  };
   const strings = M.metal(k.renderer, '#d8d8d0', 0.3);
   for (let i = 0; i < 30; i++) {
     const x = -W / 2 + 0.1 + i * 0.042;
-    const len = x < 0 ? 1.25 - (x + W / 2) * 0.1 : 1.1 - (x - 0) * 1.3;
-    b.at(strings, new BoxGeometry(0.003, 0.003, Math.max(0.2, len)), x, 0.955, -0.14 - Math.max(0.2, len) / 2);
+    const len = Math.max(0.12, -farEdge(x) - 0.14 - 0.04);
+    b.at(strings, new BoxGeometry(0.003, 0.003, len), x, 0.905, -0.14 - len / 2);
   }
-  // the lid, propped open on its stick
-  const lidG = welded(new ExtrudeGeometry(outline, { depth: 0.02, bevelEnabled: false, curveSegments: 24 }));
+  // the lid, propped open on its stick: its front flap folded back, so it starts behind the music desk
+  const lidShape = new Shape();
+  lidShape.moveTo(-W / 2, -LID_FRONT);
+  lidShape.lineTo(W / 2, -LID_FRONT);
+  lidShape.lineTo(W / 2, -0.35);
+  lidShape.bezierCurveTo(W / 2, -0.75, 0.05, -0.7, 0.0, -1.0);
+  lidShape.bezierCurveTo(-0.08, -1.3, -0.2, -D, -W / 2 + 0.3, -D);
+  lidShape.quadraticCurveTo(-W / 2, -D, -W / 2, -D + 0.25);
+  lidShape.lineTo(-W / 2, -LID_FRONT);
+  const lidG = welded(new ExtrudeGeometry(lidShape, { depth: 0.02, bevelEnabled: false, curveSegments: 24 }));
   lidG.rotateX(Math.PI / 2);
   // hinge along the bass side (x = −W/2): lift the treble side up
   lidG.translate(W / 2, 0, 0);
-  lidG.rotateZ(0.5);
+  lidG.rotateZ(LID_UP);
   lidG.translate(-W / 2, 0, 0);
   b.at(black, lidG, 0, 1.0, 0);
-  // (the lid meets the stick 1.21 m out from its hinge: 1.0 + 1.21 sin 0.5 up)
-  b.add(black, stalk([new Vector3(0.35, 0.99, -0.5), new Vector3(0.35, 1.57, -0.5)], 0.01, 0.01, 6, 2));
+  // the stick stands on the rim and meets the lid's underside
+  const stickX = 0.35;
+  const stickTop = 1.0 + (stickX + W / 2) * Math.tan(LID_UP) - 0.02 / Math.cos(LID_UP);
+  b.add(black, stalk([new Vector3(stickX, 0.98, -0.5), new Vector3(stickX, stickTop, -0.5)], 0.01, 0.01, 6, 2));
   // the keyboard: a key bed, white keys, black keys in their twos and threes, cheeks either side
   b.at(black, rounded(W, 0.07, 0.3, 0.01), 0, 0.73, 0.14);
   const ivory = M.gloss(k.renderer, '#f6f2e8');
@@ -240,8 +320,9 @@ export function piano(k: Kit): Object3D {
     }
   }), rounded(0.38, 0.2, 0.002, 0.0005, 1), 0, 1.14, -0.035, -0.28, 0, 0);
   // three legs with brass casters, and the pedal lyre
-  for (const [x, z] of [[-W / 2 + 0.1, 0.1], [W / 2 - 0.1, 0.1], [-0.35, -D + 0.18]] as const) {
-    b.at(black, turned([[0.05, 0.06], [0.045, 0.1], [0.04, 0.3], [0.05, 0.55], [0.07, 0.68], [0.07, 0.72], [0, 0.72]], 16), x, 0.12, z);
+  // (the front two under the case, behind the key bed: a leg up in front of it came through the keys)
+  for (const [x, z] of [[-W / 2 + 0.12, -0.1], [W / 2 - 0.12, -0.1], [-0.35, -D + 0.18]] as const) {
+    b.at(black, turned([[0, 0], [0.05, 0], [0.045, 0.04], [0.04, 0.24], [0.05, 0.46], [0.07, 0.56], [0.07, 0.6], [0, 0.6]], 16), x, 0.12, z);
     b.at(brass, turned([[0, 0], [0.04, 0.02], [0.04, 0.06], [0.05, 0.1], [0.05, 0.12], [0, 0.12]], 14), x, 0, z);
   }
   for (const sx of [-1, 1]) b.add(black, stalk([new Vector3(sx * 0.05, 0.72, 0.02), new Vector3(sx * 0.1, 0.4, 0.02), new Vector3(sx * 0.06, 0.1, 0.02)], 0.015, 0.012, 8, 10));

@@ -345,23 +345,33 @@ export class FishingSystem extends createSystem({}) {
       this.equip('right');
     }
 
-    // rod button: out into this hand, away, or across to the other hand
+    // rod button: out into this hand, away, or across to the other hand (either way it's yours to
+    // say now: nothing brings it back out on its own)
     for (const h of ['left', 'right'] as const) {
       if (!this.rodButton(h) || backpackView.open) continue;
       if (this.state === 'landing') this.endLanding();
       else if (this.state === 'fighting') continue;
       else if (this.state === 'stowed') this.equip(h);
-      else if (h === this.hand) this.stow();
-      else this.equip(h);
+      else if (h === this.hand) {
+        this.stow();
+        this.toast.show(`Rod away · ${h === 'right' ? 'B' : 'Y'} or trigger for it back`, 2.2, INK.amber, true);
+      } else this.equip(h);
+      this.autoStowed = false;
+      this.keptOut = this.state !== 'stowed' && (deps.indoors?.() ?? false);
     }
 
-    // through a door the rod goes over your shoulder; back outside it's in your hand again
+    // through a door (or with the axe or the pick out) the rod goes over your shoulder, and back
+    // outside it's in your hand again. Held as a state, not caught on the way in: a rod still out
+    // when a landing ends indoors goes away then, and it always comes back once you're out.
     const inside = deps.indoors?.() ?? false;
-    if (inside && !this.wasInside && this.state !== 'landing' && this.state !== 'fighting') {
-      this.rodWasOut = this.state !== 'stowed';
-      if (this.rodWasOut) this.stow();
-    } else if (!inside && this.wasInside && this.rodWasOut && this.state === 'stowed') this.equip(this.hand);
-    this.wasInside = inside;
+    if (!inside) this.keptOut = false;
+    if (inside && !this.keptOut && this.state !== 'stowed' && this.state !== 'landing' && this.state !== 'fighting') {
+      this.stow();
+      this.autoStowed = true;
+    } else if (!inside && this.state === 'stowed' && this.autoStowed) {
+      this.autoStowed = false;
+      this.equip(this.hand);
+    }
 
     // a teleport with the line out brings it in
     const moved = this.player.position.distanceTo(this.lastRig);
@@ -382,6 +392,10 @@ export class FishingSystem extends createSystem({}) {
     const reelIn = Math.max(held > FISHING.triggerOff ? held : 0, Math.min(1.3, this.handCrankRate / FISHING.crankFull));
 
     switch (this.state) {
+      case 'stowed':
+        // outside with an empty rod hand, the trigger brings the rod back out
+        if (down && !inside && backpackView.hand !== this.hand) this.equip(this.hand);
+        break;
       case 'idle':
         if (down) {
           this.setState('windup');
@@ -455,8 +469,10 @@ export class FishingSystem extends createSystem({}) {
     shot('bail_click', MIX.bail, { rate: 0.95 });
   }
 
-  private wasInside = false;
-  private rodWasOut = false;
+  /** the rod went over your shoulder by itself (indoors), not by the rod button: it comes back out by itself */
+  private autoStowed = false;
+  /** you took it out indoors with the rod button: it stays out till you're outside again */
+  private keptOut = false;
 
   private stow(): void {
     this.reelInNow();
