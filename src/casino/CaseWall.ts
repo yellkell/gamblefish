@@ -6,7 +6,8 @@
  *             strip of cards, one per prize, each wearing its grade's colour along the bottom.
  *             Under it the case's board: everything in the case, in grade colours, the odds of
  *             each grade, and OPEN ($50). Point and pull the trigger. The gems are only in the
- *             case once the Jeweller's pickaxe is yours: till then it's logs and fish.
+ *             case once the Jeweller's pickaxe is yours: till then it's logs and fish (and the
+ *             board shows just those).
  *  THE SPIN   The prize is drawn first (casino/cases.ts, crypto RNG); the strip is dressed round
  *             it and races past the marker, ticking card by card, slowing and slowing, and comes
  *             to rest with the marker somewhere on your card.
@@ -518,14 +519,6 @@ export class CaseWall {
       c.fillRect(x, y + 108, 96, 10);
       c.restore();
     });
-    if (!this.gems) {
-      // after the last tile: what's to come
-      const i = inCase.length;
-      const x = 56 + (i % 9) * 104 + 12;
-      const y = 108 + Math.floor(i / 9) * 128;
-      L.text('+ gems, once the', x, y + 48, 22, 'dim', 'left', 600, 900 - x);
-      L.text('Jeweller’s pickaxe is yours', x, y + 78, 22, 'dim', 'left', 600, 900 - x);
-    }
     // the odds of each grade
     const ox = 1020;
     L.text('THE ODDS', ox, 128, 24, 'dim', 'left', 700);

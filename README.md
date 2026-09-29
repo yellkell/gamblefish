@@ -290,7 +290,7 @@ and the vendors.
     ★ Rare Special (a blue marlin). The board shows everything in the case and each grade's
     odds. One fish in ten comes out Silver.
   - **Gems only with the pickaxe:** until the Jeweller's pickaxe is yours the case holds just
-    logs and fish, and the board says the gems are to come. It returns about 94.5% without
+    logs and fish, and the board shows only those. It returns about 94.5% without
     the gems and 92.3% with them.
   - **The reveal:** your card comes out of the strip in its grade's light, with rays from
     Restricted up. Mil-Spec and up get a party in the grade's colour; Classified, Covert and
