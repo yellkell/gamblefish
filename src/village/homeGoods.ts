@@ -110,18 +110,22 @@ export const GOODS: HomeItem[] = [
   { id: 'helmet', shop: 'J', name: 'Brass diving helmet', blurb: 'on the salvage crate it came up in', price: 350, at: [1.5, 0, -1.62, -0.5], solid: [0.24, 0.24, 0.85], build: divingHelmet },
 
   // ── the jeweller: sparkle for Coral's villa ──
+  // (Villa Mar's spots: the sofa and the mirror on the back wall, the chaise beside them, the
+  // vanity, the pearls and the drapes down the left wall, the piano down the right with its tail
+  // to the wall, the screen across the front right corner, the tiara and the ring either side of
+  // the door. The sideboard and a palm of hers step aside for the piano and the chaise: villa.ts)
   { id: 'chandelier', shop: 'A', name: 'Crystal chandelier', blurb: 'for the hall of Villa Mar', price: 1500, at: [0, 3.35, -0.5, 0], hangs: true, build: chandelier },
-  { id: 'vanity', shop: 'A', name: 'Vanity & jewellery box', blurb: 'mother-of-pearl, lined in velvet', price: 650, at: [-3.18, 0, -1.3, Math.PI / 2], solid: [0.6, 0.28, 0.78], build: vanity },
-  { id: 'pearls', shop: 'A', name: 'Pearls on a velvet bust', blurb: 'three strands, from the deep reef', price: 900, at: [-3.05, 0, 0.6, Math.PI / 2], solid: [0.22, 0.22, 1.45], build: pearlBust },
-  { id: 'ring', shop: 'A', name: 'Diamond ring under glass', blurb: 'for when you’re ready to ask', price: 2500, at: [3.05, 0, 1.75, -Math.PI / 2], solid: [0.2, 0.2, 1.3], build: ringCloche },
-  { id: 'tiara', shop: 'A', name: 'Mermaid’s tiara', blurb: 'silver waves and aquamarines', price: 1200, at: [-2.35, 0, 1.55, 0.5], solid: [0.26, 0.26, 0.9], build: tiara },
+  { id: 'vanity', shop: 'A', name: 'Vanity & jewellery box', blurb: 'mother-of-pearl, lined in velvet', price: 650, at: [-3.18, 0, -1.15, Math.PI / 2], solid: [0.6, 0.28, 0.78], build: vanity },
+  { id: 'pearls', shop: 'A', name: 'Pearls on a velvet bust', blurb: 'three strands, from the deep reef', price: 900, at: [-3.1, 0, 0.3, Math.PI / 2], solid: [0.22, 0.22, 1.45], build: pearlBust },
+  { id: 'ring', shop: 'A', name: 'Diamond ring under glass', blurb: 'for when you’re ready to ask', price: 2500, at: [1.4, 0, 2.2, Math.PI], solid: [0.2, 0.2, 1.3], build: ringCloche },
+  { id: 'tiara', shop: 'A', name: 'Mermaid’s tiara', blurb: 'silver waves and aquamarines', price: 1200, at: [-1.4, 0, 2.2, 0.5], solid: [0.26, 0.26, 0.9], build: tiara },
 
   // ── the boutique: the finer things for Coral's villa ──
-  { id: 'chaise', shop: 'E', name: 'Velvet chaise longue', blurb: 'for long afternoons by the window', price: 700, at: [2.05, 0, -2.2, -Math.PI / 2], solid: [0.4, 0.9, 0.7], build: chaise },
+  { id: 'chaise', shop: 'E', name: 'Velvet chaise longue', blurb: 'for long afternoons by the window', price: 700, at: [2.3, 0, -2.2, -Math.PI / 2], solid: [0.4, 0.9, 0.7], build: chaise },
   { id: 'mirror', shop: 'E', name: 'Gilded cheval mirror', blurb: 'she says it flatters the light', price: 450, at: [-1.95, 0, -2.35, 0], solid: [0.55, 0.25, 2.0], build: chevalMirror },
   { id: 'drapes', shop: 'E', name: 'Silk drapes', blurb: 'rose silk, floor to ceiling', price: 380, at: [-3.45, 0, 1.75, Math.PI / 2], build: drapes },
-  { id: 'piano', shop: 'E', name: 'Baby grand piano', blurb: 'she plays. of course she plays', price: 2000, at: [1.3, 0, 0.25, -0.35], solid: [0.75, 1.15, 1.0], build: piano },
-  { id: 'screen', shop: 'E', name: 'Painted silk screen', blurb: 'birds of paradise in blossom', price: 550, at: [2.45, 0, 2.3, Math.PI], solid: [0.7, 0.2, 1.8], build: screen },
+  { id: 'piano', shop: 'E', name: 'Baby grand piano', blurb: 'she plays. of course she plays', price: 2000, at: [2.35, 0, 0.35, -Math.PI / 2], solid: [0.75, 1.15, 1.0], build: piano },
+  { id: 'screen', shop: 'E', name: 'Painted silk screen', blurb: 'birds of paradise in blossom', price: 550, at: [2.85, 0, 1.95, (-3 * Math.PI) / 4], solid: [0.7, 0.2, 1.8], build: screen },
 ];
 
 /* ── the shack ─────────────────────────────────────────────────────────── */

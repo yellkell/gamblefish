@@ -19,6 +19,7 @@
  */
 
 import {
+  BoxGeometry,
   BufferGeometry,
   CanvasTexture,
   CatmullRomCurve3,
@@ -617,6 +618,23 @@ export class Batch {
       out.add(new Mesh(g, mat));
     }
     return out;
+  }
+}
+
+/**
+ * A tassel hanging from (x, top, z), `len` long: a knot, a waisted head and a collar, then a
+ * skirt of threads round a core, the threads' ends hanging a little below it. (Its profile runs
+ * up from the bottom, so the lathe's faces look out: drawn top-down they face in, and the tassel
+ * is a hollow cone you see the inside of.)
+ */
+export function tassel(b: Batch, mat: Material, x: number, top: number, z: number, len = 0.15): void {
+  const k = len / 0.15;
+  const y0 = top - len;
+  b.at(mat, turned([[0, 0.008], [0.022, 0.008], [0.026, 0.018], [0.023, 0.085], [0.016, 0.094], [0.021, 0.099], [0.021, 0.109], [0.012, 0.114], [0.019, 0.127], [0.017, 0.139], [0.007, 0.148], [0, 0.15]], 14), x, y0, z, 0, 0, 0, k);
+  const threads = 14;
+  for (let i = 0; i < threads; i++) {
+    const a = (i / threads) * Math.PI * 2;
+    b.at(mat, new BoxGeometry(0.0035, 0.086, 0.0035), x + Math.cos(a) * 0.0235 * k, y0 + 0.043 * k, z + Math.sin(a) * 0.0235 * k, 0, -a, 0, k);
   }
 }
 
