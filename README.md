@@ -113,8 +113,8 @@ and the vendors.
   under the pier. Indoors it's all muffled.
 - **Music:** `src/audio/music.ts` plays songs off ff2's jukebox. Outside, the
   rotation plays: Paradise, Poo Song, VOne, Experimental Song, New Song 35, Mist,
-  By the River, Like That (`src/audio/songs/`, in filename order). Inside the
-  casinos it's Give It To Me then Imagine, round and round (`src/audio/casino/`),
+  By the River, Like That, Imagine, Novus (`src/audio/songs/`, in filename order).
+  Inside the casinos it's Fusion then Give It To Me, round and round (`src/audio/casino/`),
   spilling muffled out of their doors as you walk up.
   The backpack's **MUSIC** button mutes it all.
 - **The day:** `src/world/sky.ts` runs a whole day in about 40 minutes, with the
