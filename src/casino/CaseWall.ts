@@ -134,6 +134,8 @@ export class CaseWall {
   private p = 3 * PITCH; // how far along the strip the marker is (m)
   private p0 = 0;
   private p1 = 0;
+  /** where the strip was when its cards were last laid out (it only moves while it spins) */
+  private laidP = NaN;
   private lastCard = 0;
   private lastTick = 0;
   private status = 'Open a case: $' + CASE_PRICE;
@@ -490,6 +492,8 @@ export class CaseWall {
 
   /** Each card where the strip has it, trimmed to the window: its quad and its picture both cut at the glass's ends. */
   private layout(): void {
+    if (this.p === this.laidP) return;
+    this.laidP = this.p;
     const half = WIN_W / 2;
     this.cards.forEach((c, k) => {
       const x = k * PITCH - this.p;

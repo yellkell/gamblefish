@@ -127,8 +127,9 @@ and the vendors.
   puffs on a flat base, lit by the sky's own sun and moon: white tops and grey-blue bellies
   by day, a silver edge as one crosses the sun, gold then pink through the sunset, and dim
   moonlit shapes against the stars. The far ones fade into the horizon haze.
-  - **Cost:** one draw for the whole sky, about a thousand sprites, sorted back to front a
-    few times a second.
+  - **Cost:** one draw for the whole sky, about 1200 sprites, sorted back to front a few
+    times a second. Only the 800 to 1000 that can reach inside the fade-out are drawn, and
+    each puff's haze, silver lining and sun angle are worked out per corner, not per pixel.
 - **Hawks:** `src/world/hawks.ts`. Every few minutes a red-tailed hawk comes in over the
   island, finds a thermal near you and circles up it, banked into the turn. Its wings are
   fingered at the tips and held in a shallow V. It gives a few deep beats now and then,
