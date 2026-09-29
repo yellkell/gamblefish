@@ -531,7 +531,6 @@ export class CaseWall {
       L.text(g.name, ox + 34, y, 22, 'ink', 'left', 600, 210);
       L.text(`${(g.odds / 100).toFixed(g.odds < 100 ? 2 : 1)}%`, rx, y, 22, 'ink', 'right', 700);
     });
-    L.text('one fish in ten comes out Silver', ox, 408, 17, 'dim', 'left', 500, rx - ox);
     const busy = this.phase === 'spinning' || this.phase === 'landed';
     L.button('open', busy ? 'OPENING…' : `OPEN · $${CASE_PRICE}`, ox, 424, rx - ox, 80, busy ? 'off' : this.state.money >= CASE_PRICE ? 'go' : 'off', 36);
     L.end();
