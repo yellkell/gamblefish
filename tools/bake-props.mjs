@@ -112,7 +112,12 @@ const ROD_MATS = {
  * where it's part of the reel rather than the rod. The gunmetal and the champagne trim are on
  * both (the seat's hoods and the winding checks; the reel's body and trims), so that goes by the
  * piece: each piece the builder merged is its own island of triangles, and a piece whose middle
- * hangs below the seat (z < −2 cm), or that turns with the reel, is the reel's.
+ * hangs below the seat (z < −2 cm), or that turns with the reel, is the reel's. So is the reel's
+ * foot, the one piece lying along the seat's underside (below its barrel, z < −1.1 cm, and
+ * behind the fore grip): a conventional reel on top of the rod takes its place.
+ *
+ * And `rod.fit`, how each piece fits a conventional reel (src/fishing/props.ts): 1 it comes off
+ * with the spinning reel, 2 it turns to the top with the guides.
  */
 function rodTags(g) {
   const names = Object.keys(ROD_MATS);
@@ -137,22 +142,37 @@ function rodTags(g) {
     up[find(idx[t + 1])] = a;
     up[find(idx[t + 2])] = a;
   }
+  const sumY = new Float64Array(n);
   const sumZ = new Float64Array(n);
+  const lowY = new Float64Array(n).fill(Infinity);
   const count = new Uint32Array(n);
   const turns = new Uint8Array(n);
   for (let i = 0; i < n; i++) {
     const r = find(i);
+    sumY[r] += P[i * 3 + 1];
     sumZ[r] += P[i * 3 + 2];
+    lowY[r] = Math.min(lowY[r], P[i * 3 + 1]);
     count[r]++;
     if (aux[i * 4 + 3] > 0) turns[r] = 1;
   }
   const reel = new Uint8Array(n);
+  const fit = new Uint8Array(n);
   for (let i = 0; i < n; i++) {
     const r = find(i);
-    reel[i] = turns[r] || sumZ[r] / count[r] < -0.02 ? 1 : 0;
+    const y = sumY[r] / count[r];
+    const z = sumZ[r] / count[r];
+    reel[i] = turns[r] || z < -0.02 || (z < -0.011 && y < 0.45) ? 1 : 0;
+    // the reel itself comes off for a conventional reel, and the line from its spool (the big
+    // guides hang low enough to count as the reel's above, for their paint, but they're out
+    // along the blank); on the blank, what
+    // stands off its underside (the guides, the line through them, the hook keeper, the tip-top's
+    // ring) turns to the top with it; what's round the blank (the blank, the wraps) is the same
+    // either way up
+    fit[i] = reel[i] && lowY[r] < 0.45 ? 1 : y > 0.54 && z < -0.003 ? 2 : 0;
   }
   arrays['rod.mat'] = mat;
   arrays['rod.reel'] = reel;
+  arrays['rod.fit'] = fit;
   return names;
 }
 

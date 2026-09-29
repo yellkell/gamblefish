@@ -644,7 +644,7 @@ export class FishingSystem extends createSystem({}) {
     const dOut = f.distance - this.lastDist;
     this.lastDist = f.distance;
     if (!this.cranking && dOut < 0) this.rod.turnCrank(-dOut / LINE_PER_CRANK, dt);
-    if (dOut > 0) this.rod.spoolAng -= Math.min(dOut, 0.5) / 0.023;
+    this.rod.payOut(Math.min(dOut, 0.5), dt);
     const rateT = dOut < 0 ? Math.min(1.6, -dOut / dt / LINE_PER_CRANK) : 0;
     this.rod.crankRate += (Math.max(rateT, this.cranking ? this.handCrankRate : 0) - this.rod.crankRate) * (1 - Math.exp(-dt * 10));
     this.dragSpeed = dOut > 0 ? dOut / dt : 0;
@@ -1205,6 +1205,9 @@ export class FishingSystem extends createSystem({}) {
     const bailOpen = this.state === 'windup' || this.state === 'flying';
     this.rod.lineFill = 1 - Math.min(1, this.lineOut / 220) * 0.5;
     this.rod.update(dt, time, this.grip(this.hand), this.player.raySpaces[this.hand], { bendT, loadT, towards, bailOpen });
+    // the cast running line off the spool
+    if (this.state === 'flying') this.rod.payOut(this.lineOut - this.castOut, dt, true);
+    this.castOut = this.lineOut;
     if (this.state !== 'fighting') {
       const rateT = this.state === 'retrieving' ? Math.min(1.6, this.retrieveSpeed / LINE_PER_CRANK) : 0;
       if (!this.cranking && rateT > 0) this.rod.turnCrank(rateT * dt, dt);
@@ -1212,6 +1215,8 @@ export class FishingSystem extends createSystem({}) {
     }
   }
   private retrieveSpeed = 0;
+  /** the line out at the last frame, for what the cast has run off since */
+  private castOut = 0;
 
   /** The bobber is sitting ON the sea (not on a deck or the sand above it). */
   private onWater(): boolean {
