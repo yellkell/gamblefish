@@ -490,9 +490,10 @@ export class CaseWall {
   private paintBoard(): void {
     const L = this.letters;
     const c = L.begin();
-    L.title('THE LURE CASE', 60, 72, 46, 'left', 420);
-    L.text(this.status, 500, 66, 25, this.statusInk, 'left', 600, 700);
-    L.text(`$${this.state.money}`, 1344, 66, 28, 'accent', 'right', 700);
+    // (everything kept in from the gold-leaf fans in the corners)
+    L.title('THE LURE CASE', 80, 74, 46, 'left', 400);
+    L.text(this.status, 500, 66, 25, this.statusInk, 'left', 600, 680);
+    L.text(`$${this.state.money}`, 1316, 66, 28, 'accent', 'right', 700);
     // what's in it, commonest first, each tile in its grade's colour
     const inCase = contents(this.gems);
     inCase.forEach((item, i) => {
@@ -520,18 +521,19 @@ export class CaseWall {
       c.restore();
     });
     // the odds of each grade
-    const ox = 1020;
-    L.text('THE ODDS', ox, 128, 24, 'dim', 'left', 700);
+    const ox = 1006;
+    const rx = 1316;
+    L.text('THE ODDS', ox, 124, 24, 'dim', 'left', 700);
     GRADES.forEach((g, i) => {
-      const y = 168 + i * 36;
+      const y = 160 + i * 34;
       c.fillStyle = g.colour;
       c.fillRect(ox, y - 18, 22, 22);
-      L.text(g.name, ox + 34, y, 22, 'ink', 'left', 600, 220);
-      L.text(`${(g.odds / 100).toFixed(g.odds < 100 ? 2 : 1)}%`, 1344, y, 22, 'ink', 'right', 700);
+      L.text(g.name, ox + 34, y, 22, 'ink', 'left', 600, 210);
+      L.text(`${(g.odds / 100).toFixed(g.odds < 100 ? 2 : 1)}%`, rx, y, 22, 'ink', 'right', 700);
     });
-    L.text('one fish in ten comes out Silver', ox, 432, 17, 'dim', 'left', 500, 330);
+    L.text('one fish in ten comes out Silver', ox, 408, 17, 'dim', 'left', 500, rx - ox);
     const busy = this.phase === 'spinning' || this.phase === 'landed';
-    L.button('open', busy ? 'OPENING…' : `OPEN · $${CASE_PRICE}`, ox, 450, 328, 88, busy ? 'off' : this.state.money >= CASE_PRICE ? 'go' : 'off', 38);
+    L.button('open', busy ? 'OPENING…' : `OPEN · $${CASE_PRICE}`, ox, 424, rx - ox, 80, busy ? 'off' : this.state.money >= CASE_PRICE ? 'go' : 'off', 36);
     L.end();
   }
 }

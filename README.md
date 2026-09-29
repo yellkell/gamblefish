@@ -286,12 +286,12 @@ and the vendors.
     marker, ticking card by card, and slows to a crawl onto your prize. The prize is drawn
     first (crypto RNG) and the strip is dressed round it, so the spin only shows it.
   - **Grades** in CS's names and colours: Consumer (logs and small fish), Industrial,
-    Mil-Spec (the first gems), Restricted, Classified, Covert (an opah, a ruby) and the
-    ★ Rare Special (a blue marlin). The board shows everything in the case and each grade's
+    Mil-Spec (peridot, amethyst), Restricted, Classified, Covert (an opah, an emerald, a
+    black opal) and the ★ Rare Special (a blue marlin, a ruby). The board shows everything in the case and each grade's
     odds. One fish in ten comes out Silver.
   - **Gems only with the pickaxe:** until the Jeweller's pickaxe is yours the case holds just
-    logs and fish, and the board shows only those. It returns about 94.5% without
-    the gems and 92.3% with them.
+    logs and fish, and the board shows only those. It returns about 94% without
+    the gems and 81% with them.
   - **The reveal:** your card comes out of the strip in its grade's light, with rays from
     Restricted up. Mil-Spec and up get a party in the grade's colour; Classified, Covert and
     the ★ Rare Special get a banner.

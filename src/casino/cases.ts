@@ -6,7 +6,7 @@
  * Every prize is an item in one of seven grades, named and coloured the way a CS case does it.
  * The gems are only in the case once the Jeweller's pickaxe is yours (the pouch comes with it);
  * before that each grade holds just its logs and fish. Either way every grade has something in it;
- * the case returns about 92% with the gems, 94.5% without (RETURNS, which tools/casino-check.mjs
+ * the case returns about 81% with the gems, 94% without (RETURNS, which tools/casino-check.mjs
  * proves).
  *
  * The draw picks a grade by its odds, then an item in it (all equally likely), then the item's
@@ -27,7 +27,7 @@ export const CASE_PRICE = 50;
 /** what a log is worth: the timber yard sells them at $40 for ten */
 export const LOG_VALUE = 4;
 /** what the case pays back on average (%), with the gems in it and without */
-export const RETURNS = { gems: 92.3, noGems: 94.5 };
+export const RETURNS = { gems: 80.8, noGems: 94.5 };
 /** how often a fish comes out a tier up (Silver) */
 export const SILVER_CHANCE = 0.1;
 
@@ -72,7 +72,11 @@ const logs = (grade: GradeId, count: number): CaseItem => ({ id: `logs${count}`,
 const fish = (grade: GradeId, of: string, kg: [number, number]): CaseItem => ({ id: of, grade, kind: 'fish', of, size: kg });
 const gem = (grade: GradeId, of: string, ct: [number, number]): CaseItem => ({ id: of, grade, kind: 'gem', of, size: ct });
 
-/** What's in the case: logs and small fish at the bottom, gems and the rare fish at the top. */
+/**
+ * What's in the case: logs and small fish at the bottom, gems and the rare fish at the top. The
+ * common stones (peridot, amethyst) are Mil-Spec; the rest are a grade up from where their rarity
+ * alone would put them, up to the ruby beside the marlin.
+ */
 export const ITEMS: CaseItem[] = [
   logs('consumer', 6),
   fish('consumer', 'mullet', [0.8, 2.2]),
@@ -91,22 +95,22 @@ export const ITEMS: CaseItem[] = [
   fish('milspec', 'bonefish', [2, 4.5]),
   gem('milspec', 'peridot', [2, 5]),
   gem('milspec', 'amethyst', [4, 10]),
-  gem('milspec', 'tourmaline', [2, 6]),
 
   fish('restricted', 'redSnapper', [4, 9]),
   fish('restricted', 'grouper', [6, 14]),
   fish('restricted', 'permit', [6, 14]),
-  gem('restricted', 'aquamarine', [2, 7]),
-  gem('restricted', 'sapphire', [2, 5]),
+  gem('restricted', 'tourmaline', [2, 6]),
 
   fish('classified', 'roosterfish', [8, 22]),
-  gem('classified', 'emerald', [2, 5]),
-  gem('classified', 'opal', [2, 6]),
+  gem('classified', 'aquamarine', [2, 7]),
+  gem('classified', 'sapphire', [2, 5]),
 
   fish('covert', 'opah', [15, 40]),
-  gem('covert', 'ruby', [3, 5]),
+  gem('covert', 'emerald', [2, 5]),
+  gem('covert', 'opal', [2, 6]),
 
   fish('rare', 'marlin', [45, 130]),
+  gem('rare', 'ruby', [3, 5]),
 ];
 
 export const gradeOf = (id: GradeId): Grade => GRADES.find((g) => g.id === id)!;
