@@ -112,7 +112,7 @@ and the vendors.
   to the foam you see running up the sand, over a distant surf roar. Water laps
   under the pier. Indoors it's all muffled.
 - **Music:** `src/audio/music.ts` plays songs off ff2's jukebox. Outside, the
-  rotation plays: Paradise, Poo Song, VOne, Experimental Song, New Song 35, Mist,
+  rotation plays: Paradise, Poo Song, Experimental Song, New Song 35, Mist,
   By the River, Like That, Imagine, Novus (`src/audio/songs/`, in filename order).
   Inside the casinos it's Give It To Me then Fusion, round and round (`src/audio/casino/`),
   spilling muffled out of their doors as you walk up.
