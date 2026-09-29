@@ -204,6 +204,7 @@ for (const gems of [true, false]) {
   const rtp = (caseBack / (OPENS * CASE_PRICE)) * 100;
   const says = gems ? RETURNS.gems : RETURNS.noGems;
   check(`a million $${CASE_PRICE} cases ${gems ? 'with' : 'without'} the gems: within 1% of ${says}%`, Math.abs(rtp - says) < 1, `${rtp.toFixed(1)}%`);
+  if (gems) check('with the gems in, the case still pays back at least 89%', rtp >= 89, `${rtp.toFixed(1)}%`);
 }
 
 const pass = results.filter(Boolean).length;
