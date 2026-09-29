@@ -19,9 +19,12 @@
  *    they land; the winning symbols light up; the money lands in your wallet with the cash chime
  *    at the end of the count, and the amount rises over the reels in gold. Every win flashes
  *    light, rings the floor and throws confetti from the reels, more for bigger wins
- *    (casino/celebrate.ts), and the winning symbols glow. Three shells or hooks get a NICE WIN
- *    banner; big wins get a BIG WIN banner, a burst of sparks, bells and a boom. Pull again
- *    (or hit SPIN) to skip the count.
+ *    (casino/celebrate.ts), and the winning symbols glow and the payline turns to gold.
+ *    Three shells or hooks and up are a show that lasts the whole count: the win rolls up in big
+ *    gold figures over the reels, a NICE WIN banner stays up with a shine crossing it, and
+ *    confetti keeps popping; when the count lands the figures slam and burst. Big wins get a
+ *    BIG WIN (or JACKPOT) banner with light rays turning behind it, coins fountaining out over
+ *    the machine, a burst of sparks, bells and a boom. Pull again (or hit SPIN) to skip the count.
  *  - A single worm only gives your bet back, so it isn't dressed up as a win: "BAIT BACK".
  *
  * The rules (reels, paytable, the fair draw) are casino/slots.ts.
@@ -58,7 +61,7 @@ import { font } from '../ui/fonts.ts';
 import { Panel, roundRect } from '../ui/panel.ts';
 import { InteractivePanel, register } from '../ui/pointer.ts';
 import type { Interior } from '../village/interiors.ts';
-import { Celebration, type Tier } from './celebrate.ts';
+import { Celebration, type Tally, type Tier } from './celebrate.ts';
 import { look } from './look.ts';
 import { payOut, refund, stake } from './money.ts';
 import { line, pays, pull, REELS, STOPS, THREE, TWO_WORMS, ONE_WORM, type Symbol } from './slots.ts';
@@ -146,14 +149,14 @@ export class SlotMachine {
   private readonly coins: InstancedMesh;
   private coinList: Coin[] = [];
   private readonly buttons: DeckButton[] = [];
-  private readonly banner: Sprite;
+  private readonly payline: Mesh;
   private readonly sparks: InstancedMesh;
   private sparkList: { p: Vector3; v: Vector3; age: number }[] = [];
   private readonly floorGlow: Mesh;
   private readonly whirr = new RollBed();
   private readonly party: Celebration;
   private tier: Tier = 1;
-  private bannerSize = 1;
+  private tally: Tally | null = null;
 
   private bet: number;
   private phase: 'idle' | 'spinning' | 'counting' | 'won' = 'idle';
@@ -172,7 +175,6 @@ export class SlotMachine {
   private coinsPoured = 0;
   private owed = 0;
   private shake = 0;
-  private bannerT = -1;
   // lever
   private leverAngle = 0;
   private leverVel = 0;
@@ -263,6 +265,7 @@ export class SlotMachine {
     shade.position.set(0, REEL_Y, FRONT - 0.008);
     const payline = new Mesh(new PlaneGeometry(WIN_W, 0.0035), new MeshBasicMaterial({ color: 0xff2a2a, transparent: true, opacity: 0.85, toneMapped: false }));
     payline.position.set(0, REEL_Y, FRONT - 0.006);
+    this.payline = payline;
     const glass = new Mesh(new PlaneGeometry(WIN_W, WIN_H), new MeshBasicMaterial({ map: glassTexture(), transparent: true, blending: AdditiveBlending, depthWrite: false }));
     glass.position.set(0, REEL_Y, FRONT + 0.004);
     this.body.add(shade, payline, glass);
@@ -349,12 +352,7 @@ export class SlotMachine {
     this.lever.rotation.x = -0.12;
     this.body.add(this.lever);
 
-    // big-win banner and sparks
-    this.banner = new Sprite(new SpriteMaterial({ map: bannerTexture('BIG WIN'), transparent: true, depthWrite: false, depthTest: false, toneMapped: false }));
-    this.banner.position.set(0, 1.62, 0.5);
-    this.banner.visible = false;
-    this.banner.renderOrder = 20;
-    g.add(this.banner);
+    // big-win sparks out of the topper
     this.sparks = new InstancedMesh(new PlaneGeometry(0.024, 0.024), new MeshBasicMaterial({ map: glowTexture(), color: 0xffe080, transparent: true, blending: AdditiveBlending, depthWrite: false, toneMapped: false }), 120);
     this.sparks.count = 0;
     this.sparks.frustumCulled = false;
@@ -547,7 +545,7 @@ export class SlotMachine {
 
     this.updateBulbs();
     this.updateCoins(dt, inside);
-    this.updateBanner(dt);
+    this.updateSparks(dt);
     // the cabinet's jolt
     this.shake *= Math.exp(-dt * 14);
     this.body.position.set((Math.random() - 0.5) * this.shake, 0, (Math.random() - 0.5) * this.shake);
@@ -612,20 +610,18 @@ export class SlotMachine {
       this.tier = mult >= 25 ? 3 : mult >= 8 ? 2 : 1;
       this.message = mult >= 25 ? (syms[0] === 'chest' ? 'JACKPOT!' : 'BIG WIN!') : mult >= 8 ? 'NICE WIN' : 'WIN';
       for (let k = 0; k < reels; k++) this.reels[k].frame.visible = this.reels[k].glow.visible = true;
-      // light and confetti out of the reel window (big wins bring their own bells and boom)
-      this.party.win({ at: new Vector3(0, REEL_Y, FRONT + 0.08), tier: this.tier, quiet: this.tier === 3 });
-      if (mult >= 8) {
-        this.bannerT = 0;
-        this.bannerSize = mult >= 25 ? 1 : 0.75;
-        const text = mult >= 25 ? (syms[0] === 'chest' ? 'JACKPOT' : 'BIG WIN') : 'NICE WIN';
-        const mat = this.banner.material;
-        if (mat.map?.name !== text) {
-          mat.map?.dispose();
-          mat.map = bannerTexture(text);
-          mat.map.name = text;
-        }
+      // light and confetti out of the reel window (big wins bring their own bells and boom); a
+      // nice win or better keeps it going for the whole count, the figures rolling up over the
+      // reels and the banner up over the topper
+      const show = mult >= 8 ? this.countDur : 0;
+      this.party.win({ at: new Vector3(0, REEL_Y, FRONT + 0.08), tier: this.tier, quiet: this.tier === 3, hold: show });
+      if (show) {
+        const text = mult >= 25 ? (syms[0] === 'chest' ? 'JACKPOT!' : 'BIG WIN!') : 'NICE WIN';
+        this.party.showBanner(text, new Vector3(0, 1.95, 0.42), mult >= 25 ? 1 : 0.8, mult >= 25, show);
+        this.tally = this.party.tally(new Vector3(0, REEL_Y + 0.215, FRONT + 0.2), this.tier);
       }
       if (mult >= 25) {
+        this.party.fountain(new Vector3(0, TOPPER_Y + 0.2, FRONT + 0.05), 30);
         bigWinHit();
         slotBells(Math.min(5, 1.5 + mult / 60));
         this.burst(40 + Math.min(60, mult));
@@ -642,6 +638,7 @@ export class SlotMachine {
     const shown = Math.floor(this.win * (1 - Math.pow(1 - k, 2.2)));
     if (shown !== this.meter) {
       this.meter = shown;
+      this.tally?.set(shown);
       if (inside && this.clock - this.lastBlip > 0.045) {
         this.lastBlip = this.clock;
         rollTick(k);
@@ -661,16 +658,19 @@ export class SlotMachine {
     this.meter = this.win;
     if (this.owed) {
       payOut(this.state, this.owed);
-      // the money lands: the amount rises over the reels
-      this.party.rise(new Vector3(0, REEL_Y + 0.13, FRONT + 0.1), this.owed, this.tier);
+      // the money lands: the rolling figures slam home, or (a small win) the amount rises over the reels
+      if (this.tally) this.tally.land(this.win);
+      else this.party.rise(new Vector3(0, REEL_Y + 0.13, FRONT + 0.1), this.owed, this.tier);
     }
+    this.party.endHold();
+    this.tally = null;
     this.owed = 0;
     this.phase = 'won';
     this.countT = 0;
     this.paintDisplay();
   }
 
-  /* ── bulbs, coins, sparks, banner ───────────────────────────────── */
+  /* ── bulbs, coins, sparks ───────────────────────────────────────── */
 
   private updateBulbs(): void {
     const c = _c;
@@ -696,6 +696,10 @@ export class SlotMachine {
     this.bulbs.instanceColor!.needsUpdate = true;
     const glow = this.floorGlow.material as MeshBasicMaterial;
     glow.opacity = winning ? 0.4 + 0.2 * Math.sin(t * 12) : 0.2 + 0.04 * Math.sin(t * 1.5);
+    // the payline burns gold and thickens across a win
+    const line = this.payline.material as MeshBasicMaterial;
+    line.color.setHex(winning ? 0xffd24a : 0xff2a2a);
+    this.payline.scale.y = winning ? 2.2 + 0.8 * Math.sin(t * 9) : 1;
   }
 
   private pour(n: number): void {
@@ -751,16 +755,7 @@ export class SlotMachine {
     }
   }
 
-  private updateBanner(dt: number): void {
-    if (this.bannerT >= 0) {
-      this.bannerT += dt;
-      const s = this.bannerT;
-      // punch in, hold with a throb, shrink away
-      const k = s < 0.25 ? easeOutBack(s / 0.25) : s < 3.2 ? 1 + 0.05 * Math.sin(s * 10) : Math.max(0, 1 - (s - 3.2) / 0.3);
-      this.banner.visible = k > 0.001;
-      this.banner.scale.set(0.6 * k * this.bannerSize, 0.2 * k * this.bannerSize, 1);
-      if (s > 3.5) this.bannerT = -1;
-    } else this.banner.visible = false;
+  private updateSparks(dt: number): void {
     const m = new Matrix4();
     const o = _o;
     let n = 0;
@@ -830,11 +825,6 @@ function plan(r: Reel, T: number, decel: number): void {
     acc += v / 240;
     r.cum[i] = acc;
   }
-}
-
-function easeOutBack(x: number): number {
-  const c1 = 2.2;
-  return 1 + (c1 + 1) * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2);
 }
 
 /** The reel's turn that puts stop i on the payline (its symbols run down the front as it turns). */
@@ -1029,28 +1019,6 @@ function capTexture(label: string, colour: string, round: boolean): CanvasTextur
   }
   g.fillText(label, 0, 6);
   return tex(c);
-}
-
-function bannerTexture(text: string): CanvasTexture {
-  const [c, g] = canvas(768, 256);
-  const grad = g.createLinearGradient(0, 40, 0, 216);
-  grad.addColorStop(0, '#fff6b0');
-  grad.addColorStop(0.5, '#ffc020');
-  grad.addColorStop(1, '#e06a10');
-  g.font = font(700, 170);
-  g.textAlign = 'center';
-  g.textBaseline = 'middle';
-  g.lineJoin = 'round';
-  g.lineWidth = 22;
-  g.strokeStyle = '#3a1004';
-  g.strokeText(text, 384, 136, 740);
-  g.shadowColor = '#ffb000';
-  g.shadowBlur = 30;
-  g.fillStyle = grad;
-  g.fillText(text, 384, 136, 740);
-  const t = tex(c);
-  t.name = text;
-  return t;
 }
 
 /** The topper: the machine's name, then the paytable (the only thing the odds come from). */

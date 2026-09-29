@@ -8,13 +8,15 @@
  *  DEALER The hole card turns over and the dealer draws to 17, a card at a time.
  *  PAY    Losing chips are raked away. A winner's pay is stacked beside it chip by chip, then it
  *         all slides over to you, with the cash chime and the wrist counters. The win goes up in
- *         light, confetti and gold over your hand, bigger for a blackjack (casino/celebrate.ts).
+ *         light, confetti and gold over your hand, bigger for a blackjack (casino/celebrate.ts),
+ *         and the felt glows gold under the winning cards.
  *         Then the cards are swept to the discard tray.
  *
  * Rules (and the shuffle) are casino/blackjack.ts; the table only shows what the rules decide.
  */
 
 import {
+  AdditiveBlending,
   CanvasTexture,
   Color,
   CylinderGeometry,
@@ -46,8 +48,8 @@ import { Lettering, lookFor, mount } from '../ui/boards.ts';
 import type { Interior } from '../village/interiors.ts';
 import { basic, isNatural, Round, Shoe, total, type Action, type Card, type Outcome } from './blackjack.ts';
 import { CardMesh } from './cards.ts';
-import { Celebration, type Tier } from './celebrate.ts';
-import { breakdown, CHIP_COLOUR } from './chips.ts';
+import { Celebration, glowPlate, type Tier } from './celebrate.ts';
+import { breakdown, chipMesh, CHIP_COLOUR } from './chips.ts';
 import { payOut, refund, stake } from './money.ts';
 
 const FELT_Y = 0.903;
@@ -87,6 +89,7 @@ export class BlackjackTable {
   private round: Round | null = null;
   private readonly live = new Map<Card, Live>();
   private readonly party: Celebration;
+  private readonly handGlows: Mesh[] = [];
 
   private phase: 'betting' | 'dealing' | 'player' | 'settled' = 'betting';
   private bet = 0;
@@ -139,10 +142,17 @@ export class BlackjackTable {
     tray.rotation.y = -0.5;
     g.add(shoe, tray);
 
+    // a gold light on the felt under each winning hand while it's paid (two, for a split)
+    for (let h = 0; h < 2; h++) {
+      const m = new Mesh(new PlaneGeometry(0.3, 0.26).rotateX(-Math.PI / 2), new MeshBasicMaterial({ map: glowPlate(), color: 0xffc83a, transparent: true, blending: AdditiveBlending, depthWrite: false, toneMapped: false }));
+      m.visible = false;
+      m.renderOrder = 4;
+      g.add(m);
+      this.handGlows.push(m);
+    }
+
     // chips
-    this.chips = new InstancedMesh(new CylinderGeometry(0.024, 0.024, 0.006, 20), new MeshLambertMaterial({ color: 0xffffff }), 160);
-    this.chips.count = 0;
-    this.chips.frustumCulled = false;
+    this.chips = chipMesh(160);
     g.add(this.chips);
 
     // totals floating over the hands
@@ -279,6 +289,7 @@ export class BlackjackTable {
     }
     this.layoutCards(dt);
     this.layoutChips();
+    this.updateHandGlows();
     this.updateLabels();
     this.party.update(dt, camera);
   }
@@ -454,6 +465,21 @@ export class BlackjackTable {
     this.chips.count = n;
     this.chips.instanceMatrix.needsUpdate = true;
     if (this.chips.instanceColor) this.chips.instanceColor.needsUpdate = true;
+  }
+
+  private updateHandGlows(): void {
+    const r = this.round;
+    this.handGlows.forEach((m, k) => {
+      const h = r?.hands[k];
+      const res = this.results[k];
+      const won = this.phase === 'settled' && !!h && !!res && res.returned > h.bet;
+      m.visible = won;
+      if (!won) return;
+      // under the cards, pulsing, gone as they're swept
+      m.position.set(this.handX(k) + 0.012, FELT_Y + 0.0015, 0.29);
+      const fade = Math.max(0, Math.min(1, (3.3 - this.settleT) / 0.4));
+      (m.material as MeshBasicMaterial).opacity = (0.55 + 0.35 * Math.sin(this.settleT * 9)) * Math.min(1, this.settleT / 0.2) * fade;
+    });
   }
 
   private updateLabels(): void {

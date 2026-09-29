@@ -8,10 +8,11 @@
  *         The result is decided fairly first (crypto RNG) and the ball's launch angle is solved
  *         so its decaying orbit meets that pocket on the turning rotor: what you see is what won.
  *  RESULT The number pops up over the wheel in its colour, the dolly marks it on the felt, the
- *         winning spots pulse gold and losing chips are swept away. Each winning stack is paid
- *         chip by chip beside it, then slides over to you: the cash chime (pitched up), the wrist
- *         counters rolling, a fanfare, and light, confetti and the amount in gold, sized to the
- *         win (casino/celebrate.ts). A straight-up hit gets a banner.
+ *         winning pocket lights up on the wheel, the winning spots pulse gold and losing chips are
+ *         swept away. Each winning stack is paid chip by chip beside it, then slides over to you:
+ *         the cash chime (pitched up), the wrist counters rolling, a fanfare, and light, confetti,
+ *         coins and the amount in gold, sized to the win (casino/celebrate.ts). A straight-up hit
+ *         gets a banner with light rays turning behind it.
  *
  * Rules (payouts, what beats what) are casino/roulette.ts.
  */
@@ -45,12 +46,11 @@ import type { World } from '@iwsdk/core';
 import { ballTick, chipClack, chipRun, RollBed, uiDeny, winFanfare } from '../audio/sfx.ts';
 import type { GameState } from '../fishing/tidewater.ts';
 import { font } from '../ui/fonts.ts';
-import { roundRect } from '../ui/panel.ts';
 import { InteractivePanel, register } from '../ui/pointer.ts';
 import { Lettering, lookFor, mount } from '../ui/boards.ts';
 import type { Interior } from '../village/interiors.ts';
-import { Celebration, type Tier } from './celebrate.ts';
-import { breakdown, CHIP_COLOUR } from './chips.ts';
+import { Celebration, glowPlate, type Tier } from './celebrate.ts';
+import { breakdown, chipMesh, CHIP_COLOUR } from './chips.ts';
 import { payOut, refund, stake } from './money.ts';
 import { colourOf, odds, settle, spin, WHEEL, type Spot } from './roulette.ts';
 
@@ -142,6 +142,7 @@ export class RouletteTable {
   private readonly roll = new RollBed();
   private readonly party: Celebration;
   private readonly glows: Mesh[] = [];
+  private readonly pocketLight: Mesh;
 
   private chip: number;
   private bets = new Map<Spot, number[]>(); // each chip placed, by spot
@@ -237,7 +238,14 @@ export class RouletteTable {
       arm.position.y = 0.12;
       this.rotor.add(arm);
     }
-    this.rotor.add(pockets, cone, turret);
+    // the winning pocket lights up on the wheel (gold when it's paid you, white when it hasn't)
+    this.pocketLight = new Mesh(
+      new RingGeometry(0.11, 0.262, 1, 1, -TAU / N / 2, TAU / N).rotateX(-Math.PI / 2),
+      new MeshBasicMaterial({ color: 0xffd24a, transparent: true, blending: AdditiveBlending, depthWrite: false, toneMapped: false }),
+    );
+    this.pocketLight.position.y = 0.0135;
+    this.pocketLight.visible = false;
+    this.rotor.add(pockets, cone, turret, this.pocketLight);
     bowl.add(this.rotor);
     this.ball = new Mesh(new SphereGeometry(0.011, 12, 10), new MeshPhongMaterial({ color: 0xffffff, shininess: 120 }));
     this.ball.position.set(0.3, 0.05, 0);
@@ -245,9 +253,7 @@ export class RouletteTable {
     g.add(bowl);
 
     // chips on the felt, and the dolly that marks the winner
-    this.chips = new InstancedMesh(new CylinderGeometry(0.024, 0.024, 0.006, 20), new MeshLambertMaterial({ color: 0xffffff }), 400);
-    this.chips.count = 0;
-    this.chips.frustumCulled = false;
+    this.chips = chipMesh(400);
     g.add(this.chips);
     this.dolly = new Mesh(new CylinderGeometry(0.012, 0.02, 0.06, 12), new MeshPhongMaterial({ color: 0xf2f6ff, transparent: true, opacity: 0.85, shininess: 120 }));
     this.dolly.visible = false;
@@ -255,7 +261,7 @@ export class RouletteTable {
 
     // the winning spots' glow: a soft gold light laid over each, pulsing (six is the most one
     // number can win: itself, its colour, odd/even, low/high, its dozen and its column)
-    const glowTex = cellGlowTexture();
+    const glowTex = glowPlate();
     for (let k = 0; k < 6; k++) {
       const m = new Mesh(new PlaneGeometry(1, 1).rotateX(-Math.PI / 2), new MeshBasicMaterial({ map: glowTex, color: 0xffc83a, transparent: true, blending: AdditiveBlending, depthWrite: false, toneMapped: false }));
       m.visible = false;
@@ -444,6 +450,9 @@ export class RouletteTable {
     const col = colourOf(this.result);
     this.status = r.returned ? `${this.result} ${col.toUpperCase()}: you win $${r.won}` : `${this.result} ${col.toUpperCase()}`;
     this.showNumber(this.result, col);
+    this.pocketLight.rotation.y = pocketAngle(this.resultIndex);
+    this.pocketLight.visible = true;
+    (this.pocketLight.material as MeshBasicMaterial).color.setHex(r.returned ? 0xffd24a : 0xbfc8d8);
     // the dolly on the winning number
     const p = this.spotLocal(`n${this.result}`);
     this.dolly.position.set(p.x, 0.94, p.z);
@@ -578,6 +587,7 @@ export class RouletteTable {
     // the winning spots pulse, then fade as their chips go
     const fade = Math.max(0, Math.min(1, (GONE_AT + 0.3 - this.sweep) / 0.5));
     for (const m of this.glows) if (m.visible) (m.material as MeshBasicMaterial).opacity = (0.55 + 0.45 * Math.sin(this.sweep * 9)) * Math.min(1, this.sweep / 0.2) * fade;
+    (this.pocketLight.material as MeshBasicMaterial).opacity = (0.5 + 0.3 * Math.sin(this.sweep * 9)) * Math.min(1, this.sweep / 0.2) * Math.max(0, Math.min(1, (OPEN_AT - this.sweep) / 0.4));
     if (this.sweep > RAKE_AT && this.bets.size) {
       // the croupier's rake: losing chips go, winners stay while they're paid
       for (const s of [...this.bets.keys()]) if (!this.winners.includes(s)) this.bets.delete(s);
@@ -587,6 +597,7 @@ export class RouletteTable {
       this.bets.clear();
       this.layChips();
       for (const m of this.glows) m.visible = false;
+      this.pocketLight.visible = false;
       this.dolly.visible = false;
       if (this.number) this.number.parent?.remove(this.number);
       this.number = null;
@@ -696,25 +707,6 @@ function payGap(chips: number): number {
 function easeOutBack(x: number): number {
   const c1 = 2.2;
   return 1 + (c1 + 1) * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2);
-}
-
-/** A soft gold light for a winning spot: bright through the middle, feathered at the edges. */
-function cellGlowTexture(): CanvasTexture {
-  const c = document.createElement('canvas');
-  c.width = c.height = 128;
-  const g = c.getContext('2d')!;
-  g.filter = 'blur(10px)';
-  g.fillStyle = '#ffffff';
-  roundRect(g, 22, 22, 84, 84, 14);
-  g.fill();
-  g.filter = 'none';
-  g.strokeStyle = 'rgba(255,255,255,0.9)';
-  g.lineWidth = 5;
-  roundRect(g, 24, 24, 80, 80, 12);
-  g.stroke();
-  const t = new CanvasTexture(c);
-  t.colorSpace = SRGBColorSpace;
-  return t;
 }
 
 /** Angle (rotor frame) of pocket i's centre — the same angle the pocket texture paints it at. */
