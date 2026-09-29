@@ -441,10 +441,18 @@ export class SkelterSystem extends createSystem({}) {
   goUp(): void {
     if (!this.complete || skelterView.onTower) return;
     this.ensureTower();
+    this.toTop();
+  }
+
+  /** Up to the balcony with a fresh course: from the board below, or again from the end of a ride. */
+  private toTop(): void {
     skelterDeps.blink?.();
+    this.clearTimer();
     skelterView.onTower = true;
     musicView.away = true;
     skelterAudio.load();
+    // (back up after a win, the descent's song is still going)
+    skelterAudio.stopRun();
     resetGameState();
     emit('game-reset');
     this.confetti.stop();
@@ -526,7 +534,8 @@ export class SkelterSystem extends createSystem({}) {
     register(this.end);
     this.end.paint = () => this.paintEnd();
     this.end.onClick = (id) => {
-      if (id === 'again') this.goUp();
+      // (you're still on the tower here, so straight back up, not through the board's goUp)
+      if (id === 'again') this.toTop();
       else if (id === 'off') this.leave(game.phase === 'GAME_OVER');
     };
     // the middle of your play space, marked on the balcony floor: step into it
