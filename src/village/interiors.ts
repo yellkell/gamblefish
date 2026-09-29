@@ -81,12 +81,18 @@ export interface Interior {
 /** how far off you can still make out a room through its doorway (m) */
 const SEEN_WITHIN = 24;
 
+/** where the case wall hangs on The Lucky Lure's right-hand wall (room frame z, m) */
+export const CASE_WALL_Z = 1.0;
+
 /**
  * Furniture you can't stand in (tables, counters), per building, in the room's floor frame:
  * [x, z, half-width, half-depth, height]. The games place their meshes to match.
  */
 export const FURNITURE: Record<string, [number, number, number, number, number][]> = {
-  C: [[0.03, -0.6, 1.72, 0.55, 0.95]], // the roulette table and wheel (casino/RouletteTable TABLE, at z −0.6)
+  C: [
+    [0.03, -0.6, 1.72, 0.55, 0.95], // the roulette table and wheel (casino/RouletteTable TABLE, at z −0.6)
+    [3.33 - 0.14, CASE_WALL_Z, 0.14, 0.92, 2.62], // the case wall on the right-hand wall (casino/CaseWall.ts)
+  ],
   B: [[0, -1.8, 2.05, 0.33, 1.9]], // three slot machines along the back wall
   G: [[0, -0.74, 1.06, 0.52, 0.95]], // the blackjack table (half-round, dealer's edge at z −1.25)
   H: [[0, -0.55, 1.74, 0.33, 1.07]], // the teller's counter (village/bank.ts)

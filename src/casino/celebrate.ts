@@ -228,11 +228,12 @@ export class Celebration {
    * `amount` rises from there in gold if given; `banner` is shown over it for tier 3 (or any
    * tier, if given). `scale` grows all of it for a win seen from further off (a shark alongside).
    * `coins: false` leaves the coins out, for a party that isn't about money (a walk opening).
+   * `tint` colours the flash and the ring (a case's grade colour) instead of gold.
    */
-  win(opts: { at: Vector3; tier: Tier; amount?: number; banner?: string; bannerAt?: Vector3; quiet?: boolean; scale?: number; hold?: number; coins?: boolean }): void {
+  win(opts: { at: Vector3; tier: Tier; amount?: number; banner?: string; bannerAt?: Vector3; quiet?: boolean; scale?: number; hold?: number; coins?: boolean; tint?: number }): void {
     const { at, tier } = opts;
     const k = opts.scale ?? 1;
-    this.burst(at, tier, k, opts.coins ?? true);
+    this.burst(at, tier, k, opts.coins ?? true, opts.tint);
     if (opts.amount) this.rise(at, opts.amount, tier, k);
     if (opts.banner) this.showBanner(opts.banner, opts.bannerAt ?? at.clone().add(new Vector3(0, 0.34 * k, 0)), k, tier === 3, opts.hold);
     if (opts.hold) this.hold(at, tier, opts.hold, k);
@@ -244,7 +245,9 @@ export class Celebration {
   }
 
   /** The light and the confetti on their own (no amount, no sound). */
-  burst(at: Vector3, tier: Tier, k = 1, coins = true): void {
+  burst(at: Vector3, tier: Tier, k = 1, coins = true, tint?: number): void {
+    this.flash.material.color.setHex(tint ?? 0xffe08a);
+    (this.ring.material as MeshBasicMaterial).color.setHex(tint ?? 0xffd24a);
     // a flash of light where it happened
     this.flashT = 0;
     this.flashSize = [0, 0.5, 0.8, 1.2][tier] * k;
@@ -728,8 +731,8 @@ function bannerTexture(text: string): CanvasTexture {
 }
 
 let rays: CanvasTexture | null = null;
-/** Sixteen soft rays from the middle, fading out toward the edge. */
-function raysTexture(): CanvasTexture {
+/** Sixteen soft rays from the middle, fading out toward the edge (white: tint it with the material). */
+export function raysTexture(): CanvasTexture {
   if (rays) return rays;
   const [c, g] = canvas(256, 256);
   g.translate(128, 128);

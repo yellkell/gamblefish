@@ -2,7 +2,7 @@
 /**
  * THE CASINO — headless. Drives the games' rule files (Node strips the types): every bet spot's
  * winning numbers, the payouts, settlement, and that the wheel is fair (each pocket about 1/37,
- * house edge 1/37 on every bet).
+ * house edge 1/37 on every bet), and the case wall: its grades' odds, what's in it, and its return.
  *
  *   node tools/casino-check.mjs
  */
@@ -10,6 +10,10 @@
 import { WHEEL, REDS, colourOf, wins, odds, settle, spin, fairRandom } from '../src/casino/roulette.ts';
 import { REELS, STOPS, SYMBOLS, THREE, line, pays, pull } from '../src/casino/slots.ts';
 import { Shoe, Round, basic, total, isNatural } from '../src/casino/blackjack.ts';
+import { CASE_PRICE, GRADES, ITEMS, LOG_VALUE, itemsOf, openCase, rollGrade, sizeUp, stripFor } from '../src/casino/cases.ts';
+import { FISH } from '../src/fishing/tidewater.ts';
+import { GEMS } from '../src/mining/gems.ts';
+import { GRID_SIZES, bounds, shapeFor } from '../src/backpack/logic.ts';
 
 const results = [];
 const check = (name, ok, detail) => {
@@ -165,6 +169,36 @@ for (let i = 0; i < HANDS; i++) {
 }
 const edgePerHand = (bjStaked - bjBack) / (HANDS * 2);
 check('a million hands of basic strategy: house edge 0.1–0.7% of the bet', edgePerHand > 0.001 && edgePerHand < 0.007, `${(edgePerHand * 100).toFixed(2)}% per hand`);
+
+console.log('\ncases: the lure case');
+check('the grades\' odds add up to 10,000, commonest first', GRADES.reduce((a, g) => a + g.odds, 0) === 10000 && GRADES.every((g, i) => i === 0 || g.odds < GRADES[i - 1].odds));
+check('every grade holds something', GRADES.every((g) => itemsOf(g.id).length > 0), GRADES.map((g) => `${g.id} ${itemsOf(g.id).length}`).join(', '));
+check('logs and small fish at the bottom, no gems below Mil-Spec, the rare fish at the top', itemsOf('consumer').every((i) => i.kind !== 'gem') && itemsOf('industrial').every((i) => i.kind !== 'gem') && itemsOf('rare').every((i) => i.kind === 'fish'));
+check('every fish and gem is one the island knows, its sizes inside its range', ITEMS.every((i) => i.kind === 'logs' || (i.kind === 'fish' ? FISH[i.of] && i.size[0] >= FISH[i.of].kg[0] && i.size[1] <= FISH[i.of].kg[1] : GEMS[i.of] && i.size[0] >= GEMS[i.of].ct[0] && i.size[1] <= GEMS[i.of].ct[1])));
+const [bw, bh] = GRID_SIZES[0];
+check(`every fish fits the smallest backpack (${bw} × ${bh}) at its biggest`, ITEMS.filter((i) => i.kind === 'fish').every((i) => {
+  const p = sizeUp(i, () => 0.999999);
+  const b = bounds(shapeFor(i.of, p.cm, p.size));
+  return (b.w <= bw && b.h <= bh) || (b.h <= bw && b.w <= bh);
+}));
+check(`logs are worth the timber yard's $${LOG_VALUE} each`, ITEMS.filter((i) => i.kind === 'logs').every((i) => sizeUp(i, Math.random).value === i.count * LOG_VALUE));
+const prize = openCase();
+const strip = stripFor(prize, 60, 47);
+check('the strip carries the prize at the marker, 60 cards long', strip.length === 60 && strip[47] === prize.item && strip.every(Boolean));
+// crypto draws: each grade comes up at its odds
+const GN = 200000;
+const gc = Object.fromEntries(GRADES.map((g) => [g.id, 0]));
+for (let i = 0; i < GN; i++) gc[rollGrade(fairRandom).id]++;
+const chiG = GRADES.reduce((a, g) => a + (gc[g.id] - (GN * g.odds) / 10000) ** 2 / ((GN * g.odds) / 10000), 0);
+// 6 degrees of freedom: 99.9% of fair draws come in under 22.5
+check('200,000 draws: each grade at its odds (χ² < 22.5)', chiG < 22.5, `χ² ${chiG.toFixed(1)}`);
+// the return, over a million opens from a seeded draw (so the check is steady run to run)
+const cr = seeded(7);
+let caseBack = 0;
+const OPENS = 1_000_000;
+for (let i = 0; i < OPENS; i++) caseBack += openCase(cr).value;
+const caseRtp = caseBack / (OPENS * CASE_PRICE);
+check(`a million $${CASE_PRICE} cases: they return 90–94% (the wall says about 92%)`, caseRtp > 0.9 && caseRtp < 0.94, `${(caseRtp * 100).toFixed(1)}%`);
 
 const pass = results.filter(Boolean).length;
 console.log(`\n${pass}/${results.length} passed`);

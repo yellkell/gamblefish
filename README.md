@@ -279,6 +279,22 @@ and the vendors.
     the whole count: the amount rolls up in big gold figures over the reels, the NICE WIN,
     BIG WIN! or JACKPOT! banner stays up and confetti keeps popping. When the count lands
     the figures slam and burst, then float away.
+- **The case wall** (`src/casino/CaseWall.ts`, rules in `src/casino/cases.ts`): on The
+  Lucky Lure's right-hand wall, between the roulette table and the door. It opens THE LURE
+  CASE ($50) the way a CS case opens.
+  - **The spin:** point at OPEN and pull the trigger. A strip of cards races past a gold
+    marker, ticking card by card, and slows to a crawl onto your prize. The prize is drawn
+    first (crypto RNG) and the strip is dressed round it, so the spin only shows it.
+  - **Grades** in CS's names and colours: Consumer (logs and small fish), Industrial,
+    Mil-Spec (the first gems), Restricted, Classified, Covert (an opah, a ruby) and the
+    ★ Rare Special (a blue marlin). The board shows everything in the case and each grade's
+    odds. It returns about 92%. One fish in ten comes out Silver.
+  - **The reveal:** your card comes out of the strip in its grade's light, with rays from
+    Restricted up. Mil-Spec and up get a party in the grade's colour; Classified, Covert and
+    the ★ Rare Special get a banner.
+  - **Where it goes:** logs into your backpack, a fish into its grid and a stone into your
+    pouch. A fish with no room, or a stone before you own the pickaxe (the pouch comes with
+    it), is sold on the spot. Case fish don't fill the field guide.
 - **The fish's skin** (`src/fishing/fishSkin.ts`): Tidewater's WGSL fish material, ported to
   GLSL on three's standard material. It adds scales in colour and relief, each species'
   markings, the lateral line and gill cover, see-through ray-striped fins, eyes with an iris
