@@ -439,3 +439,82 @@ export function gemChime(rare = false): void {
     tone({ freq: f * 2.01, type: 'sine', dur: 0.18, gain: 0.02, delay: i * 0.045 });
   });
 }
+
+/**
+ * A red-tailed hawk's scream, from up in the sky at `at`: a hoarse, falling "kee-eeeer". A
+ * sawtooth sliding down from about 3 kHz, roughened by a fast tremolo (the rasp) and a band of
+ * breath that follows its pitch, shaped to the scream's quick attack and long fall.
+ */
+export function hawkCry(at: { x: number; y: number; z: number }, gain = 0.5): void {
+  const c = ready();
+  if (!c) return;
+  const t0 = c.currentTime + 0.02;
+  const dur = 1.3 + Math.random() * 0.6;
+  const top = 2900 + Math.random() * 350;
+  const pitch = (p: AudioParam, k: number): void => {
+    p.setValueAtTime(top * 0.86 * k, t0);
+    p.exponentialRampToValueAtTime(top * k, t0 + 0.12);
+    p.exponentialRampToValueAtTime(top * 0.93 * k, t0 + dur * 0.35);
+    p.exponentialRampToValueAtTime(top * 0.68 * k, t0 + dur);
+  };
+
+  const pan = c.createPanner();
+  pan.panningModel = 'HRTF';
+  pan.distanceModel = 'inverse';
+  pan.refDistance = 25;
+  pan.rolloffFactor = 1;
+  pan.positionX.value = at.x;
+  pan.positionY.value = at.y;
+  pan.positionZ.value = at.z;
+  const env = c.createGain();
+  env.gain.setValueAtTime(0.0001, t0);
+  env.gain.exponentialRampToValueAtTime(gain, t0 + 0.07);
+  env.gain.setValueAtTime(gain, t0 + dur * 0.3);
+  env.gain.exponentialRampToValueAtTime(gain * 0.45, t0 + dur * 0.8);
+  env.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+  const soft = c.createBiquadFilter();
+  soft.type = 'lowpass';
+  soft.frequency.value = 6500;
+  env.connect(soft).connect(pan).connect(c._master!);
+
+  // the voice, rasped by a fast tremolo, with a little waver in its pitch
+  const osc = c.createOscillator();
+  osc.type = 'sawtooth';
+  pitch(osc.frequency, 1);
+  const waver = c.createOscillator();
+  waver.frequency.value = 6 + Math.random() * 3;
+  const waverDepth = c.createGain();
+  waverDepth.gain.value = 45;
+  waver.connect(waverDepth).connect(osc.frequency);
+  const rasp = c.createGain();
+  rasp.gain.value = 0.55;
+  const rattle = c.createOscillator();
+  rattle.type = 'triangle';
+  rattle.frequency.value = 85 + Math.random() * 25;
+  const rattleDepth = c.createGain();
+  rattleDepth.gain.value = 0.45;
+  rattle.connect(rattleDepth).connect(rasp.gain);
+  const voice = c.createGain();
+  voice.gain.value = 0.3;
+  osc.connect(rasp).connect(voice).connect(env);
+
+  // the breath: noise in a narrow band riding the voice's pitch
+  const frames = Math.floor(c.sampleRate * dur);
+  const buf = c.createBuffer(1, frames, c.sampleRate);
+  const data = buf.getChannelData(0);
+  for (let i = 0; i < frames; i++) data[i] = Math.random() * 2 - 1;
+  const noise = c.createBufferSource();
+  noise.buffer = buf;
+  const band = c.createBiquadFilter();
+  band.type = 'bandpass';
+  band.Q.value = 5;
+  pitch(band.frequency, 1.05);
+  const breath = c.createGain();
+  breath.gain.value = 0.9;
+  noise.connect(band).connect(breath).connect(rasp);
+
+  for (const o of [osc, waver, rattle, noise]) {
+    o.start(t0);
+    o.stop(t0 + dur + 0.05);
+  }
+}

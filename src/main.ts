@@ -25,6 +25,8 @@ import { decodeTerrain, type BoxCollider, type WorldJson } from './world/data.ts
 import { Heightfield } from './world/heightfield.ts';
 import { Ocean } from './world/ocean.ts';
 import { createSky } from './world/sky.ts';
+import { Clouds } from './world/clouds.ts';
+import { Hawks } from './world/hawks.ts';
 import { Surfaces } from './world/surfaces.ts';
 import { buildTerrain } from './world/terrain.ts';
 import { Grass } from './world/grass.ts';
@@ -184,6 +186,8 @@ World.create(container, {
   if (grass) scene.add(grass.mesh);
   const ocean = new Ocean(grid, sky.state);
   scene.add(ocean.mesh);
+  const clouds = new Clouds(sky.state);
+  scene.add(clouds.mesh);
   const t0 = performance.now();
   let lastT = 0;
   ocean.mesh.onBeforeRender = (_r, _s, camera: Camera) => {
@@ -194,6 +198,7 @@ World.create(container, {
     lamps.visible = sky.state.night.value > 0.01;
     villageTick(dt);
     lastT = t;
+    clouds.update(dt, camera);
     ocean.update(t, camera);
     // up the helter skelter the plants and the grass stay picked round its tower, not round you
     const hold = skelterView.onTower ? SKELTER : null;
@@ -407,6 +412,9 @@ World.create(container, {
   // the music (ff2's jukebox songs outside, the casinos' own inside) and the sea's sound
   const music = new Music(interiors.filter((i) => i.role.role === 'casino'));
   const shore = new ShoreSound(heightfield, json.layout.pier, () => interiorAt(interiors, world.player.position.x, world.player.position.z) !== null, () => sky.state.night.value);
+  // now and then a hawk, circling up a thermal near you
+  const hawks = new Hawks(heightfield, sky.state, () => interiorAt(interiors, world.player.position.x, world.player.position.z) !== null);
+  scene.add(hawks.group);
   // your shack, and the shops that furnish it
   const kit = { renderer: world.renderer, props: fishingDeps.props! };
   const shack = room(HOME);
@@ -450,13 +458,14 @@ World.create(container, {
     statue.update(dt, world.camera);
     music.update(world.camera);
     shore.update(ocean.time, dt, world.camera);
+    hawks.update(dt, world.camera);
     market?.update(dt, world.camera);
     for (const t of tables) t.update(dt, world.camera);
     blink.update(dt);
   };
 
   // Dev hook: drive the rig without a headset (`__fish.move.to(x, z, yaw)`).
-  (window as unknown as { __fish: unknown }).__fish = { world, surfaces, move: teleportView, json, game, fishing: fishingView, vegetation, backpack: backpackView, interiors, tables, music, shore, sky, homeShops, gearShops, rodRack, villa, fx, props: fishingDeps.props, wood: woodView, skelter: skelterView, camps: campView, mining: mineView, gemWindows, statue, spotFor };
+  (window as unknown as { __fish: unknown }).__fish = { world, surfaces, move: teleportView, json, game, fishing: fishingView, vegetation, backpack: backpackView, interiors, tables, music, shore, sky, clouds, hawks, homeShops, gearShops, rodRack, villa, fx, props: fishingDeps.props, wood: woodView, skelter: skelterView, camps: campView, mining: mineView, gemWindows, statue, spotFor };
 
   if (import.meta.env.DEV) void import('./dev/harness.ts').then((m) => m.installHarness(world));
 
