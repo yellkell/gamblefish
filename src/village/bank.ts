@@ -5,9 +5,11 @@
  * The room is a teller's hall: a long counter in dark wood with a brass rail,
  * a glass screen with brass bars and a window in the middle, the vault door on
  * the back wall, a green banker's lamp, coin stacks on the counter. Behind the
- * window hangs THE BOARD, which is the whole bank:
+ * window hangs THE BOARD, which is the whole bank. It's where you support the
+ * game: what you pay is a thank-you to its maker, and the coins are a little
+ * something back (you can fish up as many in a few minutes late on).
  *
- *   PACKS     four packs (coins big, price small, BEST VALUE flagged), the
+ *   PACKS     SUPPORT THE GAME, four packs (coins big, price small, BEST VALUE flagged), the
  *             account strip (SAVE MY PURCHASES / LOG IN, or who it's saved to)
  *             and the terms in one line.
  *   CONFIRM   the 18+ and no-cash-value agreement, every purchase.
@@ -17,7 +19,9 @@
  *             is up; step 4 says to refresh the page once paid, since the
  *             boot claim is the one that always collects them.
  *   PAID      the coins that landed, and (the first time) one tap to save the
- *             purchase to the email you paid with.
+ *             purchase to the email you paid with. Coins that landed at boot (after
+ *             the refresh) bring this face up on the next visit, so the offer to save
+ *             them isn't missed.
  *   LOG IN    on a new headset: type your email, open the link on your phone,
  *             type the six-digit code it shows. The game restarts as your
  *             account, with your save and every coin you bought.
@@ -185,6 +189,7 @@ export class IslandBank {
       this.face = 'checkout';
       void startCheckout(this.chosen.id);
     } else if (id === 'back' || id === 'done') {
+      bank.landed = 0;
       if (bank.checkout) cancelCheckout();
       cancelRecovery();
       this.face = 'packs';
@@ -229,9 +234,10 @@ export class IslandBank {
     if (!inside) this.visited = false;
     const co = bank.checkout;
     const paid = co?.state === 'paid';
-    if (paid && !this.wasPaid) {
+    if ((paid && !this.wasPaid) || (bank.landed > 0 && this.face === 'packs' && inside)) {
       this.face = 'paid';
       if (inside) winFanfare(8);
+      this.paint();
     }
     this.wasPaid = paid;
     if (bank.version !== this.seen) {
@@ -254,16 +260,17 @@ export class IslandBank {
     L.title('ISLAND BANK', 48, 90, 64, 'left', 600);
     text(`wallet $${Math.floor(this.state.money).toLocaleString('en-US')}`, W - 44, 84, 40, INK.amber, 'right', 700);
     const badge = bank.mode === 'test' ? 'TEST MODE · no real money' : bank.mode === 'dev' ? 'DEV BANK · no real money' : bank.mode === 'live' ? '' : '';
-    if (badge) text(badge, 470, 84, 30, '#3fd6c6', 'left', 700);
+    if (badge) text(badge, 620, 84, 30, '#3fd6c6', 'left', 700);
 
     const co = bank.checkout;
     switch (this.face) {
       case 'packs': {
-        if (bank.status === 'loading' || bank.status === 'idle') text('opening the bank…  (the first visit can take half a minute)', 44, 170, 32, INK.dim);
-        if (bank.status === 'off') {
-          text(bank.note || 'the bank is closed right now', 44, 170, 32, INK.danger);
-          btn('retry', 'TRY AGAIN', 44, 200, 300, 80);
-        }
+        text('SUPPORT THE GAME', 44, 190, 56, BRASS, 'left', 700);
+        if (bank.status === 'loading' || bank.status === 'idle') text('opening the bank…  (the first visit can take half a minute)', 44, 250, 32, INK.dim);
+        else if (bank.status === 'off') {
+          text(bank.note || 'the bank is closed right now', 44, 250, 32, INK.danger);
+          btn('retry', 'TRY AGAIN', W - 344, 140, 300, 80);
+        } else text('Enjoying the island? Chip in to keep it growing, and take some coins as a thank-you.', 44, 250, 32, INK.hot, 'left', 600, W - 88);
         const open = bank.status === 'ready';
         bank.packs.forEach((p, i) => {
           const x = 44 + i * 358;
@@ -294,20 +301,21 @@ export class IslandBank {
         // the account
         const a = bank.account;
         if (a.protected) {
-          text(`✓ Your purchases are saved to ${a.email}.`, 44, 700, 36, INK.good, 'left', 700);
+          text(`✓ Your coins are saved to ${a.email}.`, 44, 700, 36, INK.good, 'left', 700);
           text('Log in with it at this bank on any headset to get them back.', 44, 744, 30, INK.dim);
         } else {
-          text('Keep what you buy: save it to your email, then log in on any headset.', 44, 700, 30, INK.dim);
+          text('Keep your thank-you coins: save them to your email, then log in on any headset.', 44, 700, 30, INK.dim);
           btn('save-type', 'SAVE MY PURCHASES', 44, 720, 520, 80, BRASS, true, 34);
           btn('login', 'LOG IN (new headset)', 590, 720, 520, 80, '#3fd6c6', true, 34);
         }
-        text('18+ only. Coins are for play in Fish & Chips: no cash value, never withdrawn or exchanged. Payments by Stripe.', 44, 872, 22, INK.dim, 'left', 500, W - 88);
+        text('18+ only. Coins are a thank-you for play in Fish & Chips: no cash value, never withdrawn or exchanged. Payments by Stripe.', 44, 872, 22, INK.dim, 'left', 500, W - 88);
         break;
       }
       case 'confirm': {
         const p = this.chosen!;
-        text(`${p.coins.toLocaleString('en-US')} coins for ${priceLabel(p.minor)}`, W / 2, 230, 72, INK.hot, 'center', 700);
-        text('Before you buy:', 120, 340, 36, BRASS, 'left', 700);
+        text(`Support the game with ${priceLabel(p.minor)}`, W / 2, 210, 64, INK.hot, 'center', 700);
+        text(`and take ${p.coins.toLocaleString('en-US')} coins as a thank-you`, W / 2, 268, 38, INK.dim, 'center');
+        text('Before you pay:', 120, 340, 36, BRASS, 'left', 700);
         const lines = [
           '• You are 18 or over.',
           '• Coins are for play in Fish & Chips only. They have no cash value and',
@@ -332,7 +340,7 @@ export class IslandBank {
           c.fill();
           drawQr(c, co.short, 90, 160, 500);
           text('Pay on your phone', 680, 200, 54, INK.hot, 'left', 700);
-          text(`${priceLabel(co.pack.minor)} for ${co.pack.coins.toLocaleString('en-US')} coins`, 680, 252, 36, INK.dim);
+          text(`${priceLabel(co.pack.minor)} support · ${co.pack.coins.toLocaleString('en-US')} coins back`, 680, 252, 36, INK.dim, 'left', 600, W - 724);
           text('1.  Take a screenshot of this code.', 680, 306, 32, INK.hot);
           text('2.  Bring the screenshot up on your phone.', 680, 346, 32, INK.hot);
           text('3.  Tap the QR code there to pay.', 680, 386, 32, INK.hot);
@@ -347,16 +355,17 @@ export class IslandBank {
         break;
       }
       case 'paid': {
-        const got = co?.paid ?? 0;
-        text(`+${got.toLocaleString('en-US')}`, W / 2, 300, 150, '#ffd24a', 'center', 700);
-        text('coins landed in your wallet', W / 2, 370, 44, INK.hot, 'center');
+        const got = co?.paid || bank.landed;
+        text('THANK YOU FOR SUPPORTING THE GAME!', W / 2, 180, 52, BRASS, 'center', 700);
+        text(`+${got.toLocaleString('en-US')}`, W / 2, 320, 130, '#ffd24a', 'center', 700);
+        text('coins landed in your wallet, with thanks', W / 2, 390, 40, INK.hot, 'center');
         const a = bank.account;
         if (a.protected) {
           text(`Saved to ${a.email}: log in with it on any headset.`, W / 2, 480, 34, INK.good, 'center', 700);
           btn('done', 'DONE', W / 2 - 220, 560, 440, 110, BRASS, true, 44);
         } else if (bank.protecting.stage === 'busy') text('saving…', W / 2, 520, 40, INK.dim, 'center');
         else {
-          text('Save this purchase to your email, so a new headset can get it back:', W / 2, 470, 32, INK.dim, 'center');
+          text('Save your coins to your email, so a new headset can get them back:', W / 2, 470, 32, INK.dim, 'center');
           if (bank.lastEmail) btn('save-paid', `SAVE TO ${bank.lastEmail}`, W / 2 - 520, 520, 1040, 100, '#ffb000', true, 38);
           btn('save-type', bank.lastEmail ? 'ANOTHER EMAIL' : 'SAVE TO MY EMAIL', W / 2 - 520, 640, 500, 90, BRASS, true, 32);
           btn('done', 'NOT NOW', W / 2 + 20, 640, 500, 90, 'rgba(255,255,255,0.25)', true, 32);

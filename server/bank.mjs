@@ -16,7 +16,7 @@
  *   GET  /whoami      {uid, protected, email (masked)}          (signed)
  *   POST /protect     {email} → attach it to this uid           (signed)
  *   POST /handoff     {} → {code} for a new headset to redeem   (signed)
- *   POST /redeem      {code} → {token} that signs it in as you  (public)
+ *   POST /redeem      {code} → {token} that signs it in as you  (public, throttled)
  *   GET  /save        {data, at} — this account's game save     (signed)
  *   POST /save        {data, at} → keep it                      (signed)
  *
@@ -48,16 +48,21 @@
  *   FIREBASE_SERVICE_ACCOUNT the service-account JSON (raw or base64)
  *   BANK_CURRENCY            ISO code, default usd
  *   PUBLIC_URL               where paid.html lives (default https://gamblefish.web.app)
+ *   RETURN_URLS              other addresses the game is served from, comma-separated: a
+ *                            checkout started there returns there (default the GitHub Pages copy)
  *   BANK_TAX_CODE            the packs' Stripe tax code (default txcd_10201000, downloaded video games)
  *   BANK_DEV=1               force dev mode (never on a public host)
  */
 
 import { createServer } from 'node:http';
 import { randomBytes } from 'node:crypto';
+import { callerOf, RedeemGuard, returnBase } from './guards.mjs';
 
 const PORT = Number(process.env.PORT || 8792);
 const CURRENCY = (process.env.BANK_CURRENCY || 'usd').toLowerCase();
 const PUBLIC_URL = (process.env.PUBLIC_URL || 'https://gamblefish.web.app').replace(/\/$/, '');
+/** Every address a checkout may return to (see guards.mjs). */
+const RETURN_URLS = [PUBLIC_URL, ...(process.env.RETURN_URLS ?? 'https://yellkell.github.io/gamblefish').split(',')].map((u) => u.trim()).filter(Boolean);
 const STRIPE_KEY = process.env.STRIPE_SECRET_KEY || '';
 const WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET || '';
 const FORCE_DEV = process.env.BANK_DEV === '1';
@@ -81,7 +86,7 @@ export const PACKS = [
   { id: 'vault', coins: 7000, minor: 1799 },
 ];
 
-const packName = (pack) => `${pack.coins.toLocaleString('en-US')} Fish & Chips coins`;
+const packName = (pack) => `Support Fish & Chips: ${pack.coins.toLocaleString('en-US')} coins as thanks`;
 
 /* ── the ledger ──────────────────────────────────────────────────────── */
 
@@ -235,6 +240,8 @@ const codes = new Map();
 const handoffs = new Map();
 const HANDOFF_TTL_MS = 10 * 60 * 1000;
 const MAX_HANDOFFS_PER_UID = 3;
+/** Wrong LOG IN codes, counted so nobody can guess their way into an account. */
+const redeemGuard = new RedeemGuard();
 /** Dev mode only: email → uid, in place of Firebase Auth. */
 const devEmails = new Map();
 
@@ -403,9 +410,10 @@ function price(minor) {
 
 /* ── the checkout ────────────────────────────────────────────────────── */
 
-async function createCheckout(req, uid, pack) {
+async function createCheckout(req, uid, pack, home) {
   const code = newCode();
   const base = selfBase(req);
+  const back = returnBase(home, RETURN_URLS, PUBLIC_URL);
   let id;
   let url;
   if (stripe) {
@@ -426,14 +434,14 @@ async function createCheckout(req, uid, pack) {
             tax_behavior: 'inclusive',
             product_data: {
               name: packName(pack),
-              description: 'In-game coins for Fish & Chips. For play only: no cash value, cannot be withdrawn or exchanged. 18+.',
+              description: 'Thank you for supporting Fish & Chips. Your coins are for play only: no cash value, cannot be withdrawn or exchanged. 18+.',
               tax_code: TAX_CODE,
             },
           },
         },
       ],
-      success_url: `${PUBLIC_URL}/paid.html?s={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${PUBLIC_URL}/paid.html?cancel=1`,
+      success_url: `${back}/paid.html?s={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${back}/paid.html?cancel=1`,
       expires_at: Math.floor(Date.now() / 1000) + 31 * 60,
     });
     id = session.id;
@@ -535,7 +543,7 @@ export function handleHttp(req, res) {
       const pack = PACKS.find((p) => p.id === body?.pack);
       if (!pack) return json(res, 400, { error: 'no such pack' });
       if (openFor(uid) >= MAX_OPEN_PER_UID) return json(res, 429, { error: 'too many open checkouts: pay or wait' });
-      json(res, 200, await createCheckout(req, uid, pack));
+      json(res, 200, await createCheckout(req, uid, pack, body?.home));
     });
 
   if (req.method === 'POST' && path === '/claim') return signed(req, res, async (uid) => json(res, 200, await ledger.claim(uid)));
@@ -571,10 +579,16 @@ export function handleHttp(req, res) {
 
   if (req.method === 'POST' && path === '/redeem') {
     void (async () => {
+      const who = callerOf(req);
+      const refused = redeemGuard.refuse(who);
+      if (refused) return json(res, 429, { error: refused });
       const body = await readBody(req);
       const code = String(body?.code ?? '').trim();
       const h = /^\d{6}$/.test(code) ? handoffs.get(code) : undefined;
-      if (!h || h.at < Date.now() - HANDOFF_TTL_MS) return json(res, 404, { error: 'no such code: it may have expired' });
+      if (!h || h.at < Date.now() - HANDOFF_TTL_MS) {
+        redeemGuard.miss(who);
+        return json(res, 404, { error: 'no such code: it may have expired' });
+      }
       handoffs.delete(code); // once
       try {
         const token = auth ? await auth.createCustomToken(h.uid) : `dev:${h.uid}`;

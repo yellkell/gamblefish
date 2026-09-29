@@ -18,7 +18,8 @@
     "check:camps": "node tools/camps-check.mjs",
     "check:line": "node tools/line-check.mjs",
     "check:mining": "node tools/mining-check.mjs",
-    "check:statue": "node tools/statue-check.mjs"
+    "check:statue": "node tools/statue-check.mjs",
+    "check:bank": "node tools/bank-check.mjs"
   },
   "dependencies": {
     "@iwsdk/core": "0.4.2",
