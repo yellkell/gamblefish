@@ -6,8 +6,8 @@
  * Every prize is an item in one of seven grades, named and coloured the way a CS case does it.
  * The gems are only in the case once the Jeweller's pickaxe is yours (the pouch comes with it);
  * before that each grade holds just its logs and fish. Either way every grade has something in it;
- * the case returns about 92% with the gems, 94.5% without (RETURNS, which the board shows and
- * tools/casino-check.mjs proves).
+ * the case returns about 92% with the gems, 94.5% without (RETURNS, which tools/casino-check.mjs
+ * proves).
  *
  * The draw picks a grade by its odds, then an item in it (all equally likely), then the item's
  * size: a fish's weight, a stone's carats. What it's worth is what the island pays for it (the

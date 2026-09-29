@@ -53,7 +53,7 @@ import { roundRect } from '../ui/panel.ts';
 import { InteractivePanel, register } from '../ui/pointer.ts';
 import { thumbnail } from '../ui/thumbnail.ts';
 import type { Interior } from '../village/interiors.ts';
-import { CASE_PRICE, contents, GRADES, gradeOf, ITEMS, itemName, openCase, RETURNS, stripFor, type CaseItem, type GradeId, type Prize } from './cases.ts';
+import { CASE_PRICE, contents, GRADES, gradeOf, ITEMS, itemName, openCase, stripFor, type CaseItem, type GradeId, type Prize } from './cases.ts';
 import { Celebration, raysTexture, type Tier } from './celebrate.ts';
 import { look } from './look.ts';
 import { payOut, stake } from './money.ts';
@@ -529,7 +529,7 @@ export class CaseWall {
       L.text(g.name, ox + 34, y, 22, 'ink', 'left', 600, 220);
       L.text(`${(g.odds / 100).toFixed(g.odds < 100 ? 2 : 1)}%`, 1344, y, 22, 'ink', 'right', 700);
     });
-    L.text(`returns about ${this.gems ? RETURNS.gems : RETURNS.noGems}% · one fish in ten comes out Silver`, ox, 432, 17, 'dim', 'left', 500, 330);
+    L.text('one fish in ten comes out Silver', ox, 432, 17, 'dim', 'left', 500, 330);
     const busy = this.phase === 'spinning' || this.phase === 'landed';
     L.button('open', busy ? 'OPENING…' : `OPEN · $${CASE_PRICE}`, ox, 450, 328, 88, busy ? 'off' : this.state.money >= CASE_PRICE ? 'go' : 'off', 38);
     L.end();

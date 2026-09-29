@@ -201,7 +201,7 @@ for (const gems of [true, false]) {
   for (let i = 0; i < OPENS; i++) caseBack += openCase(cr, gems).value;
   const rtp = (caseBack / (OPENS * CASE_PRICE)) * 100;
   const says = gems ? RETURNS.gems : RETURNS.noGems;
-  check(`a million $${CASE_PRICE} cases ${gems ? 'with' : 'without'} the gems: within 1% of the ${says}% the board says`, Math.abs(rtp - says) < 1, `${rtp.toFixed(1)}%`);
+  check(`a million $${CASE_PRICE} cases ${gems ? 'with' : 'without'} the gems: within 1% of ${says}%`, Math.abs(rtp - says) < 1, `${rtp.toFixed(1)}%`);
 }
 
 const pass = results.filter(Boolean).length;
