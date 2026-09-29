@@ -281,7 +281,9 @@ and the vendors.
     the figures slam and burst, then float away.
 - **The case wall** (`src/casino/CaseWall.ts`, rules in `src/casino/cases.ts`): on The
   Lucky Lure's right-hand wall, between the roulette table and the door. It opens THE LURE
-  CASE ($50) the way a CS case opens.
+  CASE ($50) the way a CS case opens. It's a cabinet like the slot machines: plum lacquer
+  and gold, a sunburst painted out from the window, and a lit CASE OPENING sign on top
+  whose bulbs chase round it, race while the strip runs, and flash the prize's grade.
   - **The spin:** point at OPEN and pull the trigger. A strip of cards races past a gold
     marker, ticking card by card, and slows to a crawl onto your prize. The prize is drawn
     first (crypto RNG) and the strip is dressed round it, so the spin only shows it.

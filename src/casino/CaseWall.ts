@@ -1,9 +1,13 @@
 /**
  * The case wall in The Lucky Lure: THE LURE CASE, opened the way a CS case is.
  *
- *  THE WALL   A lacquered panel on the room's side wall, CASE OPENING in neon over it. At eye
- *             height a long window with a gold marker down its middle, and behind the glass a
- *             strip of cards, one per prize, each wearing its grade's colour along the bottom.
+ *  THE WALL   A cabinet against the room's side wall, like the slot machines next door: plum
+ *             lacquer on a plinth, gold down its edges, its front painted with a sunburst out from
+ *             the window, and on top a lit sign, CASE OPENING in neon behind glass, ringed with
+ *             bulbs that chase round it (racing as the strip runs, flashing the prize's grade). At
+ *             eye height a long window with a gold marker down its middle, and behind the glass a
+ *             strip of cards, one per prize, each wearing its grade's colour along the bottom
+ *             (each card trimmed at the glass's ends, so none of the strip shows outside it).
  *             Under it the case's board: everything in the case, in grade colours, the odds of
  *             each grade, and OPEN ($50). Point and pull the trigger. The gems are only in the
  *             case once the Jeweller's pickaxe is yours: till then it's logs and fish (and the
@@ -29,13 +33,18 @@ import {
   CylinderGeometry,
   ExtrudeGeometry,
   Group,
+  InstancedMesh,
+  Matrix4,
   Mesh,
   MeshBasicMaterial,
   MeshLambertMaterial,
+  MeshStandardMaterial,
   PlaneGeometry,
   Shape,
+  SphereGeometry,
   SRGBColorSpace,
   Vector3,
+  type Material,
   type Camera,
 } from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
@@ -48,28 +57,45 @@ import type { GameState } from '../fishing/tidewater.ts';
 import { pulseHand } from '../input/haptics.ts';
 import { gemMesh } from '../mining/gemMesh.ts';
 import { lookFor, Lettering, mount } from '../ui/boards.ts';
-import { font } from '../ui/fonts.ts';
+import { font, onFontsReady } from '../ui/fonts.ts';
 import { roundRect } from '../ui/panel.ts';
 import { InteractivePanel, register } from '../ui/pointer.ts';
 import { thumbnail } from '../ui/thumbnail.ts';
 import type { Interior } from '../village/interiors.ts';
 import { CASE_PRICE, contents, GRADES, gradeOf, ITEMS, itemName, openCase, stripFor, type CaseItem, type GradeId, type Prize } from './cases.ts';
 import { Celebration, raysTexture, type Tier } from './celebrate.ts';
-import { look } from './look.ts';
+import { casinoEnv, look } from './look.ts';
 import { payOut, stake } from './money.ts';
 
-/* ── the wall (its own frame: the wall at z = 0, facing +z, floor at y = 0) ── */
-const W = 1.8;
-const PANEL = { y0: 0.4, y1: 2.62 };
+/* ── the cabinet (its own frame: the wall at z = 0, facing +z, floor at y = 0) ── */
+/** the body's width, and how far its front stands out from the wall */
+const W = 1.72;
+const DEPTH = 0.17;
+/** the body (on its plinth), and the lit sign on top (village/interiors.ts FURNITURE C holds all of it) */
+const BODY = { y0: 0.1, y1: 2.08 };
+const SIGN = { y0: 2.08, y1: 2.62 };
+const SIGN_W = W + 0.06;
+const SIGN_D = DEPTH + 0.05;
 const STRIP_Y = 1.62;
 const WIN_W = 1.5;
 const WIN_H = 0.33;
 const CARD_W = 0.235;
 const CARD_H = 0.27;
 const PITCH = 0.25;
-const CARD_Z = 0.085;
-const FACE_Z = 0.06; // the face's back; it's 0.05 deep
+/** the window's housing stands on the body's front (it's 0.05 deep) */
+const FACE_Z = DEPTH;
+const FACE_W = W - 0.1;
+const FACE_H = 0.54;
+const CARD_Z = FACE_Z + 0.025;
 const N_CARDS = 60;
+/** the Lucky Lure's neon */
+const NEON = '#ff3fb4';
+/** a bulb lit, and dark */
+const BULB_ON = 0xffd060;
+const BULB_OFF = 0x4a3410;
+const _on = new Color(BULB_ON);
+const _off = new Color(BULB_OFF);
+const _c = new Color();
 /** where the prize sits in the strip */
 const WIN_AT = 52;
 /** how long the strip runs */
@@ -79,7 +105,7 @@ const LAND_PAUSE = 0.35;
 /** how long the prize card stays out */
 const SHOW_T = 4.2;
 /** where the prize card comes out to */
-const OUT = new Vector3(0, STRIP_Y + 0.03, 0.3);
+const OUT = new Vector3(0, STRIP_Y + 0.03, CARD_Z + 0.215);
 
 export interface CaseWallOptions {
   /** where it hangs, in the room's floor frame: x, z, and its turn (0 = facing +z) */
@@ -97,6 +123,11 @@ export class CaseWall {
   private readonly board: InteractivePanel;
   private readonly letters: Lettering;
   private readonly cards: Mesh<PlaneGeometry, MeshBasicMaterial>[] = [];
+  private readonly bulbs: InstancedMesh;
+  private readonly bulbCount: number;
+  /** how far the bulbs' chase has run (bulbs) */
+  private chase = 0;
+  private readonly floorGlow: Mesh<PlaneGeometry, MeshBasicMaterial>;
   private readonly art = new Map<string, CanvasTexture>();
   private readonly pics = new Map<string, HTMLCanvasElement>();
   private readonly prizeCard: Mesh<PlaneGeometry, MeshBasicMaterial>;
@@ -132,40 +163,82 @@ export class CaseWall {
     g.rotation.y = opts.at[2];
     room.contents.add(g);
 
-    // the panel: deep lacquer in a gold edge
-    const panelH = PANEL.y1 - PANEL.y0;
-    const back = new Mesh(new RoundedBoxGeometry(W, panelH, 0.06, 3, 0.02), look.gloss(r, 0x121420));
-    back.position.set(0, (PANEL.y0 + PANEL.y1) / 2, 0.03);
-    g.add(back);
+    // the cabinet: a plinth, the body in plum lacquer with gold down its edges, its front painted
+    // (a sunburst out from the window, a gilt pinstripe, the house's name on the door)
     const gold = look.gold(r);
-    for (const [x, y, w, h] of [
-      [0, PANEL.y1, W + 0.02, 0.025],
-      [0, PANEL.y0, W + 0.02, 0.025],
-      [-W / 2, (PANEL.y0 + PANEL.y1) / 2, 0.025, panelH],
-      [W / 2, (PANEL.y0 + PANEL.y1) / 2, 0.025, panelH],
-    ] as const) {
-      const rail = new Mesh(new RoundedBoxGeometry(w, h, 0.03, 2, 0.008), gold);
-      rail.position.set(x, y, 0.065);
-      g.add(rail);
+    const black = look.gloss(r, 0x14101a);
+    const bodyH = BODY.y1 - BODY.y0;
+    const plinth = new Mesh(new RoundedBoxGeometry(W + 0.04, BODY.y0, DEPTH + 0.02, 3, 0.02), black);
+    plinth.position.set(0, BODY.y0 / 2, (DEPTH + 0.02) / 2);
+    const body = new Mesh(new RoundedBoxGeometry(W, bodyH, DEPTH, 4, 0.025), look.paint(r, 0x2a0f33));
+    body.position.set(0, (BODY.y0 + BODY.y1) / 2, DEPTH / 2);
+    const front = new Mesh(
+      new PlaneGeometry(W - 0.07, bodyH - 0.07),
+      new MeshStandardMaterial({ map: frontTexture(), emissive: 0xffffff, emissiveMap: frontTexture(), emissiveIntensity: 0.3, roughness: 0.16, metalness: 0.05, envMap: casinoEnv(r), envMapIntensity: 0.9 }),
+    );
+    front.position.set(0, (BODY.y0 + BODY.y1) / 2, DEPTH + 0.001);
+    g.add(plinth, body, front);
+    for (const sx of [-1, 1]) {
+      const edge = new Mesh(new RoundedBoxGeometry(0.02, bodyH - 0.02, 0.02, 2, 0.008), gold);
+      edge.position.set(sx * (W / 2 - 0.004), (BODY.y0 + BODY.y1) / 2, DEPTH - 0.004);
+      g.add(edge);
     }
+    const band = new Mesh(new RoundedBoxGeometry(W + 0.01, 0.022, DEPTH + 0.03, 2, 0.008), gold);
+    band.position.set(0, BODY.y0 + 0.011, (DEPTH + 0.03) / 2);
+    g.add(band);
 
-    // the neon over it, with its glow on the wall
-    const title = new Mesh(new PlaneGeometry(1.56, 0.36), new MeshBasicMaterial({ map: neonTexture(), transparent: true, depthWrite: false, toneMapped: false }));
-    title.position.set(0, 2.37, 0.064);
-    const halo = new Mesh(new PlaneGeometry(1.9, 0.7), new MeshBasicMaterial({ map: softTexture(), color: 0xff3fb4, transparent: true, opacity: 0.28, blending: AdditiveBlending, depthWrite: false, toneMapped: false }));
-    halo.position.set(0, 2.37, 0.062);
-    g.add(halo, title);
+    // the sign on top: a lightbox, CASE OPENING in neon behind its glass, gilt round it, bulbs
+    // round that, and its pink on the wall behind and the floor in front
+    const signH = SIGN.y1 - SIGN.y0;
+    const signY = (SIGN.y0 + SIGN.y1) / 2;
+    const box = new Mesh(new RoundedBoxGeometry(SIGN_W, signH, SIGN_D, 4, 0.03), black);
+    box.position.set(0, signY, SIGN_D / 2);
+    g.add(box);
+    const faceW = SIGN_W - 0.1;
+    const faceH = signH - 0.1;
+    const sign = new Mesh(new PlaneGeometry(faceW, faceH), new MeshBasicMaterial({ map: signTexture(faceW / faceH), toneMapped: false }));
+    sign.position.set(0, signY, SIGN_D + 0.001);
+    const signGlass = new Mesh(new PlaneGeometry(faceW, faceH), new MeshBasicMaterial({ map: glassTexture(), transparent: true, opacity: 0.55, blending: AdditiveBlending, depthWrite: false }));
+    signGlass.position.set(0, signY, SIGN_D + 0.004);
+    g.add(sign, signGlass);
+    g.add(frameRing(faceW, faceH, 0.016, 0.012, gold, signY, SIGN_D));
+    const signBack = new Mesh(new PlaneGeometry(SIGN_W + 1.3, signH + 1.1), new MeshBasicMaterial({ map: softTexture(), color: NEON, transparent: true, opacity: 0.3, blending: AdditiveBlending, depthWrite: false, toneMapped: false }));
+    signBack.position.set(0, signY, 0.012);
+    g.add(signBack);
+    this.floorGlow = new Mesh(new PlaneGeometry(2.2, 1.3).rotateX(-Math.PI / 2), new MeshBasicMaterial({ map: softTexture(), color: NEON, transparent: true, opacity: 0.16, blending: AdditiveBlending, depthWrite: false, toneMapped: false }));
+    this.floorGlow.position.set(0, 0.006, DEPTH + 0.55);
+    g.add(this.floorGlow);
 
-    // the window: a dark well behind the cards, a face with the window cut in it, a chrome ring
-    const well = new Mesh(new PlaneGeometry(WIN_W + 0.3, WIN_H + 0.2), new MeshBasicMaterial({ map: wellTexture() }));
-    well.position.set(0, STRIP_Y, 0.062);
+    // bulbs round the sign and round the window
+    const bulbPts: [number, number, number][] = [];
+    for (let k = 0; k < 44; k++) {
+      const [x, y] = perimeter(k / 44, faceW / 2 + 0.035, faceH / 2 + 0.03);
+      bulbPts.push([x, signY + y, SIGN_D + 0.012]);
+    }
+    for (let k = 0; k < 36; k++) {
+      const [x, y] = perimeter(k / 36, FACE_W / 2 - 0.03, FACE_H / 2 - 0.03);
+      if (Math.abs(y) < FACE_H / 2 - 0.04 || Math.abs(x) < 0.05) continue; // the long sides only, and not over the notches
+      bulbPts.push([x, STRIP_Y + y, FACE_Z + 0.064]);
+    }
+    this.bulbCount = bulbPts.length;
+    this.bulbs = new InstancedMesh(new SphereGeometry(0.011, 10, 8), new MeshBasicMaterial({ color: 0xffffff, toneMapped: false }), this.bulbCount);
+    const at = new Matrix4();
+    bulbPts.forEach(([x, y, z], i) => {
+      this.bulbs.setMatrixAt(i, at.makeTranslation(x, y, z));
+      this.bulbs.setColorAt(i, new Color(BULB_OFF));
+    });
+    g.add(this.bulbs);
+
+    // the window: a dark well behind the cards, a housing with the window cut in it, a chrome ring
+    const well = new Mesh(new PlaneGeometry(WIN_W + 0.06, WIN_H + 0.06), new MeshBasicMaterial({ map: wellTexture() }));
+    well.position.set(0, STRIP_Y, FACE_Z + 0.006);
     g.add(well);
     const face = new Shape();
-    rrect(face, -W / 2 + 0.06, STRIP_Y - 0.27, W - 0.12, 0.54, 0.03);
+    rrect(face, -FACE_W / 2, STRIP_Y - FACE_H / 2, FACE_W, FACE_H, 0.03);
     const hole = new Shape();
     rrect(hole, -WIN_W / 2, STRIP_Y - WIN_H / 2, WIN_W, WIN_H, 0.02);
     face.holes.push(hole);
-    const faceMesh = new Mesh(new ExtrudeGeometry(face, { depth: 0.05, bevelEnabled: true, bevelSize: 0.008, bevelThickness: 0.008, bevelSegments: 2 }), look.gloss(r, 0x1d2130));
+    const faceMesh = new Mesh(new ExtrudeGeometry(face, { depth: 0.05, bevelEnabled: true, bevelSize: 0.008, bevelThickness: 0.008, bevelSegments: 2 }), look.gloss(r, 0x1a0b20));
     faceMesh.position.z = FACE_Z;
     g.add(faceMesh);
     const ringOuter = new Shape();
@@ -177,11 +250,12 @@ export class CaseWall {
     ring.position.z = FACE_Z + 0.058;
     g.add(ring);
 
-    // the cards (only those in the window are drawn, and each is cut off at the window's ends)
-    const cardGeo = new PlaneGeometry(CARD_W, CARD_H);
+    // the cards (only those in the window are drawn, and each is cut off at the window's ends:
+    // layout() trims its quad and its picture, so nothing of the strip is ever outside the glass)
     for (let k = 0; k < N_CARDS; k++) {
-      const m = new Mesh(cardGeo, windowed());
+      const m = new Mesh(new PlaneGeometry(CARD_W, CARD_H), new MeshBasicMaterial({ toneMapped: false }));
       m.visible = false;
+      m.frustumCulled = false;
       g.add(m);
       this.cards.push(m);
     }
@@ -221,7 +295,7 @@ export class CaseWall {
     this.board = new InteractivePanel([1400, 560], [1.5, 0.6]);
     this.letters = new Lettering(this.board, lookFor('C'), 5);
     mount(this.board, lookFor('C'), { renderer: r });
-    this.board.mesh.position.set(0, 0.98, 0.08);
+    this.board.mesh.position.set(0, 0.98, DEPTH + 0.02);
     g.add(this.board.mesh);
     this.board.paint = () => this.paintBoard();
     this.board.onClick = (id) => id === 'open' && this.open();
@@ -402,7 +476,35 @@ export class CaseWall {
     this.updatePrize();
     // the marker breathes; brighter while the strip runs
     this.markerGlow.material.opacity = (this.phase === 'spinning' ? 0.8 : 0.45) + 0.15 * Math.sin(this.clock * 5);
+    this.updateBulbs(dt);
     this.party.update(dt, camera);
+  }
+
+  /**
+   * The bulbs: a lazy chase while it waits; racing round as the strip runs, slowing as it slows;
+   * all on as it lands; then (Mil-Spec and up) flashing in the prize's grade.
+   */
+  private updateBulbs(dt: number): void {
+    const spinning = this.phase === 'spinning';
+    this.chase += (spinning ? 5 + 34 * Math.pow(1 - Math.min(1, this.t / SPIN_T), 2) : 4) * dt;
+    const step = Math.floor(this.chase);
+    const p = this.prize;
+    const showing = this.phase === 'showing' && p !== null && this.t < SHOW_T - 0.4;
+    const flash = showing && rank(p.item.grade) >= 2;
+    const blink = Math.floor(this.clock * 10);
+    if (flash) _c.set(gradeOf(p.item.grade).colour);
+    for (let i = 0; i < this.bulbCount; i++) {
+      // (the chase runs clockwise: the lit bulbs step up the perimeter)
+      const k = i - (step % 28) + 28;
+      let on: boolean;
+      if (flash) on = (i + blink) % 2 === 0;
+      else if (showing || this.phase === 'landed') on = true;
+      else if (spinning) on = k % 4 === 0;
+      else on = k % 7 === 0 || k % 7 === 3;
+      this.bulbs.setColorAt(i, on ? (flash ? _c : _on) : _off);
+    }
+    this.bulbs.instanceColor!.needsUpdate = true;
+    this.floorGlow.material.opacity = flash ? 0.26 + 0.08 * Math.sin(this.clock * 12) : spinning ? 0.21 : 0.16 + 0.02 * Math.sin(this.clock * 1.5);
   }
 
   /** Your card comes out, the party goes up, the prize is yours. */
@@ -423,7 +525,7 @@ export class CaseWall {
     this.dress(); // the rest of the strip goes dark
     if (inside) cardFlip();
     // the party, in the grade's colour, bigger up the grades
-    const at = new Vector3(0, STRIP_Y, 0.34);
+    const at = new Vector3(0, STRIP_Y, CARD_Z + 0.255);
     const g = rank(p.item.grade);
     const tier: Tier | 0 = g >= 5 ? 3 : g >= 3 ? 2 : g >= 2 ? 1 : 0;
     if (tier)
@@ -433,7 +535,7 @@ export class CaseWall {
         tint,
         coins: p.item.grade === 'rare',
         banner: p.item.grade === 'rare' ? '★ RARE SPECIAL ★' : p.item.grade === 'covert' ? 'COVERT!' : p.item.grade === 'classified' ? 'CLASSIFIED' : undefined,
-        bannerAt: new Vector3(0, 2.0, 0.42),
+        bannerAt: new Vector3(0, 2.0, CARD_Z + 0.335),
         hold: p.item.grade === 'rare' ? 3 : 0,
         quiet: !inside,
       });
@@ -454,14 +556,25 @@ export class CaseWall {
     });
   }
 
+  /** Each card where the strip has it, trimmed to the window: its quad and its picture both cut at the glass's ends. */
   private layout(): void {
+    const half = WIN_W / 2;
     this.cards.forEach((c, k) => {
       const x = k * PITCH - this.p;
-      c.visible = Math.abs(x) < WIN_W / 2 + CARD_W / 2;
-      if (c.visible) {
-        c.position.set(x, STRIP_Y, CARD_Z);
-        (c.material.userData.x as { value: number }).value = x;
-      }
+      const x0 = Math.max(x - CARD_W / 2, -half);
+      const x1 = Math.min(x + CARD_W / 2, half);
+      c.visible = x1 - x0 > 1e-4;
+      if (!c.visible) return;
+      c.position.set(0, STRIP_Y, CARD_Z);
+      // PlaneGeometry's corners: top left, top right, bottom left, bottom right
+      const pos = c.geometry.attributes.position;
+      const uv = c.geometry.attributes.uv;
+      const u0 = (x0 - (x - CARD_W / 2)) / CARD_W;
+      const u1 = (x1 - (x - CARD_W / 2)) / CARD_W;
+      pos.setX(0, x0).setX(2, x0).setX(1, x1).setX(3, x1);
+      uv.setX(0, u0).setX(2, u0).setX(1, u1).setX(3, u1);
+      pos.needsUpdate = true;
+      uv.needsUpdate = true;
     });
   }
 
@@ -535,25 +648,6 @@ export class CaseWall {
     L.button('open', busy ? 'OPENING…' : `OPEN · $${CASE_PRICE}`, ox, 424, rx - ox, 80, busy ? 'off' : this.state.money >= CASE_PRICE ? 'go' : 'off', 36);
     L.end();
   }
-}
-
-/**
- * A card's material: its picture, cut off where the card runs past either end of the window (the
- * card only ever slides along x, so its x in the wall's frame is its position plus its own x).
- */
-function windowed(): MeshBasicMaterial {
-  const m = new MeshBasicMaterial({ toneMapped: false });
-  const x = { value: 0 };
-  m.userData.x = x;
-  m.onBeforeCompile = (sh) => {
-    sh.uniforms.uCardX = x;
-    sh.vertexShader = sh.vertexShader.replace('void main() {', 'varying float vCardX;\nvoid main() {\n  vCardX = position.x;');
-    sh.fragmentShader = sh.fragmentShader.replace(
-      'void main() {',
-      `uniform float uCardX;\nvarying float vCardX;\nvoid main() {\n  if (abs(uCardX + vCardX) > ${(WIN_W / 2).toFixed(4)}) discard;`,
-    );
-  };
-  return m;
 }
 
 /** A grade's place, commonest (0) to rarest (6). */
@@ -693,27 +787,252 @@ function prizeTexture(p: Prize, pic: HTMLCanvasElement | undefined): CanvasTextu
   return tex(c);
 }
 
-/** CASE OPENING in neon tube: a wide pink glow, a white-hot core. */
-function neonTexture(): CanvasTexture {
-  const [c, g] = canvas(1040, 240);
-  g.textAlign = 'center';
-  g.textBaseline = 'middle';
-  g.lineJoin = 'round';
-  g.font = font(700, 118);
-  g.shadowColor = '#ff3fb4';
-  g.shadowBlur = 40;
-  g.strokeStyle = '#ff3fb4';
-  g.lineWidth = 12;
-  g.strokeText('CASE OPENING', 520, 104, 1000);
-  g.shadowBlur = 0;
-  g.fillStyle = '#fff4fb';
-  g.fillText('CASE OPENING', 520, 104, 1000);
-  g.font = font(700, 40);
-  g.shadowColor = '#ffc83a';
-  g.shadowBlur = 18;
-  g.fillStyle = '#ffd98a';
-  g.fillText(`THE LURE CASE · $${CASE_PRICE}`, 520, 196, 1000);
-  return tex(c);
+/**
+ * The cabinet's painted front: plum lacquer, darker toward the floor, a sunburst out from the window
+ * with a pink bloom round it, a gilt pinstripe stepped at the corners, and the door under the board
+ * latticed in gold with the house's name on its plate. (It's the body's front less 3.5 cm all round.)
+ */
+let front: CanvasTexture | null = null;
+function frontTexture(): CanvasTexture {
+  if (front) return front;
+  const FW = W - 0.07;
+  const FH = BODY.y1 - BODY.y0 - 0.07;
+  const top = (BODY.y0 + BODY.y1) / 2 + FH / 2;
+  const PX = 560;
+  const [c, g] = canvas(Math.round(FW * PX), Math.round(FH * PX));
+  const X = (m: number): number => (m + FW / 2) * PX;
+  const Y = (m: number): number => (top - m) * PX;
+  const paint = (): void => {
+    g.clearRect(0, 0, c.width, c.height);
+    const base = g.createLinearGradient(0, 0, 0, c.height);
+    base.addColorStop(0, '#3c1548');
+    base.addColorStop(0.45, '#290d34');
+    base.addColorStop(1, '#13061b');
+    g.fillStyle = base;
+    g.fillRect(0, 0, c.width, c.height);
+    // the sunburst, and the bloom round the window
+    const cx = X(0);
+    const cy = Y(STRIP_Y);
+    const R = 1.4 * PX;
+    const rays = g.createRadialGradient(cx, cy, 0.1 * PX, cx, cy, R);
+    rays.addColorStop(0, 'rgba(255, 120, 205, 0.22)');
+    rays.addColorStop(0.45, 'rgba(255, 120, 205, 0.08)');
+    rays.addColorStop(1, 'rgba(255, 120, 205, 0)');
+    g.fillStyle = rays;
+    const N = 44;
+    for (let i = 0; i < N; i += 2) {
+      g.beginPath();
+      g.moveTo(cx, cy);
+      g.arc(cx, cy, R, (i / N) * Math.PI * 2, ((i + 1) / N) * Math.PI * 2);
+      g.closePath();
+      g.fill();
+    }
+    const bloom = g.createRadialGradient(cx, cy, 0, cx, cy, 0.95 * PX);
+    bloom.addColorStop(0, hexA(NEON, 0.3));
+    bloom.addColorStop(1, hexA(NEON, 0));
+    g.fillStyle = bloom;
+    g.fillRect(0, 0, c.width, c.height);
+    // the door under the board: a gold lattice on black, a pinstripe round it, a plate with the name
+    const dx = X(-0.66);
+    const dy = Y(0.585);
+    const dw = 1.32 * PX;
+    const dh = 0.4 * PX;
+    g.save();
+    roundRect(g, dx, dy, dw, dh, 0.03 * PX);
+    g.fillStyle = 'rgba(8, 2, 12, 0.35)';
+    g.fill();
+    g.clip();
+    g.strokeStyle = 'rgba(224, 184, 78, 0.16)';
+    g.lineWidth = 2;
+    const step = 0.075 * PX;
+    for (let x = dx - dh; x < dx + dw + dh; x += step) {
+      g.beginPath();
+      g.moveTo(x, dy);
+      g.lineTo(x + dh, dy + dh);
+      g.moveTo(x + dh, dy);
+      g.lineTo(x, dy + dh);
+      g.stroke();
+    }
+    g.restore();
+    pinstripe(g, dx, dy, dw, dh, 0.03 * PX, 0);
+    const py = Y(0.385);
+    const pw = 0.62 * PX;
+    const ph = 0.105 * PX;
+    roundRect(g, cx - pw / 2, py - ph / 2, pw, ph, ph / 2);
+    g.fillStyle = '#16071d';
+    g.fill();
+    g.strokeStyle = '#d9a53a';
+    g.lineWidth = 3;
+    g.stroke();
+    g.fillStyle = '#e8bf5c';
+    g.font = font(700, Math.round(0.06 * PX));
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    (g as CanvasRenderingContext2D & { letterSpacing?: string }).letterSpacing = `${Math.round(0.008 * PX)}px`;
+    g.fillText('THE LUCKY LURE', cx, py + 2, pw - 0.08 * PX);
+    (g as CanvasRenderingContext2D & { letterSpacing?: string }).letterSpacing = '0px';
+    for (const sx of [-1, 1]) diamond(g, cx + sx * (pw / 2 + 0.05 * PX), py, 0.02 * PX);
+    // the gilt pinstripe round it all
+    pinstripe(g, 0.03 * PX, 0.03 * PX, c.width - 0.06 * PX, c.height - 0.06 * PX, 0, 0.05 * PX);
+  };
+  paint();
+  front = tex(c);
+  onFontsReady(() => {
+    paint();
+    front!.needsUpdate = true;
+  });
+  return front;
+}
+
+/** A gilt pinstripe (a line and a finer one inside it) round a box, rounded by `r` or stepped in at its corners by `notch`. */
+function pinstripe(g: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number, notch: number): void {
+  const path = (i: number): void => {
+    const [a, b, cw, ch] = [x + i, y + i, w - i * 2, h - i * 2];
+    if (!notch) return roundRect(g, a, b, cw, ch, Math.max(0, r - i));
+    const n = notch;
+    g.beginPath();
+    g.moveTo(a + n, b);
+    g.lineTo(a + cw - n, b);
+    g.lineTo(a + cw - n, b + n);
+    g.lineTo(a + cw, b + n);
+    g.lineTo(a + cw, b + ch - n);
+    g.lineTo(a + cw - n, b + ch - n);
+    g.lineTo(a + cw - n, b + ch);
+    g.lineTo(a + n, b + ch);
+    g.lineTo(a + n, b + ch - n);
+    g.lineTo(a, b + ch - n);
+    g.lineTo(a, b + n);
+    g.lineTo(a + n, b + n);
+    g.closePath();
+  };
+  path(0);
+  g.strokeStyle = '#d9a53a';
+  g.lineWidth = 3.5;
+  g.stroke();
+  path(9);
+  g.strokeStyle = 'rgba(255, 231, 163, 0.55)';
+  g.lineWidth = 1.2;
+  g.stroke();
+}
+
+function diamond(g: CanvasRenderingContext2D, x: number, y: number, r: number): void {
+  g.beginPath();
+  g.moveTo(x, y - r);
+  g.lineTo(x + r, y);
+  g.lineTo(x, y + r);
+  g.lineTo(x - r, y);
+  g.closePath();
+  g.fillStyle = '#e8bf5c';
+  g.fill();
+}
+
+/**
+ * The sign's face: smoked glass lit from behind, rays up from under the title, a pink neon tube
+ * round the edge, CASE OPENING in pink tube with a white-hot core, and the case and its price in
+ * gold under it.
+ */
+function signTexture(aspect: number): CanvasTexture {
+  const w = 1600;
+  const h = Math.round(w / aspect);
+  const [c, g] = canvas(w, h);
+  const tube = (colour: string, width: number, glow: number, core: string, text?: [string, number, number]): void => {
+    g.shadowColor = colour;
+    g.shadowBlur = glow;
+    g.strokeStyle = colour;
+    g.lineWidth = width;
+    if (text) g.strokeText(...text);
+    else g.stroke();
+    g.shadowBlur = glow * 0.4;
+    g.lineWidth = width * 0.45;
+    g.strokeStyle = core;
+    if (text) g.strokeText(...text);
+    else g.stroke();
+    g.shadowBlur = 0;
+  };
+  const paint = (): void => {
+    g.clearRect(0, 0, w, h);
+    const bg = g.createLinearGradient(0, 0, 0, h);
+    bg.addColorStop(0, '#2e0c39');
+    bg.addColorStop(1, '#0b0411');
+    g.fillStyle = bg;
+    g.fillRect(0, 0, w, h);
+    g.save();
+    g.translate(w / 2, h * 1.08);
+    const N = 36;
+    for (let i = 0; i < N; i += 2) {
+      g.beginPath();
+      g.moveTo(0, 0);
+      g.arc(0, 0, w, Math.PI + (i / N) * Math.PI, Math.PI + ((i + 1) / N) * Math.PI);
+      g.closePath();
+      g.fillStyle = 'rgba(255, 120, 210, 0.07)';
+      g.fill();
+    }
+    g.restore();
+    const lit = g.createRadialGradient(w / 2, h * 0.55, 0, w / 2, h * 0.55, w * 0.5);
+    lit.addColorStop(0, hexA(NEON, 0.22));
+    lit.addColorStop(1, hexA(NEON, 0));
+    g.fillStyle = lit;
+    g.fillRect(0, 0, w, h);
+    g.lineJoin = 'round';
+    g.lineCap = 'round';
+    roundRect(g, 26, 26, w - 52, h - 52, 34);
+    tube(NEON, 9, 24, '#ffc6ec');
+    g.textAlign = 'center';
+    g.textBaseline = 'alphabetic';
+    g.font = font(700, Math.round(h * 0.44));
+    const title: [string, number, number] = ['CASE OPENING', w / 2, h * 0.58];
+    g.save();
+    g.shadowColor = NEON;
+    g.shadowBlur = 60;
+    g.fillStyle = hexA(NEON, 0.35);
+    g.fillText(...title, w * 0.86);
+    g.restore();
+    tube(NEON, 18, 44, '#ff9fda', title);
+    g.fillStyle = '#fff5fb';
+    g.fillText(...title, w * 0.86);
+    const sub = `THE LURE CASE  ·  $${CASE_PRICE}`;
+    g.font = font(700, Math.round(h * 0.15));
+    const sy = h * 0.83;
+    g.shadowColor = '#ffb627';
+    g.shadowBlur = 22;
+    g.fillStyle = '#ffdc8e';
+    g.fillText(sub, w / 2, sy);
+    const half = g.measureText(sub).width / 2;
+    g.font = font(700, Math.round(h * 0.11));
+    for (const sx of [-1, 1]) g.fillText('★', w / 2 + sx * (half + h * 0.12), sy - h * 0.005);
+    g.shadowBlur = 0;
+  };
+  paint();
+  const t = tex(c);
+  onFontsReady(() => {
+    paint();
+    t.needsUpdate = true;
+  });
+  return t;
+}
+
+/** A gilt frame round a w × h face at height y, standing on a front at z. */
+function frameRing(w: number, h: number, rim: number, depth: number, mat: Material, y: number, z: number): Mesh {
+  const outer = new Shape();
+  rrect(outer, -w / 2 - rim, y - h / 2 - rim, w + rim * 2, h + rim * 2, rim + 0.01);
+  const hole = new Shape();
+  rrect(hole, -w / 2, y - h / 2, w, h, 0.01);
+  outer.holes.push(hole);
+  const m = new Mesh(new ExtrudeGeometry(outer, { depth, bevelEnabled: true, bevelSize: 0.004, bevelThickness: 0.004, bevelSegments: 2 }), mat);
+  m.position.z = z;
+  return m;
+}
+
+/** A point on a rectangle's perimeter (for the bulbs), u from 0 to 1, clockwise from the top left. */
+function perimeter(u: number, hw: number, hh: number): [number, number] {
+  let d = u * 4 * (hw + hh);
+  if (d < 2 * hw) return [-hw + d, hh];
+  d -= 2 * hw;
+  if (d < 2 * hh) return [hw, hh - d];
+  d -= 2 * hh;
+  if (d < 2 * hw) return [hw - d, -hh];
+  d -= 2 * hw;
+  return [-hw, -hh + d];
 }
 
 let soft: CanvasTexture | null = null;

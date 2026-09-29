@@ -48,8 +48,13 @@ const SAG = 0.012;
 const INERTIA = 0.7;
 /** The hand's acceleration is clamped here (m/s²): a tracking glitch mustn't fold the rod. */
 const MAX_ACC = 120;
-/** The tip jumping this far in a frame is a teleport or a snap turn, not a swing. */
-const JUMP = 0.6;
+/**
+ * The tip jumping this far in a frame (m, or m/s times the frame) is a tracking glitch, not a
+ * swing. It's read in the rig's frame, so a teleport or a snap turn never gets here, and it's well
+ * past any swing: a hard cast's tip runs 30 m/s and more, over half a metre in one slow frame.
+ */
+const GLITCH = 1.5;
+const GLITCH_SPEED = 80;
 const MAX_BEND = 0.75;
 /** The unbent tip-top, rod space. */
 const TIP0 = new Vector3(0, ROD_L, 0);
@@ -65,6 +70,7 @@ const _g = new Vector3();
 const _a = new Vector3();
 const _t = new Vector2();
 const _rot = new Matrix3();
+const _rigInv = new Matrix4();
 
 /**
  * Add the part of a pull that bends the blank to `out` (rod space x, z). `d` is the pull's unit
@@ -180,12 +186,19 @@ export class Rod {
   readonly tip = new Vector3();
   /** smoothed world velocity of the tip as your hand swings it (the unbent tip: the blank's wobble isn't your swing) (m/s) */
   readonly tipVel = new Vector3();
+  /**
+   * The swing as the rig sees it (the unbent tip, its smoothed velocity and acceleration, in the
+   * rig's frame): a teleport or a snap turn moves the rig, not your hand, so it isn't a swing.
+   */
   private readonly lastTip = new Vector3();
+  private readonly vel = new Vector3();
   private readonly lastVel = new Vector3();
-  /** smoothed world acceleration of the unbent tip (m/s²): the blank lags it */
-  private readonly tipAcc = new Vector3();
+  private readonly acc = new Vector3();
+  /** the rig's turn, to bring the swing back into the world */
+  private readonly rigQ = new Quaternion();
   private hasLast = false;
   private hasVel = false;
+  /** the rig-frame velocity over the last moments, for the cast */
   private readonly samples: TipSample[] = [];
 
   bend = 0;
@@ -283,8 +296,9 @@ export class Rod {
    * but points where the controller points (the RAY space's −Z): on Quest the grip frame is
    * pitched ~45° up from the ray, and a rod follows where you aim, not the angle of the handle. `towards`: where the line pulls (world), or
    * null for a line hanging straight down. `bendT` / `loadT`: Tidewater's targets for the state.
+   * `rig`: the player's rig (the hands' parent), whose frame the swing is read in.
    */
-  update(dt: number, time: number, grip: Object3D, ray: Object3D, o: { bendT: number; loadT: number; towards: Vector3 | null; bailOpen: boolean }): void {
+  update(dt: number, time: number, grip: Object3D, ray: Object3D, o: { bendT: number; loadT: number; towards: Vector3 | null; bailOpen: boolean; rig?: Object3D }): void {
     grip.updateWorldMatrix(true, false);
     ray.updateWorldMatrix(true, false);
     grip.getWorldPosition(_p);
@@ -293,21 +307,29 @@ export class Rod {
     this.mesh.matrixWorldNeedsUpdate = true;
     _inv.copy(this.mesh.matrix).invert();
 
-    // the hand's swing, read off the unbent tip (the cast and the strike read this too)
-    _p.copy(TIP0).applyMatrix4(this.mesh.matrix);
+    // the hand's swing, read off the unbent tip in the rig's frame (the cast and the strike read this too)
+    if (o.rig) {
+      o.rig.updateWorldMatrix(true, false);
+      _rigInv.copy(o.rig.matrixWorld).invert();
+      o.rig.getWorldQuaternion(this.rigQ);
+    } else {
+      _rigInv.identity();
+      this.rigQ.identity();
+    }
+    _p.copy(TIP0).applyMatrix4(this.mesh.matrix).applyMatrix4(_rigInv);
     let swung = false;
     if (this.hasLast && dt > 0) {
       _v.copy(_p).sub(this.lastTip);
-      if (_v.lengthSq() > JUMP * JUMP) {
+      if (_v.length() > Math.max(GLITCH, GLITCH_SPEED * dt)) {
         this.resetMotion();
       } else {
-        this.lastVel.copy(this.tipVel);
-        this.tipVel.lerp(_v.divideScalar(dt), 1 - Math.exp(-dt * 30));
-        this.samples.push({ t: time, v: this.tipVel.clone() });
+        this.lastVel.copy(this.vel);
+        this.vel.lerp(_v.divideScalar(dt), 1 - Math.exp(-dt * 30));
+        this.samples.push({ t: time, v: this.vel.clone() });
         while (this.samples.length && time - this.samples[0].t > 0.15) this.samples.shift();
         if (this.hasVel) {
-          _a.copy(this.tipVel).sub(this.lastVel).divideScalar(dt);
-          this.tipAcc.lerp(_a, 1 - Math.exp(-dt * 20));
+          _a.copy(this.vel).sub(this.lastVel).divideScalar(dt);
+          this.acc.lerp(_a, 1 - Math.exp(-dt * 20));
           swung = true;
         }
         this.hasVel = true;
@@ -315,6 +337,7 @@ export class Rod {
     }
     this.lastTip.copy(_p);
     this.hasLast = true;
+    this.tipVel.copy(this.vel).applyQuaternion(this.rigQ);
 
     // where it's pulled (rod space, across the blank): its own weight toward the ground, and the
     // line from the tip-top toward the bob (a fish hanging off it, or the rod loaded in the
@@ -331,7 +354,7 @@ export class Rod {
     let az = 0;
     if (swung) {
       _rot.setFromMatrix4(_inv);
-      _a.copy(this.tipAcc).clampLength(0, MAX_ACC).applyMatrix3(_rot);
+      _a.copy(this.acc).clampLength(0, MAX_ACC).applyQuaternion(this.rigQ).applyMatrix3(_rot);
       ax = (-_a.x * INERTIA) / ROD_L;
       az = (-_a.z * INERTIA) / ROD_L;
     }
@@ -386,7 +409,7 @@ export class Rod {
     this.spoolAng -= cast ? Math.min(a, SHOWN_TURNS * Math.PI * 2 * dt) : a;
   }
 
-  /** The fastest the tip moved in the last ~0.15 s (a cast is released just after its peak). */
+  /** The fastest the tip moved in the last ~0.15 s (a cast is released just after its peak), in the world. */
   peakTipVelocity(out: Vector3): Vector3 {
     out.set(0, 0, 0);
     let best = -1;
@@ -397,7 +420,7 @@ export class Rod {
         out.copy(s.v);
       }
     }
-    return out;
+    return out.applyQuaternion(this.rigQ);
   }
 
   /** Where the bent blank's axis is at rod height `y`, relative to the straight rod (rod space). */
@@ -434,6 +457,7 @@ export class Rod {
     this.hasVel = false;
     this.samples.length = 0;
     this.tipVel.set(0, 0, 0);
-    this.tipAcc.set(0, 0, 0);
+    this.vel.set(0, 0, 0);
+    this.acc.set(0, 0, 0);
   }
 }
