@@ -163,14 +163,29 @@ export function buildBoardwalk( ctx, pts, opts = {} ) {
 
 	}
 
-	// path lights
+	// path lights (not where another path joins this one: `keepClear` [x, z, r] — there it stands
+	// on the far side instead, or if that's taken too, it's left out)
 	const every = opts.lightEvery ?? 60;
+	const keepClear = opts.keepClear ?? [];
+	const clear = ( x, z ) => keepClear.every( ( [ cx, cz, r ] ) => Math.hypot( x - cx, z - cz ) > r );
 	let side = 1;
 	for ( let i = Math.floor( every * 0.4 ); i < n - 10; i += every ) {
 
 		const s = S[ i ];
-		const o = side * ( width / 2 + 0.2 );
-		const px = s.p.x + s.nx * o, pz = s.p.z + s.nz * o;
+		const at = ( k ) => [ s.p.x + s.nx * k * ( width / 2 + 0.2 ), s.p.z + s.nz * k * ( width / 2 + 0.2 ) ];
+		let [ px, pz ] = at( side );
+		if ( ! clear( px, pz ) ) {
+
+			[ px, pz ] = at( - side );
+			if ( ! clear( px, pz ) ) {
+
+				side = - side;
+				continue;
+
+			}
+
+		}
+
 		const g = terrain.heightAt( px, pz );
 		const w = pathLight( B, px, g - 0.25, pz, rand.next() );
 		lights.push( { position: w, color: new Color( 1.0, 0.7, 0.4 ), intensity: 2.5, kind: 'pathLight' } );

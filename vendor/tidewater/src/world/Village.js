@@ -93,11 +93,18 @@ export class Village {
 		this.signB = new Builder();
 		this.pierInfo = buildPier( { B: this.harbor, terrain, colliders, rand, lights: this.lights, inst: this.inst, signB: this.signB, hang: () => new Builder() } );
 
-		// boardwalk from the foot of the pier steps up to the plaza
+		// plank side paths from the plaza / main boardwalk to the nearest houses
+		const sidePaths = [
+			[ [ 36.8, - 110.6 ], [ 32.0, - 109.3 ], [ 27.4, - 107.6 ] ],
+			[ [ 46.8, - 97.8 ], [ 53.5, - 98.5 ], [ 61.7, - 99.1 ] ],
+		];
+
+		// boardwalk from the foot of the pier steps up to the plaza (no path light where a side path
+		// joins it: one stood in the way at the plank junction below the fish market)
 		const foot = this.pierInfo.stepFoot;
 		this.path = buildBoardwalk( ctx( this.harbor ), [
 			[ foot.x, foot.z + 0.05 ], [ 54.6, - 72 ], [ 52.4, - 82 ], [ 48.4, - 92 ], [ 44.8, - 100.5 ], [ 42.6, - 107.2 ],
-		], { width: 1.8, startY: foot.y + 0.24, lightEvery: 70 } );
+		], { width: 1.8, startY: foot.y + 0.24, lightEvery: 70, keepClear: sidePaths.map( ( p ) => [ p[ 0 ][ 0 ], p[ 0 ][ 1 ], 1.6 ] ) } );
 		this._plaza( ctx( this.town ) );
 
 		for ( const s of specs.houses ) {
@@ -117,11 +124,8 @@ export class Village {
 
 		}
 
-		// plank side paths from the plaza / main boardwalk to the nearest houses
-		this.sidePaths = [
-			buildBoardwalk( ctx( this.town ), [ [ 36.8, - 110.6 ], [ 32.0, - 109.3 ], [ 27.4, - 107.6 ] ], { width: 1.1, lift: 0.2, lightEvery: 1e9 } ),
-			buildBoardwalk( ctx( this.town ), [ [ 46.8, - 97.8 ], [ 53.5, - 98.5 ], [ 61.7, - 99.1 ] ], { width: 1.1, lift: 0.2, lightEvery: 1e9 } ),
-		];
+		// the side paths themselves
+		this.sidePaths = sidePaths.map( ( pts ) => buildBoardwalk( ctx( this.town ), pts, { width: 1.1, lift: 0.2, lightEvery: 1e9 } ) );
 
 		this.footprints.push( buildBoathouse( ctx( this.harbor ), specs.boathouse ).footprint );
 		this.footprints.push( buildMarketStall( ctx( this.town ), specs.stall ).footprint );
