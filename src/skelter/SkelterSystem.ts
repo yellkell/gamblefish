@@ -17,7 +17,7 @@
  *                teleport is off and the slide moves you, the rod's away and the island's songs
  *                make way for the ride's. The coins are money: what you've caught goes into your
  *                wallet at every landing (and if a gate takes you off, you keep what you had).
- *  THE BOTTOM    confetti, and the choice: back up to the top, or off into the village.
+ *  THE BOTTOM    the choice: back up to the top, or off into the village.
  *  AFTER DARK    lanterns all the way up the slide's outer rail come on at dusk, like the pier's
  *                (skelter/lights.ts): the tower's wound in a string of warm lights.
  *
@@ -43,7 +43,7 @@ import { BuildSign, type SignText } from '../woodworks/buildSign.ts';
 import { clipAbove, setBuilding, BUILT } from './clip.ts';
 import { Coins } from './coins.ts';
 import { BARRIER_SIZE, GROUND_LANDING_Y, HEAD_RADIUS, LANDING_HOLD, PLINTH_RADIUS, PLINTH_TOP, ROOF_HEIGHT, SLIDE_PITCH, SLIDE_SPEED, TOTAL_DESCENT, TOTAL_TIERS, TOWER_RADIUS, TOWER_TOP } from './constants.ts';
-import { Confetti, SKY_LIGHT } from './fx.ts';
+import { SKY_LIGHT } from './fx.ts';
 import { createLights, type SkelterLights } from './lights.ts';
 import { HelterPath, helterPath } from './path.ts';
 import { SKELTER, TOWARD_VILLAGE } from './site.ts';
@@ -126,7 +126,6 @@ export class SkelterSystem extends createSystem({}) {
   private slide!: Slide;
   private coins!: Coins;
   private streaks!: StreakHandles;
-  private confetti!: Confetti;
   private ring!: Group;
   private hud!: Panel;
   private banner!: Panel;
@@ -298,13 +297,11 @@ export class SkelterSystem extends createSystem({}) {
     this.lights = createLights(helterPath);
     this.frame.add(this.tower.group, this.track.group, this.lights.group);
     this.clipped = [...clipAbove(this.tower.group), ...clipAbove(this.track.group), ...clipAbove(this.lights.group)];
-    // the ride: its slide, its coins, the wind past you, the confetti at the bottom
+    // the ride: its slide, its coins, the wind past you
     this.slide = new Slide(this.frame, this.player);
     this.coins = new Coins(this.frame, this.player, (streak, gem) => skelterAudio.coin(streak, gem));
     this.streaks = createStreaks();
     this.player.add(this.streaks.object);
-    this.confetti = new Confetti();
-    this.scene.add(this.confetti.mesh);
     this.frame.updateMatrixWorld(true);
   }
 
@@ -455,7 +452,6 @@ export class SkelterSystem extends createSystem({}) {
     skelterAudio.stopRun();
     resetGameState();
     emit('game-reset');
-    this.confetti.stop();
     this.slide.placeAtStart();
     this.slide.buildCourse();
     this.coins.build(this.slide.getGates());
@@ -799,13 +795,11 @@ export class SkelterSystem extends createSystem({}) {
     this.state.save();
     this.state.emit();
     skelterAudio.play('welldone');
-    this.player.head.getWorldPosition(this.head);
-    this.confetti.start(this.head.clone());
     this.endTitle = 'YOU MADE IT!';
     this.endLines = [`+$${game.coins} of $${game.coinsTotal} on offer`, `${TOTAL_DESCENT} m down in ${this.formatTime(game.runTime)}`];
     this.setHud(false);
     this.banner.mesh.visible = false;
-    // the landing breathes: confetti gets a few seconds before the board
+    // the landing breathes: a few seconds before the board
     this.winWait = 3.2;
   }
 
@@ -938,7 +932,7 @@ export class SkelterSystem extends createSystem({}) {
     }
   }
 
-  /** the landing's shockwave, the wind past you, the confetti */
+  /** the landing's shockwave, the wind past you */
   private effects(dt: number): void {
     const ring = this.track!.arrivalRing;
     if (game.arrival > 0) {
@@ -954,8 +948,6 @@ export class SkelterSystem extends createSystem({}) {
     u.uOffset.value += game.slideSpeed * dt * 1.35;
     this.streaks.object.visible = u.uStrength.value > 0.02;
     this.streaks.object.rotation.x = -SLIDE_PITCH;
-    this.player.head.getWorldPosition(this.head);
-    this.confetti.update(dt, this.head);
   }
 
   /** The painted tower is lit by the island's sun (or moon), and dims with the day; its lanterns
