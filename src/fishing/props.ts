@@ -5,6 +5,9 @@
  * (game/FishingRod.js) to GLSL: the blank bends toward the line with a fast action (only the tip
  * under a light load, down into the butt under a heavy one), the rotor spins, the bail flips
  * open for the cast, the crank turns, the spool oscillates and slips back when the drag gives.
+ * With a conventional reel on it (fishing/conventionalReel.ts, fitted by fishing/rod.ts) the
+ * spinning reel folds away, the guides turn to the top, and the new reel's spool, handle and drag
+ * lever turn about its axle.
  * The fish get a swimming body wave that grows toward the tail, with fins fluttering over it,
  * and Tidewater's own procedural skin (fishing/fishSkin.ts): scales, markings, fin rays, eyes,
  * the silvery sheen.
@@ -35,6 +38,18 @@ export const BODY_Y = 0.327;
 export const PIVOT_Y = 0.403;
 /** The crank's T-knob: centre of its circle (rod space) and radius. */
 export const CRANK = { x: -0.046, y: BODY_Y, z: REEL_Z, r: 0.052 };
+/** Tidewater's first (stripper) guide: its height and the centre of its ring, below the blank. */
+export const GUIDE1 = { y: 0.86, z: -0.068 };
+/** The spool end of the line off a conventional reel is below here (its other end is at the first guide). */
+const SPOOL_END = 0.54;
+/** How far a big-game reel's drag lever pulls back for free spool (rad). */
+const LEVER_BACK = 0.9;
+
+/**
+ * The parts of a conventional reel (fishing/conventionalReel.ts), by the rod shader's `anim` tag:
+ * after Tidewater's own (1 rotor .. 5 braid), and all turning about the reel's axle.
+ */
+export const CONV_TAG = { frame: 6, spool: 7, line: 8, crank: 9, lever: 10, lead: 11 } as const;
 
 /** Deflection of the blank at rod height y (Tidewater `bendAt`, same curve as the shader). */
 export function bendAt(y: number, bend: number, p: number, out: { lat: number; drop: number }): { lat: number; drop: number } {
@@ -52,7 +67,8 @@ export interface RodUniforms {
   rodBend: IUniform<Vector4>; // xyz bend direction (rod space), w bend
   rodShape: IUniform<Vector4>; // x bend exponent
   reelAnim: IUniform<Vector4>; // rotor, bail 0..1, crank, spool angle
-  reelAnim2: IUniform<Vector4>; // spool oscillation (m), line fill
+  reelAnim2: IUniform<Vector4>; // spool oscillation (m), line fill, 1 with a conventional reel on
+  reelAxle: IUniform<Vector4>; // a conventional reel's axle (rod y, z), its spool's core radius
 }
 
 export interface FishUniforms {
@@ -76,11 +92,16 @@ export function swim(u: FishUniforms, amp: number, freq: number, dt: number): vo
   u.uPhase.value = (u.uPhase.value + freq * dt) % 1;
 }
 
-/** Per rod vertex, from the bake: its material (an index into `names`) and whether it's the reel's. */
+/**
+ * Per rod vertex, from the bake: its material (an index into `names`), whether it's the reel's,
+ * and how it fits a conventional reel (1 it comes off with the spinning reel, 2 it turns to the
+ * top with the guides; null from a bake older than that, which only takes a spinning reel).
+ */
 export interface RodTags {
   names: string[];
   mat: Uint8Array;
   reel: Uint8Array;
+  fit: Uint8Array | null;
 }
 
 export interface Props {
@@ -102,7 +123,29 @@ const ROD_VERTEX = /* glsl */ `
   vec3 Nn = normal;
   float part = anim;
   vec3 axisC = vec3(0.0, 0.0, ${f(REEL_Z)});
-  if (part > 0.5) {
+  bool conv = reelAnim2.z > 0.5;
+  if (part > 5.5) {
+    // a conventional reel: the spool winds in with the handle (the other way round from it, as
+    // gears turn), runs back paying out; the line on it thins as it goes; the lever pulls back
+    // for free spool. All about the axle across the rod (x). The line leaving the spool for the
+    // first guide (11) comes off the top of what's left on it.
+    vec2 q = P.yz - reelAxle.xy;
+    if ((part > 7.5 && part < 8.5) || (part > 10.5 && P.y < ${f(SPOOL_END)})) {
+      float r = length(q);
+      q *= mix(reelAxle.z, r, reelAnim2.y) / max(r, 1e-5);
+    }
+    float a = part < 6.5 || part > 10.5 ? 0.0 : part < 8.5 ? reelAnim.w : part < 9.5 ? -reelAnim.z : reelAnim.y * ${f(LEVER_BACK)};
+    float ca = cos(a); float sa = sin(a);
+    P.yz = reelAxle.xy + vec2(q.x * ca - q.y * sa, q.x * sa + q.y * ca);
+    Nn.yz = vec2(Nn.y * ca - Nn.z * sa, Nn.y * sa + Nn.z * ca);
+  } else if (conv && fit > 0.5 && fit < 1.5) {
+    // the spinning reel is off the rod: its triangles fold away to a point inside the seat
+    P = vec3(0.0, ${f(SEAT_Y)}, 0.0);
+  } else if (conv && fit > 1.5) {
+    // the guides turn to the top with the reel (a half turn about the blank)
+    P.xz = -P.xz;
+    Nn.xz = -Nn.xz;
+  } else if (part > 0.5) {
     if (part < 2.5) {
       if (part > 1.5) {
         // the bail flips back about the line through its two pivots
@@ -214,7 +257,9 @@ export function loadProps(buf: ArrayBuffer): Props {
   const fishMats = new Set<MeshStandardMaterial>();
   const rodGeometry = geometry(arrays, 'rod', { anim: [1, false] });
   const rodMats = (meta as { rodMats?: string[] }).rodMats;
-  const rodTags: RodTags | null = rodMats && arrays['rod.mat'] && arrays['rod.reel'] ? { names: rodMats, mat: arrays['rod.mat'] as Uint8Array, reel: arrays['rod.reel'] as Uint8Array } : null;
+  const fit = (arrays['rod.fit'] as Uint8Array | undefined) ?? null;
+  const rodTags: RodTags | null = rodMats && arrays['rod.mat'] && arrays['rod.reel'] ? { names: rodMats, mat: arrays['rod.mat'] as Uint8Array, reel: arrays['rod.reel'] as Uint8Array, fit } : null;
+  rodGeometry.setAttribute('fit', new BufferAttribute(fit ? Float32Array.from(fit) : new Float32Array(rodGeometry.getAttribute('position').count), 1));
   const bobberGeometry = geometry(arrays, 'bobber');
   const fishGeo = new Map<string, BufferGeometry>();
 
@@ -229,6 +274,7 @@ export function loadProps(buf: ArrayBuffer): Props {
         rodShape: { value: new Vector4(3, 0, 0, 0) },
         reelAnim: { value: new Vector4() },
         reelAnim2: { value: new Vector4(0, 1, 0, 0) },
+        reelAxle: { value: new Vector4() },
       };
       const mat = new MeshPhongMaterial({ vertexColors: true, shininess: 60, specular: 0x333333 });
       mat.onBeforeCompile = (shader) => {
@@ -236,7 +282,7 @@ export function loadProps(buf: ArrayBuffer): Props {
         shader.vertexShader = shader.vertexShader
           .replace(
             '#include <common>',
-            '#include <common>\nattribute float anim;\nuniform vec4 rodBend;\nuniform vec4 rodShape;\nuniform vec4 reelAnim;\nuniform vec4 reelAnim2;',
+            '#include <common>\nattribute float anim;\nattribute float fit;\nuniform vec4 rodBend;\nuniform vec4 rodShape;\nuniform vec4 reelAnim;\nuniform vec4 reelAnim2;\nuniform vec4 reelAxle;',
           )
           .replace('#include <beginnormal_vertex>', ROD_VERTEX)
           .replace('#include <begin_vertex>', 'vec3 transformed = rodP;');

@@ -7,14 +7,21 @@
 import { CanvasTexture, CylinderGeometry, Group, Mesh, MeshBasicMaterial, MeshStandardMaterial, SphereGeometry, SRGBColorSpace, TorusGeometry, Vector3, type Object3D } from 'three';
 import { casinoEnv } from '../../casino/look.ts';
 import { Batch, blade, M, OUTLINE, rounded, stalk, turned, type Kit } from '../craft.ts';
-import { LINE, REELS, RODS } from '../../fishing/rodLook.ts';
+import { conventionalReel } from '../../fishing/conventionalReel.ts';
+import { isConventional, LINE, REEL_KNOB, REEL_LEVER, REELS, RODS } from '../../fishing/rodLook.ts';
 import { goopTub } from './goop.ts';
 
 /* ── rods ───────────────────────────────────────────────────────────── */
 
-/** a rod standing up: butt cap, grip, reel seat, fore grip, a tapering blank with its guides */
+/**
+ * a rod standing up: butt cap, grip, reel seat, fore grip, a tapering blank with its guides, and
+ * the reel of its level: a spinning reel hangs on the guides' side (+z), a conventional reel
+ * sits on the other (−z), so the guides turn round to that side to run its line
+ */
 export function rod(k: Kit, level: number, withReel = true): Group {
   const r = RODS[Math.min(level, RODS.length - 1)];
+  const reelLevel = Math.min(level, REELS.length - 1);
+  const side = withReel && isConventional(reelLevel) ? -1 : 1;
   const b = new Batch();
   const grip = r.grip === 'cork' ? M.wood(k.renderer, 'bamboo', 0.8) : M.satin(k.renderer, '#26262a');
   const metal = M.metal(k.renderer, level >= 3 ? '#c8a040' : '#b8bcc4', 0.25);
@@ -38,15 +45,15 @@ export function rod(k: Kit, level: number, withReel = true): Group {
     const rr = (0.022 - 0.014 * u) * (level >= 3 ? 1.2 : 1);
     const rb = 0.009 - 0.0065 * u;
     b.at(wrap, turned([[rb + 0.0012, -0.012], [rb + 0.0012, 0.012]], 8), 0, y, 0);
-    b.add(metal, stalk([new Vector3(0, y - 0.01, rb), new Vector3(0, y, rb + rr * 0.9)], 0.0012, 0.0012, 4, 2));
-    b.at(metal, new TorusGeometry(rr, 0.0018, 5, 16), 0, y + rr * 0.1, rb + rr * 1.9);
+    b.add(metal, stalk([new Vector3(0, y - 0.01, side * rb), new Vector3(0, y, side * (rb + rr * 0.9))], 0.0012, 0.0012, 4, 2));
+    b.at(metal, new TorusGeometry(rr, 0.0018, 5, 16), 0, y + rr * 0.1, side * (rb + rr * 1.9));
   }
-  b.at(metal, new TorusGeometry(0.004, 0.0012, 4, 10), 0, L + 0.004, 0.006);
+  b.at(metal, new TorusGeometry(0.004, 0.0012, 4, 10), 0, L + 0.004, side * 0.006);
   const g = b.group();
   if (withReel) {
-    const rl = reel(k, Math.min(level, 3));
-    rl.position.set(0, 0.38, 0.016);
-    rl.rotation.set(0, 0, 0);
+    const rl = reel(k, reelLevel);
+    // its foot on the seat: a spinning reel's stands off on +z, a conventional reel's on −z
+    rl.position.set(0, 0.38, side > 0 ? 0.016 : -0.011);
     g.add(rl);
   }
   return g;
@@ -55,18 +62,19 @@ export function rod(k: Kit, level: number, withReel = true): Group {
 /* ── reels ──────────────────────────────────────────────────────────── */
 
 /**
- * A reel under a rod, its foot up at the rod (at the origin), hanging toward +z: a spinning reel
- * for the first three, a lever-drag conventional reel on top of the rod for the big-game one.
+ * A reel on a rod, its foot on the rod (at the origin): a spinning reel hanging toward +z for the
+ * first two, a conventional reel on top of the rod (−z) for the last two (fishing/conventionalReel.ts,
+ * the same build as the one on the rod in your hand).
  */
 export function reel(k: Kit, level: number): Group {
   const c = REELS[Math.min(level, REELS.length - 1)];
   const b = new Batch();
   const body = M.metal(k.renderer, c.body, 0.3);
   const trim = M.metal(k.renderer, c.trim, 0.25);
-  const knob = M.satin(k.renderer, '#1a1a1e');
-  if (level < 2) {
+  const knob = M.satin(k.renderer, REEL_KNOB);
+  if (c.kind === 'spinning') {
     // spinning reel: foot, stem, a gearbox, the rotor and spool facing up the rod
-    b.at(trim, rounded(0.012, 0.004, 0.08, 0.002), 0, 0, 0.004);
+    b.at(trim, rounded(0.012, 0.08, 0.004, 0.0015), 0, 0, 0.004);
     b.add(body, stalk([new Vector3(0, 0, 0.006), new Vector3(0, -0.02, 0.03), new Vector3(0, -0.05, 0.05)], 0.006, 0.008, 6, 6));
     b.at(body, rounded(0.035, 0.05, 0.05, 0.015), 0, -0.07, 0.06);
     // the rotor cup and spool: turned about the rod's axis (y)
@@ -81,29 +89,8 @@ export function reel(k: Kit, level: number): Group {
     b.at(knob, turned([[0, 0], [0.012, 0], [0.012, 0.012], [0, 0.014]], 12), 0, -0.07 + 0.035 + 0.078, 0.06);
   } else {
     // a conventional reel: two side plates round a spool, across the rod, on top of it (−z)
-    const W = level >= 3 ? 0.08 : 0.06;
-    const R = level >= 3 ? 0.045 : 0.036;
-    b.at(trim, rounded(0.012, 0.004, 0.08, 0.002), 0, 0, -0.004);
-    b.at(body, rounded(0.02, 0.06, 0.02, 0.004), 0, 0, -0.02);
-    const cz = -0.02 - R;
-    for (const sx of [-1, 1]) {
-      b.at(body, new CylinderGeometry(R, R, 0.012, 24).rotateZ(Math.PI / 2), (sx * W) / 2, 0, cz);
-      b.at(trim, new TorusGeometry(R, 0.003, 5, 24).rotateY(Math.PI / 2), (sx * (W + 0.012)) / 2, 0, cz);
-    }
-    b.at(M.satin(k.renderer, '#e8e0c0'), new CylinderGeometry(R * 0.78, R * 0.78, W - 0.01, 20).rotateZ(Math.PI / 2), 0, 0, cz);
-    for (let i = 0; i < 3; i++) {
-      const a = (i / 3) * Math.PI * 2 + 0.4;
-      b.at(trim, new CylinderGeometry(0.003, 0.003, W, 6).rotateZ(Math.PI / 2), 0, Math.cos(a) * R * 0.92, cz + Math.sin(a) * R * 0.92);
-    }
-    // the handle off the right plate: a power handle with a big knob
-    b.add(trim, stalk([new Vector3(W / 2 + 0.01, 0, cz), new Vector3(W / 2 + 0.02, 0.03, cz - 0.02), new Vector3(W / 2 + 0.02, 0.05, cz - 0.03)], 0.004, 0.004, 5, 4));
-    b.at(knob, turned([[0, 0], [0.011, 0.002], [0.013, 0.025], [0, 0.028]], 12), W / 2 + 0.02, 0.05, cz - 0.03, 0, 0, -Math.PI / 2);
-    // the drag lever over the left plate
-    if (level >= 3) {
-      b.add(M.metal(k.renderer, '#c02020', 0.3), stalk([new Vector3(-W / 2 - 0.01, 0, cz), new Vector3(-W / 2 - 0.012, 0.02, cz - 0.03), new Vector3(-W / 2 - 0.012, 0.03, cz - 0.05)], 0.004, 0.003, 5, 4));
-    } else {
-      b.at(knob, turned([[0, 0], [0.012, 0], [0.012, 0.008], [0, 0.01]], 12), -W / 2 - 0.01, 0, cz, 0, 0, Math.PI / 2);
-    }
+    const paint = { body, trim, knob, line: M.satin(k.renderer, '#e8e0c0'), lever: M.metal(k.renderer, REEL_LEVER, 0.3) };
+    for (const p of conventionalReel(level).pieces) b.add(paint[p.paint], p.g);
   }
   return b.group();
 }

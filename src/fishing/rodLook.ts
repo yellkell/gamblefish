@@ -16,13 +16,24 @@ export const RODS: { blank: string; len: number; grip: 'cork' | 'eva'; wrap: str
   { blank: '#101a3a', len: 2.2, grip: 'eva', wrap: '#c8a040' }, // carbon big-game
 ];
 
-/** each reel level: the body, its trim, and the body in shadow (the rotor, the side plates) */
-export const REELS: { body: string; trim: string; dark: string }[] = [
-  { body: '#4a4e56', trim: '#b8bcc4', dark: '#24262a' }, // old spinning reel
-  { body: '#c8a040', trim: '#2a2a2e', dark: '#3a2e14' }, // smooth spinning reel
-  { body: '#1a2a5a', trim: '#c8ccd4', dark: '#0e1630' }, // conventional reel
-  { body: '#c8a040', trim: '#1a1a1e', dark: '#1a1a1e' }, // two-speed lever drag
+/**
+ * each reel level: what kind of reel it is (a spinning reel hanging under the rod, or a
+ * conventional reel on top of it: fishing/conventionalReel.ts), the body, its trim, and the body
+ * in shadow (the rotor, the side plates)
+ */
+export const REELS: { kind: 'spinning' | 'conventional'; body: string; trim: string; dark: string }[] = [
+  { kind: 'spinning', body: '#4a4e56', trim: '#b8bcc4', dark: '#24262a' }, // old spinning reel
+  { kind: 'spinning', body: '#c8a040', trim: '#2a2a2e', dark: '#3a2e14' }, // smooth spinning reel
+  { kind: 'conventional', body: '#1a2a5a', trim: '#c8ccd4', dark: '#0e1630' }, // conventional reel
+  { kind: 'conventional', body: '#c8a040', trim: '#1a1a1e', dark: '#1a1a1e' }, // two-speed lever drag
 ];
+
+/** the knobs on a reel, and the big-game reel's drag lever */
+export const REEL_KNOB = '#1a1a1e';
+export const REEL_LEVER = '#c02020';
+
+/** whether a reel level is a conventional reel */
+export const isConventional = (level: number): boolean => at(REELS, level).kind === 'conventional';
 
 /** each line level's colour: mono, clear mono, then hi-vis braids */
 export const LINE = ['#e8e0c0', '#f4f4f0', '#3fd66a', '#ff8a3a', '#3fa0ff'];

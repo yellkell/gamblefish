@@ -11,16 +11,33 @@
  * It's painted for the gear you've bought (fishing/rodLook.ts): the blank, grips, wraps and
  * metalwork for your rod, the reel's body and trim for your reel, the line on the spool and
  * through the guides for your line.
+ *
+ * And it carries the reel you bought, as the tackle shop shows it: a spinning reel hangs under
+ * your fingers, a conventional reel (the top two) sits on top of the rod with the guides turned up
+ * to it. That one works as it should: no bail or rotor, the handle cranks forward over the top
+ * and the spool winds the line in, the spool spins out paying line on the cast and backs off when
+ * a fish takes drag, the line on it thins as it goes out, and the big-game reel's red lever pulls
+ * back to free spool as you cast and pushes up to strike.
  */
 
-import { BufferAttribute, Color, Matrix3, Matrix4, Mesh, Quaternion, Vector2, Vector3, type Object3D } from 'three';
-import { bendAt, bendPower, BODY_Y, CRANK, REEL_Z, ROD_L, SEAT_Y, type Props, type RodTags, type RodUniforms } from './props.ts';
-import { rodPaint, type GearLevels } from './rodLook.ts';
+import { BufferAttribute, BufferGeometry, Color, Matrix3, Matrix4, Mesh, Quaternion, Vector2, Vector3, type Object3D } from 'three';
+import { stalk } from '../village/craft.ts';
+import { conventionalReel, type ReelPaint } from './conventionalReel.ts';
+import { bendAt, bendPower, BODY_Y, CONV_TAG, CRANK, GUIDE1, REEL_Z, ROD_L, SEAT_Y, type Props, type RodTags, type RodUniforms } from './props.ts';
+import { isConventional, LINE, REEL_KNOB, REEL_LEVER, REELS, rodPaint, type GearLevels } from './rodLook.ts';
 
 /** The rod rides this far up from the controller's pointing axis (a relaxed wrist). */
 const ROD_TILT = 0.38;
 const GEAR = 5.2; // rotor turns per crank turn
+/** a conventional reel's spool turns per crank turn */
+const CONV_GEAR = 4.4;
 export const LINE_PER_CRANK = 0.8; // m of line per crank turn
+/** the spinning reel's spool (m): what turns it back a radian when the drag gives */
+const SPIN_SPOOL_R = 0.023;
+/** The fastest a spool is shown turning (turns / s): any faster and it would strobe. */
+const SHOWN_TURNS = 3.1;
+/** A conventional reel's foot sits on the seat's top: its underside this far above the rod's axis. */
+const CONV_FOOT_Z = 0.0084;
 
 /* The blank is a damped 2-D spring across its axis (~2.5 Hz, lightly damped). */
 const K = 250;
@@ -78,6 +95,84 @@ interface TipSample {
   v: Vector3;
 }
 
+/** what a conventional reel's pieces are painted, by their index in its `paint` */
+const PAINTS: ReelPaint[] = ['body', 'trim', 'knob', 'line', 'lever'];
+
+/** A conventional reel on the rod (rod space), drawn with the rod's own material. */
+interface FittedReel {
+  mesh: Mesh;
+  /** per vertex: what it's painted (an index into PAINTS), and how light (the line's bands) */
+  paint: Uint8Array;
+  shade: Float32Array;
+  axle: { y: number; z: number };
+  lineR: number;
+  coreR: number;
+  /** the handle's knob, and its angle about the axle at rest */
+  knob: Vector3;
+  knobAt: number;
+}
+
+/**
+ * The shop's conventional reel of this level (fishing/conventionalReel.ts) fitted on top of the
+ * rod: its frame turned half round about the rod (the shop's reel stands off toward −z with its
+ * handle on +x; on the rod it's on top, +z, and the handle's on the left for your other hand, as
+ * the spinning reel's is), its foot on the seat. The line runs off the top of its spool to the
+ * first guide, which the shader turns to the top with it.
+ */
+function fitConventional(level: number, rod: Mesh): FittedReel {
+  const r = conventionalReel(level);
+  const axle = { y: SEAT_Y + r.axle.y, z: CONV_FOOT_Z - r.axle.z };
+  const pos: number[] = [];
+  const nor: number[] = [];
+  const idx: number[] = [];
+  const anim: number[] = [];
+  const paint: number[] = [];
+  const add = (g: BufferGeometry, p: ReelPaint, tag: number, fromShop: boolean): void => {
+    const P = g.getAttribute('position');
+    const N = g.getAttribute('normal');
+    const base = pos.length / 3;
+    for (let i = 0; i < P.count; i++) {
+      if (fromShop) {
+        pos.push(-P.getX(i), SEAT_Y + P.getY(i), CONV_FOOT_Z - P.getZ(i));
+        nor.push(-N.getX(i), N.getY(i), -N.getZ(i));
+      } else {
+        pos.push(P.getX(i), P.getY(i), P.getZ(i));
+        nor.push(N.getX(i), N.getY(i), N.getZ(i));
+      }
+      anim.push(tag);
+      paint.push(PAINTS.indexOf(p));
+    }
+    const I = g.index;
+    for (let i = 0; i < (I ? I.count : P.count); i++) idx.push(base + (I ? I.getX(i) : i));
+  };
+  for (const p of r.pieces) add(p.g, p.paint, CONV_TAG[p.move], true);
+  add(stalk([new Vector3(0, axle.y, axle.z + r.lineR), new Vector3(0, GUIDE1.y, -GUIDE1.z - 0.0005)], 0.0003, 0.0003, 4, 1), 'line', CONV_TAG.lead, false);
+
+  const n = anim.length;
+  // the line on the spool in bands, so you see it turn
+  const shade = new Float32Array(n).fill(1);
+  for (let i = 0; i < n; i++) {
+    if (anim[i] !== CONV_TAG.line) continue;
+    const a = Math.atan2(pos[i * 3 + 2] - axle.z, pos[i * 3 + 1] - axle.y);
+    shade[i] = Math.floor(((a + Math.PI) / (Math.PI * 2)) * 12 + 0.5) % 2 ? 0.72 : 1;
+  }
+  const g = new BufferGeometry();
+  g.setAttribute('position', new BufferAttribute(new Float32Array(pos), 3));
+  g.setAttribute('normal', new BufferAttribute(new Float32Array(nor), 3));
+  g.setAttribute('color', new BufferAttribute(new Uint8Array(n * 3), 3, true));
+  g.setAttribute('anim', new BufferAttribute(new Float32Array(anim), 1));
+  g.setAttribute('fit', new BufferAttribute(new Float32Array(n), 1));
+  g.setIndex(idx);
+  const mesh = new Mesh(g, rod.material);
+  mesh.name = `reel${level}`;
+  mesh.frustumCulled = false;
+  mesh.matrixAutoUpdate = false;
+  mesh.visible = false;
+  rod.add(mesh);
+  const knob = new Vector3(-r.knob.x, SEAT_Y + r.knob.y, CONV_FOOT_Z - r.knob.z);
+  return { mesh, paint: Uint8Array.from(paint), shade, axle, lineR: r.lineR, coreR: r.coreR, knob, knobAt: Math.atan2(knob.z - axle.z, knob.y - axle.y) };
+}
+
 export class Rod {
   readonly mesh: Mesh;
   private readonly u: RodUniforms;
@@ -114,6 +209,9 @@ export class Rod {
   private readonly baked: Uint8Array;
   private readonly paint: BufferAttribute;
   private dressed = '';
+  /** the conventional reels, fitted as they're first needed, and the one on the rod (null: the spinning reel) */
+  private readonly fitted = new Map<number, FittedReel>();
+  private conv: FittedReel | null = null;
 
   constructor(props: Props) {
     const { mesh, uniforms } = props.makeRod();
@@ -134,6 +232,7 @@ export class Rod {
     const key = `${g.rod}/${g.reel}/${g.line}`;
     if (key === this.dressed || !this.tags) return;
     this.dressed = key;
+    this.fitReel(g);
     const { names, mat, reel } = this.tags;
     // each material's colour on the rod and on the reel, as the vertex colours hold them (linear)
     const lut = new Map<number, [number, number, number] | null>();
@@ -150,6 +249,33 @@ export class Rod {
       for (let j = 0; j < 3; j++) out[i * 3 + j] = rgb ? rgb[j] : this.baked[i * 3 + j];
     }
     this.paint.needsUpdate = true;
+  }
+
+  /** A conventional reel on the rod for those levels (the shader takes the spinning reel off), painted. */
+  private fitReel(g: GearLevels): void {
+    const level = Math.max(0, Math.min(REELS.length - 1, g.reel | 0));
+    let conv: FittedReel | null = null;
+    if (isConventional(level) && this.tags?.fit) {
+      conv = this.fitted.get(level) ?? null;
+      if (!conv) this.fitted.set(level, (conv = fitConventional(level, this.mesh)));
+    }
+    for (const f of this.fitted.values()) f.mesh.visible = f === conv;
+    this.conv = conv;
+    if (!conv) return;
+    this.u.reelAxle.value.set(conv.axle.y, conv.axle.z, conv.coreR, 0);
+    const look = REELS[level];
+    const hex: Record<ReelPaint, string> = { body: look.body, trim: look.trim, knob: REEL_KNOB, line: LINE[Math.max(0, Math.min(LINE.length - 1, g.line | 0))], lever: REEL_LEVER };
+    const rgb = PAINTS.map((p) => new Color(hex[p]));
+    const col = conv.mesh.geometry.getAttribute('color') as BufferAttribute;
+    const out = col.array as Uint8Array;
+    for (let i = 0; i < conv.paint.length; i++) {
+      const c = rgb[conv.paint[i]];
+      const s = conv.shade[i];
+      out[i * 3] = Math.round(Math.min(1, c.r * s) * 255);
+      out[i * 3 + 1] = Math.round(Math.min(1, c.g * s) * 255);
+      out[i * 3 + 2] = Math.round(Math.min(1, c.b * s) * 255);
+    }
+    col.needsUpdate = true;
   }
 
   /**
@@ -227,19 +353,37 @@ export class Rod {
     bendAt(ROD_L, this.bend, P, _b);
     this.tip.set(this.bendDir.x * _b.lat, ROD_L - _b.drop, this.bendDir.z * _b.lat).applyMatrix4(this.mesh.matrix);
 
-    // reel: bail, rotor (GEAR× the crank, shown at most ~3 turns/s), spool
+    // reel: bail (a conventional reel's drag lever, back for free spool), rotor (GEAR× the crank,
+    // shown at most ~3 turns/s), spool
     const bailT = o.bailOpen ? 1 : 0;
     const rate = bailT > this.bail ? 6 : 16;
     this.bail += Math.sign(bailT - this.bail) * Math.min(Math.abs(bailT - this.bail), rate * dt);
     this.u.reelAnim.value.set(this.rotor, this.bail, this.crank, this.spoolAng);
-    this.u.reelAnim2.value.set(Math.sin(this.crank * 0.5) * 0.0035, this.lineFill, 0, 0);
+    this.u.reelAnim2.value.set(this.conv ? 0 : Math.sin(this.crank * 0.5) * 0.0035, this.lineFill, this.conv ? 1 : 0, 0);
   }
 
-  /** Turn the crank by `turns` (from the reel's line speed or your other hand). */
+  /**
+   * Turn the crank by `turns` (from the reel's line speed or your other hand): a spinning reel's
+   * rotor spins round its spool, a conventional reel's spool winds the line in.
+   */
   turnCrank(turns: number, dt: number): void {
     const d = turns * Math.PI * 2;
     this.crank += d;
-    this.rotor += Math.min(d * GEAR, 3.1 * Math.PI * 2 * dt);
+    const shown = SHOWN_TURNS * Math.PI * 2 * dt;
+    if (this.conv) this.spoolAng += Math.min(d * CONV_GEAR, shown);
+    else this.rotor += Math.min(d * GEAR, shown);
+  }
+
+  /**
+   * `m` of line going out off the spool, which turns back to pay it: the drag giving to a fish,
+   * or (`cast`) the cast running it off. A spinning reel's spool stands still on the cast (the
+   * line slips off over its lip); a conventional reel's spool spins out in free spool.
+   */
+  payOut(m: number, dt: number, cast = false): void {
+    const c = this.conv;
+    if (m <= 0 || (cast && !c)) return;
+    const a = m / (c ? c.coreR + (c.lineR - c.coreR) * this.lineFill : SPIN_SPOOL_R);
+    this.spoolAng -= cast ? Math.min(a, SHOWN_TURNS * Math.PI * 2 * dt) : a;
   }
 
   /** The fastest the tip moved in the last ~0.15 s (a cast is released just after its peak). */
@@ -269,12 +413,16 @@ export class Rod {
 
   /** World position of the crank's axis (where your other hand reaches for the handle). */
   crankCentre(out: Vector3): Vector3 {
-    return out.set(CRANK.x, BODY_Y, REEL_Z).applyMatrix4(this.mesh.matrix);
+    const c = this.conv;
+    return (c ? out.set(c.knob.x, c.axle.y, c.axle.z) : out.set(CRANK.x, BODY_Y, REEL_Z)).applyMatrix4(this.mesh.matrix);
   }
 
   /** The crank angle your hand is at (rod space, same convention as the shader), in radians. */
   crankAngleOf(world: Vector3): number {
     this.toRod(world, _v);
+    const c = this.conv;
+    // a conventional reel's handle turns forward over the top (the shader turns it by −crank)
+    if (c) return c.knobAt - Math.atan2(_v.z - c.axle.z, _v.y - c.axle.y);
     const qy = _v.y - BODY_Y;
     const qz = _v.z - REEL_Z;
     // the knob at rest hangs below the axis: (y, z) = (−r cos a, −r sin a)
