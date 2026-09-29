@@ -39,11 +39,12 @@ import { RouletteTable } from './casino/RouletteTable.ts';
 import { SlotMachine } from './casino/SlotMachine.ts';
 import { casinoEnv } from './casino/look.ts';
 import { BlackjackTable } from './casino/BlackjackTable.ts';
+import { CaseWall } from './casino/CaseWall.ts';
 import { PointerSystem } from './ui/pointer.ts';
 import { buildInteriors, interiorAt, openColliders, type Interior } from './village/interiors.ts';
 import { GOODS, HOME, HOME_SHOPS, HomeShopCounter, Shack, VILLA, VILLA_SHOPS } from './village/homeGoods.ts';
 import { GearShopCounter, RodRackBoard } from './village/gearShop.ts';
-import { GEAR_COUNTERS, JEWELLER } from './village/interiors.ts';
+import { CASE_WALL_Z, GEAR_COUNTERS, JEWELLER } from './village/interiors.ts';
 import { GemWindows } from './village/gemWindows.ts';
 import { Villa } from './village/villa.ts';
 import { Blink } from './fx/blink.ts';
@@ -394,6 +395,8 @@ World.create(container, {
   const room = (n: string): Interior | undefined => interiors.find((i) => i.name === n);
   const lure = room('C');
   if (lure) tables.push(new RouletteTable(lure, game, world, { chips: [1, 5, 25, 100], maxBet: 500, at: [0, -0.6] }));
+  // and the case wall on its right-hand wall, between the table and the door (village/interiors.ts FURNITURE C)
+  if (lure) tables.push(new CaseWall(lure, game, world, { at: [lure.w / 2, CASE_WALL_Z, -Math.PI / 2], props: fishingDeps.props!, hour: () => sky.state.hour }));
   const vault = room('H');
   if (vault) tables.push(new IslandBank(vault, game, world.renderer));
   const shark = room('G');

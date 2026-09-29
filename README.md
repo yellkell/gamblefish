@@ -263,12 +263,42 @@ and the vendors.
 - **Winning at the casinos** (`src/casino/celebrate.ts`): every win flashes light, sends
   a ring across the table and throws confetti and glints, which settle on the felt. The
   amount rises in gold, and both controllers buzz. All of it scales with the win.
-  - **Roulette:** the winning spots pulse gold. Each winning stack is paid chip by chip
-    beside it, then slides over to you. A straight-up hit gets a STRAIGHT UP! banner.
-  - **Blackjack:** the pay lands chip by chip beside your bet and the hand's label
-    throbs. A natural gets a BLACKJACK! banner and the biggest burst.
-  - **Slots:** the winning symbols glow and the amount rises when the count lands.
-    Three shells or hooks get a NICE WIN banner, on top of the BIG WIN and JACKPOT ones.
+  - **Big wins** get a banner with a shine sweeping across its letters and light rays
+    turning behind it, and a fountain of gold coins that ring down and settle. (The shark's
+    bounty gets the coins too; the statue, the helter skelter and the walks opening don't.)
+  - **Chips** (`src/casino/chips.ts`) have a real chip's edge spots and inlay ring, so a
+    pay stack reads as money.
+  - **Roulette:** the winning pocket lights up on the wheel and the winning spots pulse
+    gold. Each winning stack is paid chip by chip beside it, then slides over to you. A
+    straight-up hit gets a STRAIGHT UP! banner.
+  - **Blackjack:** the pay lands chip by chip beside your bet, the felt glows gold under
+    the winning cards and the hand's label throbs. A natural gets a BLACKJACK! banner and
+    the biggest burst.
+  - **Slots:** the winning symbols glow and the payline turns gold. A small win's amount
+    rises when the count lands. From three shells or hooks up the win is a show that lasts
+    the whole count: the amount rolls up in big gold figures over the reels, the NICE WIN,
+    BIG WIN! or JACKPOT! banner stays up and confetti keeps popping. When the count lands
+    the figures slam and burst, then float away.
+- **The case wall** (`src/casino/CaseWall.ts`, rules in `src/casino/cases.ts`): on The
+  Lucky Lure's right-hand wall, between the roulette table and the door. It opens THE LURE
+  CASE ($50) the way a CS case opens.
+  - **The spin:** point at OPEN and pull the trigger. A strip of cards races past a gold
+    marker, ticking card by card, and slows to a crawl onto your prize. The prize is drawn
+    first (crypto RNG) and the strip is dressed round it, so the spin only shows it.
+  - **Grades** in CS's names and colours: Consumer (logs and small fish), Industrial,
+    Mil-Spec (peridot, amethyst), Restricted, Classified, Covert (an opah, an emerald, a
+    black opal) and the ★ Rare Special (a blue marlin, a ruby). The board shows everything in the case and each grade's
+    odds. One fish in ten comes out Silver.
+  - **Gems only with the pickaxe:** until the Jeweller's pickaxe is yours the case holds just
+    logs and fish, and the board shows only those. It returns about 94.5% without
+    the gems and 91% with them, whose stones are big ones from the top of what the rocks give.
+  - **The reveal:** your card comes out of the strip in its grade's light, with rays from
+    Restricted up. Mil-Spec and up get a party in the grade's colour; Classified, Covert and
+    the ★ Rare Special get a banner.
+  - **Where it goes:** logs into your backpack, a fish into its grid and a stone into your
+    pouch. A fish with no room is sold on the spot. Nothing from the case fills the field
+    guide: its fish and gem pages are for what you catch and dig out yourself. (The
+    Jeweller's window still names a case stone in your pouch.)
 - **The fish's skin** (`src/fishing/fishSkin.ts`): Tidewater's WGSL fish material, ported to
   GLSL on three's standard material. It adds scales in colour and relief, each species'
   markings, the lateral line and gill cover, see-through ray-striped fins, eyes with an iris

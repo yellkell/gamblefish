@@ -144,7 +144,7 @@ export class Statue {
       this.group.position.y = this.base - SUNK * (1 - k);
       if (this.rise >= 1) {
         this.rise = -1;
-        this.party.win({ at: this.bill.clone(), tier: 3, banner: 'QUITE THE JOURNEY!', scale: 7 });
+        this.party.win({ at: this.bill.clone(), tier: 3, banner: 'QUITE THE JOURNEY!', scale: 7, coins: false });
       }
     }
     // gold shines in the sun; after dark its studio light goes and a warm glow of its own comes up

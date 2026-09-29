@@ -429,7 +429,7 @@ export class SkelterSystem extends createSystem({}) {
     this.sign.draw();
     winFanfare(40);
     const gate = this.gateSpot();
-    this.party.win({ at: new Vector3(gate[0], this.floorY + 1.5, gate[1]), tier: 3, banner: 'HELTER SKELTER OPEN!', bannerAt: new Vector3(gate[0], this.floorY + 3.2, gate[1]), scale: 3 });
+    this.party.win({ at: new Vector3(gate[0], this.floorY + 1.5, gate[1]), tier: 3, banner: 'HELTER SKELTER OPEN!', bannerAt: new Vector3(gate[0], this.floorY + 3.2, gate[1]), scale: 3, coins: false });
     this.toast.show('The helter skelter is up! Take the lift to the top from the board by the crate.', 6, INK.good);
     // the chart in the field guide draws it now
     this.state.emit();
