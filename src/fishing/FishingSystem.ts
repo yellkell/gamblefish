@@ -1204,7 +1204,7 @@ export class FishingSystem extends createSystem({}) {
     }
     const bailOpen = this.state === 'windup' || this.state === 'flying';
     this.rod.lineFill = 1 - Math.min(1, this.lineOut / 220) * 0.5;
-    this.rod.update(dt, time, this.grip(this.hand), this.player.raySpaces[this.hand], { bendT, loadT, towards, bailOpen });
+    this.rod.update(dt, time, this.grip(this.hand), this.player.raySpaces[this.hand], { bendT, loadT, towards, bailOpen, rig: this.player });
     // the cast running line off the spool
     if (this.state === 'flying') this.rod.payOut(this.lineOut - this.castOut, dt, true);
     this.castOut = this.lineOut;

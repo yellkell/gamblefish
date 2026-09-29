@@ -1,9 +1,12 @@
 /**
  * The case wall in The Lucky Lure: THE LURE CASE, opened the way a CS case is.
  *
- *  THE WALL   A lacquered panel on the room's side wall, CASE OPENING in neon over it. At eye
- *             height a long window with a gold marker down its middle, and behind the glass a
- *             strip of cards, one per prize, each wearing its grade's colour along the bottom.
+ *  THE WALL   A cabinet against the room's side wall in the Lucky Lure's own look (the roulette
+ *             table's boards): black lacquer on a plinth, gold down its edges and round its
+ *             cornice, and down its front one column, all one width: THE LURE CASE in gold leaf on
+ *             a board at the top, the window, the case's board. At eye height a long window with a gold marker down its middle, and behind the glass a
+ *             strip of cards, one per prize, each wearing its grade's colour along the bottom
+ *             (each card trimmed at the glass's ends, so none of the strip shows outside it).
  *             Under it the case's board: everything in the case, in grade colours, the odds of
  *             each grade, and OPEN ($50). Point and pull the trigger. The gems are only in the
  *             case once the Jeweller's pickaxe is yours: till then it's logs and fish (and the
@@ -49,7 +52,7 @@ import { pulseHand } from '../input/haptics.ts';
 import { gemMesh } from '../mining/gemMesh.ts';
 import { lookFor, Lettering, mount } from '../ui/boards.ts';
 import { font } from '../ui/fonts.ts';
-import { roundRect } from '../ui/panel.ts';
+import { Panel, roundRect } from '../ui/panel.ts';
 import { InteractivePanel, register } from '../ui/pointer.ts';
 import { thumbnail } from '../ui/thumbnail.ts';
 import type { Interior } from '../village/interiors.ts';
@@ -58,17 +61,33 @@ import { Celebration, raysTexture, type Tier } from './celebrate.ts';
 import { look } from './look.ts';
 import { payOut, stake } from './money.ts';
 
-/* ── the wall (its own frame: the wall at z = 0, facing +z, floor at y = 0) ── */
-const W = 1.8;
-const PANEL = { y0: 0.4, y1: 2.62 };
+/* ── the cabinet (its own frame: the wall at z = 0, facing +z, floor at y = 0) ── */
+/**
+ * One column down the front, 6.5 cm apart and all one width: the name's board, the window, the case's
+ * board (each board 1.5 m across in a 4.5 cm frame, and the window's housing as wide as the frames).
+ */
+const BOARD_W = 1.5;
+const FRAME = 0.045;
+const GAP = 0.065;
+const BOARD_Y = 0.98;
+const BOARD_H = 0.6;
 const STRIP_Y = 1.62;
-const WIN_W = 1.5;
+const FACE_W = BOARD_W + FRAME * 2;
+const FACE_H = 0.46;
+const HEAD_H = 0.3;
+const HEAD_Y = STRIP_Y + FACE_H / 2 + GAP + FRAME + HEAD_H / 2;
+/** the body round the column, and how far its front stands out from the wall (village/interiors.ts FURNITURE C holds it) */
+const W = FACE_W + GAP * 2;
+const DEPTH = 0.17;
+const BODY = { y0: 0.1, y1: HEAD_Y + HEAD_H / 2 + FRAME + GAP };
+const WIN_W = BOARD_W;
 const WIN_H = 0.33;
 const CARD_W = 0.235;
 const CARD_H = 0.27;
 const PITCH = 0.25;
-const CARD_Z = 0.085;
-const FACE_Z = 0.06; // the face's back; it's 0.05 deep
+/** the window's housing stands on the body's front (it's 0.05 deep) */
+const FACE_Z = DEPTH;
+const CARD_Z = FACE_Z + 0.025;
 const N_CARDS = 60;
 /** where the prize sits in the strip */
 const WIN_AT = 52;
@@ -79,7 +98,7 @@ const LAND_PAUSE = 0.35;
 /** how long the prize card stays out */
 const SHOW_T = 4.2;
 /** where the prize card comes out to */
-const OUT = new Vector3(0, STRIP_Y + 0.03, 0.3);
+const OUT = new Vector3(0, STRIP_Y + 0.03, CARD_Z + 0.215);
 
 export interface CaseWallOptions {
   /** where it hangs, in the room's floor frame: x, z, and its turn (0 = facing +z) */
@@ -132,40 +151,54 @@ export class CaseWall {
     g.rotation.y = opts.at[2];
     room.contents.add(g);
 
-    // the panel: deep lacquer in a gold edge
-    const panelH = PANEL.y1 - PANEL.y0;
-    const back = new Mesh(new RoundedBoxGeometry(W, panelH, 0.06, 3, 0.02), look.gloss(r, 0x121420));
-    back.position.set(0, (PANEL.y0 + PANEL.y1) / 2, 0.03);
-    g.add(back);
+    // the cabinet: black lacquer on a plinth, gold down its edges and round its cornice, in the
+    // Lucky Lure's own look (the roulette table's boards: black lacquer, gold leaf, pink enamel)
     const gold = look.gold(r);
-    for (const [x, y, w, h] of [
-      [0, PANEL.y1, W + 0.02, 0.025],
-      [0, PANEL.y0, W + 0.02, 0.025],
-      [-W / 2, (PANEL.y0 + PANEL.y1) / 2, 0.025, panelH],
-      [W / 2, (PANEL.y0 + PANEL.y1) / 2, 0.025, panelH],
-    ] as const) {
-      const rail = new Mesh(new RoundedBoxGeometry(w, h, 0.03, 2, 0.008), gold);
-      rail.position.set(x, y, 0.065);
-      g.add(rail);
+    const lacquer = look.gloss(r, 0x160b11);
+    const bodyH = BODY.y1 - BODY.y0;
+    const plinth = new Mesh(new RoundedBoxGeometry(W + 0.04, BODY.y0, DEPTH + 0.02, 3, 0.02), lacquer);
+    plinth.position.set(0, BODY.y0 / 2, (DEPTH + 0.02) / 2);
+    const body = new Mesh(new RoundedBoxGeometry(W, bodyH, DEPTH, 4, 0.025), lacquer);
+    body.position.set(0, (BODY.y0 + BODY.y1) / 2, DEPTH / 2);
+    const cornice = new Mesh(new RoundedBoxGeometry(W + 0.04, 0.05, DEPTH + 0.02, 3, 0.015), lacquer);
+    cornice.position.set(0, BODY.y1 + 0.025, (DEPTH + 0.02) / 2);
+    g.add(plinth, body, cornice);
+    for (const sx of [-1, 1]) {
+      const edge = new Mesh(new RoundedBoxGeometry(0.018, bodyH - 0.02, 0.018, 2, 0.007), gold);
+      edge.position.set(sx * (W / 2 - 0.004), (BODY.y0 + BODY.y1) / 2, DEPTH - 0.004);
+      g.add(edge);
+    }
+    for (const y of [BODY.y0 + 0.011, BODY.y1 + 0.004]) {
+      const band = new Mesh(new RoundedBoxGeometry(W + 0.05, 0.016, DEPTH + 0.03, 2, 0.006), gold);
+      band.position.set(0, y, (DEPTH + 0.03) / 2);
+      g.add(band);
     }
 
-    // the neon over it, with its glow on the wall
-    const title = new Mesh(new PlaneGeometry(1.56, 0.36), new MeshBasicMaterial({ map: neonTexture(), transparent: true, depthWrite: false, toneMapped: false }));
-    title.position.set(0, 2.37, 0.064);
-    const halo = new Mesh(new PlaneGeometry(1.9, 0.7), new MeshBasicMaterial({ map: softTexture(), color: 0xff3fb4, transparent: true, opacity: 0.28, blending: AdditiveBlending, depthWrite: false, toneMapped: false }));
-    halo.position.set(0, 2.37, 0.062);
-    g.add(halo, title);
+    // its name at the top, on a board like the one below it (same face, same gold-leaf lettering,
+    // same frame), the one place it's said
+    const head = new Panel([1400, 280], [BOARD_W, HEAD_H]);
+    const headLetters = new Lettering(head, lookFor('C'), 3);
+    const paintHead = (): void => {
+      headLetters.begin();
+      headLetters.title('THE LURE CASE', 700, 186, 116, 'center', 1100);
+      headLetters.end();
+    };
+    paintHead();
+    head.repaintOnFonts(paintHead);
+    mount(head, lookFor('C'), { renderer: r });
+    head.mesh.position.set(0, HEAD_Y, DEPTH + 0.02);
+    g.add(head.mesh);
 
-    // the window: a dark well behind the cards, a face with the window cut in it, a chrome ring
-    const well = new Mesh(new PlaneGeometry(WIN_W + 0.3, WIN_H + 0.2), new MeshBasicMaterial({ map: wellTexture() }));
-    well.position.set(0, STRIP_Y, 0.062);
+    // the window: a dark well behind the cards, a housing with the window cut in it, a chrome ring
+    const well = new Mesh(new PlaneGeometry(WIN_W + 0.06, WIN_H + 0.06), new MeshBasicMaterial({ map: wellTexture() }));
+    well.position.set(0, STRIP_Y, FACE_Z + 0.006);
     g.add(well);
     const face = new Shape();
-    rrect(face, -W / 2 + 0.06, STRIP_Y - 0.27, W - 0.12, 0.54, 0.03);
+    rrect(face, -FACE_W / 2, STRIP_Y - FACE_H / 2, FACE_W, FACE_H, 0.03);
     const hole = new Shape();
     rrect(hole, -WIN_W / 2, STRIP_Y - WIN_H / 2, WIN_W, WIN_H, 0.02);
     face.holes.push(hole);
-    const faceMesh = new Mesh(new ExtrudeGeometry(face, { depth: 0.05, bevelEnabled: true, bevelSize: 0.008, bevelThickness: 0.008, bevelSegments: 2 }), look.gloss(r, 0x1d2130));
+    const faceMesh = new Mesh(new ExtrudeGeometry(face, { depth: 0.05, bevelEnabled: true, bevelSize: 0.008, bevelThickness: 0.008, bevelSegments: 2 }), lacquer);
     faceMesh.position.z = FACE_Z;
     g.add(faceMesh);
     const ringOuter = new Shape();
@@ -177,11 +210,12 @@ export class CaseWall {
     ring.position.z = FACE_Z + 0.058;
     g.add(ring);
 
-    // the cards (only those in the window are drawn, and each is cut off at the window's ends)
-    const cardGeo = new PlaneGeometry(CARD_W, CARD_H);
+    // the cards (only those in the window are drawn, and each is cut off at the window's ends:
+    // layout() trims its quad and its picture, so nothing of the strip is ever outside the glass)
     for (let k = 0; k < N_CARDS; k++) {
-      const m = new Mesh(cardGeo, windowed());
+      const m = new Mesh(new PlaneGeometry(CARD_W, CARD_H), new MeshBasicMaterial({ toneMapped: false }));
       m.visible = false;
+      m.frustumCulled = false;
       g.add(m);
       this.cards.push(m);
     }
@@ -218,10 +252,10 @@ export class CaseWall {
     this.photograph(opts.props);
 
     // the case's board
-    this.board = new InteractivePanel([1400, 560], [1.5, 0.6]);
+    this.board = new InteractivePanel([1400, 560], [BOARD_W, BOARD_H]);
     this.letters = new Lettering(this.board, lookFor('C'), 5);
     mount(this.board, lookFor('C'), { renderer: r });
-    this.board.mesh.position.set(0, 0.98, 0.08);
+    this.board.mesh.position.set(0, BOARD_Y, DEPTH + 0.02);
     g.add(this.board.mesh);
     this.board.paint = () => this.paintBoard();
     this.board.onClick = (id) => id === 'open' && this.open();
@@ -423,7 +457,7 @@ export class CaseWall {
     this.dress(); // the rest of the strip goes dark
     if (inside) cardFlip();
     // the party, in the grade's colour, bigger up the grades
-    const at = new Vector3(0, STRIP_Y, 0.34);
+    const at = new Vector3(0, STRIP_Y, CARD_Z + 0.255);
     const g = rank(p.item.grade);
     const tier: Tier | 0 = g >= 5 ? 3 : g >= 3 ? 2 : g >= 2 ? 1 : 0;
     if (tier)
@@ -433,7 +467,7 @@ export class CaseWall {
         tint,
         coins: p.item.grade === 'rare',
         banner: p.item.grade === 'rare' ? '★ RARE SPECIAL ★' : p.item.grade === 'covert' ? 'COVERT!' : p.item.grade === 'classified' ? 'CLASSIFIED' : undefined,
-        bannerAt: new Vector3(0, 2.0, 0.42),
+        bannerAt: new Vector3(0, HEAD_Y, CARD_Z + 0.335),
         hold: p.item.grade === 'rare' ? 3 : 0,
         quiet: !inside,
       });
@@ -454,14 +488,25 @@ export class CaseWall {
     });
   }
 
+  /** Each card where the strip has it, trimmed to the window: its quad and its picture both cut at the glass's ends. */
   private layout(): void {
+    const half = WIN_W / 2;
     this.cards.forEach((c, k) => {
       const x = k * PITCH - this.p;
-      c.visible = Math.abs(x) < WIN_W / 2 + CARD_W / 2;
-      if (c.visible) {
-        c.position.set(x, STRIP_Y, CARD_Z);
-        (c.material.userData.x as { value: number }).value = x;
-      }
+      const x0 = Math.max(x - CARD_W / 2, -half);
+      const x1 = Math.min(x + CARD_W / 2, half);
+      c.visible = x1 - x0 > 1e-4;
+      if (!c.visible) return;
+      c.position.set(0, STRIP_Y, CARD_Z);
+      // PlaneGeometry's corners: top left, top right, bottom left, bottom right
+      const pos = c.geometry.attributes.position;
+      const uv = c.geometry.attributes.uv;
+      const u0 = (x0 - (x - CARD_W / 2)) / CARD_W;
+      const u1 = (x1 - (x - CARD_W / 2)) / CARD_W;
+      pos.setX(0, x0).setX(2, x0).setX(1, x1).setX(3, x1);
+      uv.setX(0, u0).setX(2, u0).setX(1, u1).setX(3, u1);
+      pos.needsUpdate = true;
+      uv.needsUpdate = true;
     });
   }
 
@@ -490,9 +535,8 @@ export class CaseWall {
   private paintBoard(): void {
     const L = this.letters;
     const c = L.begin();
-    // (everything kept in from the gold-leaf fans in the corners)
-    L.title('THE LURE CASE', 80, 74, 46, 'left', 400);
-    L.text(this.status, 500, 66, 25, this.statusInk, 'left', 600, 680);
+    // (everything kept in from the gold-leaf fans in the corners; the case's name is on the board over the window)
+    L.text(this.status, 80, 66, 26, this.statusInk, 'left', 600, 1060);
     L.text(`$${this.state.money}`, 1316, 66, 28, 'accent', 'right', 700);
     // what's in it, commonest first, each tile in its grade's colour
     const inCase = contents(this.gems);
@@ -535,25 +579,6 @@ export class CaseWall {
     L.button('open', busy ? 'OPENING…' : `OPEN · $${CASE_PRICE}`, ox, 424, rx - ox, 80, busy ? 'off' : this.state.money >= CASE_PRICE ? 'go' : 'off', 36);
     L.end();
   }
-}
-
-/**
- * A card's material: its picture, cut off where the card runs past either end of the window (the
- * card only ever slides along x, so its x in the wall's frame is its position plus its own x).
- */
-function windowed(): MeshBasicMaterial {
-  const m = new MeshBasicMaterial({ toneMapped: false });
-  const x = { value: 0 };
-  m.userData.x = x;
-  m.onBeforeCompile = (sh) => {
-    sh.uniforms.uCardX = x;
-    sh.vertexShader = sh.vertexShader.replace('void main() {', 'varying float vCardX;\nvoid main() {\n  vCardX = position.x;');
-    sh.fragmentShader = sh.fragmentShader.replace(
-      'void main() {',
-      `uniform float uCardX;\nvarying float vCardX;\nvoid main() {\n  if (abs(uCardX + vCardX) > ${(WIN_W / 2).toFixed(4)}) discard;`,
-    );
-  };
-  return m;
 }
 
 /** A grade's place, commonest (0) to rarest (6). */
@@ -690,29 +715,6 @@ function prizeTexture(p: Prize, pic: HTMLCanvasElement | undefined): CanvasTextu
     g.font = font(700, 22);
     g.fillText('SILVER', 92, 44, 128);
   }
-  return tex(c);
-}
-
-/** CASE OPENING in neon tube: a wide pink glow, a white-hot core. */
-function neonTexture(): CanvasTexture {
-  const [c, g] = canvas(1040, 240);
-  g.textAlign = 'center';
-  g.textBaseline = 'middle';
-  g.lineJoin = 'round';
-  g.font = font(700, 118);
-  g.shadowColor = '#ff3fb4';
-  g.shadowBlur = 40;
-  g.strokeStyle = '#ff3fb4';
-  g.lineWidth = 12;
-  g.strokeText('CASE OPENING', 520, 104, 1000);
-  g.shadowBlur = 0;
-  g.fillStyle = '#fff4fb';
-  g.fillText('CASE OPENING', 520, 104, 1000);
-  g.font = font(700, 40);
-  g.shadowColor = '#ffc83a';
-  g.shadowBlur = 18;
-  g.fillStyle = '#ffd98a';
-  g.fillText(`THE LURE CASE · $${CASE_PRICE}`, 520, 196, 1000);
   return tex(c);
 }
 
