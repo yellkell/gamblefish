@@ -2,8 +2,9 @@
  * Now and then a red-tailed hawk. It comes in high from somewhere over the island, finds a
  * thermal not far from you and circles up it, banked into the turn, wings held in a shallow V
  * and fingered at the tips, teetering in the gusts and giving a few deep flaps now and then,
- * then slides off on a long glide and is gone for a few minutes. A silent visitor. Sometimes its mate comes too. They keep a hawk's hours: none after
- * dusk, and any still up when the light goes head home.
+ * then slides off on a long glide and is gone for a few minutes. A silent visitor. Sometimes
+ * its mate comes too. They keep a hawk's hours: visits only while the sun's well up, and home
+ * before sunset, so none is ever seen in the dusk or after dark.
  *
  * The bird is built here, pale underneath (a dark bar along each wing's leading edge, a dark
  * comma at the wrist, dark fingertips) and brown on top with its rufous tail, lit by the
@@ -35,6 +36,10 @@ const G = 9.81;
 const REACH = 650;
 /** out of sight past this (m): a visit's over */
 const GONE = 1100;
+/** the island hours (world/sky.ts: sunrise 6, sunset 18.5) a visit may start in, and when they head home */
+const VISITS_FROM = 7.5;
+const VISITS_TO = 16.8;
+const HOME_BY = 17.3;
 
 /* ── the bird ──────────────────────────────────────────────────────────── */
 
@@ -426,7 +431,11 @@ export class Hawks {
     if (dt <= 0) return;
     this.time += dt;
     this.eye.setFromMatrixPosition(camera.matrixWorld);
-    const day = this.sky.night.value < 0.25;
+    // a hawk's hours: visits only while the sun's well up, and home well before sunset (the
+    // glide out takes most of an island hour), so none is ever seen in the dusk or the dark
+    const h = this.sky.hour;
+    const day = h >= VISITS_FROM && h < VISITS_TO;
+    const home = h >= HOME_BY || h < VISITS_FROM;
     // the fill: as bright as the sky's light, warmed by the ground it comes up off
     const e = this.sky.skyE;
     this.fill.setRGB(1, 0.94, 0.84).multiplyScalar((e.r * 0.3 + e.g * 0.6 + e.b * 0.1) * 0.24);
@@ -434,21 +443,22 @@ export class Hawks {
 
     if (!up.length) {
       if (day) this.wait -= dt;
-      if (this.wait <= 0) this.visit();
+      if (this.wait <= 0 && day) this.visit();
     }
     if (this.mateIn > 0) {
       this.mateIn -= dt;
-      if (this.mateIn <= 0) this.launch(this.birds[1], 12 + Math.random() * 10);
+      if (this.mateIn <= 0 && day) this.launch(this.birds[1], 12 + Math.random() * 10);
     }
 
     const t = this.thermal;
     t.alt = Math.min(t.top, t.alt + dt * 0.35);
     for (const b of up) {
-      if (b.mode !== 'out' && (b.done || !day)) b.leave(this.clearWay(b.pos.x, b.pos.z, b.pos.y, b.pos.y - 35));
+      if (b.mode !== 'out' && (b.done || home)) b.leave(this.clearWay(b.pos.x, b.pos.z, b.pos.y, b.pos.y - 35));
       (b.mesh.material as MeshLambertMaterial).emissive.copy(this.fill);
       b.update(dt, t, this.time, this.floorAt(b));
       const far = Math.hypot(b.pos.x - this.eye.x, b.pos.z - this.eye.z);
-      if (b.mode === 'out' && far > GONE) {
+      // (and should one still be about as the light goes, it's gone: no hawks after dark)
+      if ((b.mode === 'out' && far > GONE) || this.sky.night.value > 0.02) {
         b.mesh.visible = false;
         if (!this.birds.some((o) => o.mesh.visible)) this.wait = 90 + Math.random() * 150;
       }

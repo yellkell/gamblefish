@@ -134,7 +134,8 @@ and the vendors.
   fingered at the tips and held in a shallow V. It gives a few deep beats now and then,
   then glides off without a sound.
   Sometimes its mate comes along. Their paths stay clear of the hills. They keep a hawk's
-  hours: none after dusk.
+  hours: they come only while the sun is well up (7:30 to about 5 pm on the island's
+  clock) and are gone before sunset, so you never see one at dusk or at night.
   - **The bird:** pale underneath with dark wing bars and fingertips, brown on top with the
     rufous tail. It flaps in its vertex shader, at the shoulder and the wrist, so each hawk
     costs one draw.
