@@ -4,6 +4,11 @@
  * return.
  *
  * Every prize is an item in one of seven grades, named and coloured the way a CS case does it.
+ * The gems are only in the case once the Jeweller's pickaxe is yours (the pouch comes with it);
+ * before that each grade holds just its logs and fish. Either way every grade has something in it;
+ * the case returns about 92% with the gems, 94.5% without (RETURNS, which the board shows and
+ * tools/casino-check.mjs proves).
+ *
  * The draw picks a grade by its odds, then an item in it (all equally likely), then the item's
  * size: a fish's weight, a stone's carats. What it's worth is what the island pays for it (the
  * fish stand, the Jeweller, the timber yard's $4 a log). One fish in ten comes out a tier up, a
@@ -21,6 +26,8 @@ import { fairRandom } from './roulette.ts';
 export const CASE_PRICE = 50;
 /** what a log is worth: the timber yard sells them at $40 for ten */
 export const LOG_VALUE = 4;
+/** what the case pays back on average (%), with the gems in it and without */
+export const RETURNS = { gems: 92.3, noGems: 94.5 };
 /** how often a fish comes out a tier up (Silver) */
 export const SILVER_CHANCE = 0.1;
 
@@ -103,7 +110,9 @@ export const ITEMS: CaseItem[] = [
 ];
 
 export const gradeOf = (id: GradeId): Grade => GRADES.find((g) => g.id === id)!;
-export const itemsOf = (id: GradeId): CaseItem[] => ITEMS.filter((i) => i.grade === id);
+/** What's in the case: everything, or (no pickaxe yet: `gems` false) all but the gems. */
+export const contents = (gems: boolean): CaseItem[] => (gems ? ITEMS : ITEMS.filter((i) => i.kind !== 'gem'));
+export const itemsOf = (id: GradeId, gems = true): CaseItem[] => contents(gems).filter((i) => i.grade === id);
 
 /** A card's name: "6 Logs", "Blue tang", "Ruby". */
 export function itemName(i: CaseItem): string {
@@ -131,9 +140,9 @@ export function rollGrade(r: () => number): Grade {
   return GRADES[0];
 }
 
-/** An item: a grade by its odds, then any item in it. */
-export function rollItem(r: () => number): CaseItem {
-  const list = itemsOf(rollGrade(r).id);
+/** An item: a grade by its odds, then any item in it (the gems among them only if `gems`). */
+export function rollItem(r: () => number, gems = true): CaseItem {
+  const list = itemsOf(rollGrade(r).id, gems);
   return list[Math.min(list.length - 1, Math.floor(r() * list.length))];
 }
 
@@ -148,15 +157,15 @@ export function sizeUp(item: CaseItem, r: () => number): Prize {
   return { item, size, cm: Math.round(fishLengthCm(item.of!, size)), tier, value: Math.round(fishValue(item.of!, size) * TIER_VALUE[tier]) };
 }
 
-/** Open a case: the prize, drawn fairly. */
-export function openCase(r: () => number = fairRandom): Prize {
-  return sizeUp(rollItem(r), r);
+/** Open a case: the prize, drawn fairly (a gem only if `gems`: the pickaxe is yours). */
+export function openCase(r: () => number = fairRandom, gems = true): Prize {
+  return sizeUp(rollItem(r, gems), r);
 }
 
 /**
  * The strip that spins past the marker: `n` cards, the prize's item at `at`, the rest drawn by
  * the case's own odds (so the strip looks the way the case really runs).
  */
-export function stripFor(prize: Prize, n: number, at: number, r: () => number = Math.random): CaseItem[] {
-  return Array.from({ length: n }, (_, k) => (k === at ? prize.item : rollItem(r)));
+export function stripFor(prize: Prize, n: number, at: number, r: () => number = Math.random, gems = true): CaseItem[] {
+  return Array.from({ length: n }, (_, k) => (k === at ? prize.item : rollItem(r, gems)));
 }

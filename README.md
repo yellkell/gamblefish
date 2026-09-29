@@ -288,13 +288,17 @@ and the vendors.
   - **Grades** in CS's names and colours: Consumer (logs and small fish), Industrial,
     Mil-Spec (the first gems), Restricted, Classified, Covert (an opah, a ruby) and the
     ★ Rare Special (a blue marlin). The board shows everything in the case and each grade's
-    odds. It returns about 92%. One fish in ten comes out Silver.
+    odds. One fish in ten comes out Silver.
+  - **Gems only with the pickaxe:** until the Jeweller's pickaxe is yours the case holds just
+    logs and fish, and the board says the gems are to come. It returns about 94.5% without
+    the gems and 92.3% with them.
   - **The reveal:** your card comes out of the strip in its grade's light, with rays from
     Restricted up. Mil-Spec and up get a party in the grade's colour; Classified, Covert and
     the ★ Rare Special get a banner.
   - **Where it goes:** logs into your backpack, a fish into its grid and a stone into your
-    pouch. A fish with no room, or a stone before you own the pickaxe (the pouch comes with
-    it), is sold on the spot. Case fish don't fill the field guide.
+    pouch. A fish with no room is sold on the spot. Nothing from the case fills the field
+    guide: its fish and gem pages are for what you catch and dig out yourself. (The
+    Jeweller's window still names a case stone in your pouch.)
 - **The fish's skin** (`src/fishing/fishSkin.ts`): Tidewater's WGSL fish material, ported to
   GLSL on three's standard material. It adds scales in colour and relief, each species'
   markings, the lateral line and gill cover, see-through ray-striped fins, eyes with an iris

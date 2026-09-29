@@ -244,7 +244,9 @@ export class GemWindows {
       const x = 44 + (i % 2) * (cw + 20);
       const y = 118 + Math.floor(i / 2) * (ch + 8);
       const mine = pouch.filter((g) => g.id === id);
-      const found = !!s.gems.log[id];
+      // a kind you've dug out yourself, or one in your pouch (from the case wall: it doesn't go in
+      // your book, but it's no mystery once it's in your hand)
+      const found = !!s.gems.log[id] || mine.length > 0;
       const worth = mine.reduce((a, g) => a + g.value, 0);
       L.thumb(found ? this.pics.get(id) : this.shadows.get(id), x, y + 6, ch - 12, !mine.length && found);
       L.text(found ? GEMS[id].name : '? ? ?', x + ch + 4, y + 42, 27, found ? 'ink' : 'dim', 'left', 700, cw - ch - 10);

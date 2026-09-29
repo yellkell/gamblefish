@@ -5,7 +5,8 @@
  *             height a long window with a gold marker down its middle, and behind the glass a
  *             strip of cards, one per prize, each wearing its grade's colour along the bottom.
  *             Under it the case's board: everything in the case, in grade colours, the odds of
- *             each grade, and OPEN ($50). Point and pull the trigger.
+ *             each grade, and OPEN ($50). Point and pull the trigger. The gems are only in the
+ *             case once the Jeweller's pickaxe is yours: till then it's logs and fish.
  *  THE SPIN   The prize is drawn first (casino/cases.ts, crypto RNG); the strip is dressed round
  *             it and races past the marker, ticking card by card, slowing and slowing, and comes
  *             to rest with the marker somewhere on your card.
@@ -13,10 +14,9 @@
  *             behind it from Restricted up), its size and worth on it; the rest of the strip goes
  *             dark. Mil-Spec and up get a party in the grade's colour (casino/celebrate.ts), bigger
  *             up the grades; Covert and the ★ Rare Special get their banner. Then it's yours:
- *             logs into your backpack, a fish into its grid (none of them fill the field guide:
- *             that's for what you catch), a stone into your pouch. A fish with no room in the
- *             backpack, or a stone before you've a pouch (it comes with the Jeweller's pickaxe),
- *             is sold on the spot and the money's in your wallet.
+ *             logs into your backpack, a fish into its grid, a stone into your pouch (none of
+ *             them fill the field guide: the book is for what you catch and dig out yourself). A
+ *             fish with no room in the backpack is sold on the spot, the money in your wallet.
  *
  * Leaving mid-spin never costs you: the prize is already drawn, and it's yours at once.
  */
@@ -52,7 +52,7 @@ import { roundRect } from '../ui/panel.ts';
 import { InteractivePanel, register } from '../ui/pointer.ts';
 import { thumbnail } from '../ui/thumbnail.ts';
 import type { Interior } from '../village/interiors.ts';
-import { CASE_PRICE, GRADES, gradeOf, ITEMS, itemName, openCase, stripFor, type CaseItem, type GradeId, type Prize } from './cases.ts';
+import { CASE_PRICE, contents, GRADES, gradeOf, ITEMS, itemName, openCase, RETURNS, stripFor, type CaseItem, type GradeId, type Prize } from './cases.ts';
 import { Celebration, raysTexture, type Tier } from './celebrate.ts';
 import { look } from './look.ts';
 import { payOut, stake } from './money.ts';
@@ -232,7 +232,8 @@ export class CaseWall {
     this.party = new Celebration(g, () => 0, () => world.renderer.xr.getSession());
 
     // a strip to look at before the first case
-    this.strip = Array.from({ length: N_CARDS }, (_, k) => ITEMS[(k * 7) % ITEMS.length]);
+    const shown = contents(this.gems);
+    this.strip = Array.from({ length: N_CARDS }, (_, k) => shown[(k * 7) % shown.length]);
     this.dress();
     this.layout();
 
@@ -264,6 +265,11 @@ export class CaseWall {
 
   /* ── opening ──────────────────────────────────────────────────────── */
 
+  /** Are the gems in the case? Only once the pickaxe (and so the pouch) is yours. */
+  private get gems(): boolean {
+    return this.state.gems.pick;
+  }
+
   private open(): void {
     if (this.phase === 'spinning' || this.phase === 'landed') return uiDeny();
     if (!stake(this.state, CASE_PRICE)) {
@@ -273,9 +279,10 @@ export class CaseWall {
     uiClick();
     // the prize first; then the strip round it, starting from the cards in the window now so
     // nothing jumps
-    const prize = openCase();
+    const gems = this.gems;
+    const prize = openCase(undefined, gems);
     const shown = Math.round(this.p / PITCH);
-    const strip = stripFor(prize, N_CARDS, WIN_AT);
+    const strip = stripFor(prize, N_CARDS, WIN_AT, Math.random, gems);
     for (let k = 0; k < 7; k++) strip[k] = this.strip[Math.max(0, Math.min(N_CARDS - 1, shown - 3 + k))];
     this.strip = strip;
     this.p0 = this.p - (shown - 3) * PITCH;
@@ -305,15 +312,12 @@ export class CaseWall {
       s.emit();
       this.say(`${name}, ${grade}: into your backpack (${s.woodworks.wood} logs)`, 'good');
     } else if (p.item.kind === 'gem') {
-      if (s.gems.pick) {
-        s.gems.pouch.push({ id: p.item.of!, ct: p.size, value: p.value });
-        s.save();
-        s.emit();
-        this.say(`${name}, ${p.size} ct, ${grade}: into your pouch (the Jeweller pays $${p.value})`, 'good');
-      } else {
-        payOut(s, p.value);
-        this.say(`${name}, ${grade}: no pouch yet (it comes with the pickaxe), so it's sold for $${p.value}`, 'good');
-      }
+      // (a stone is only ever drawn with the pouch yours; its log, the book's gem pages, is left
+      // alone: those fill from the rocks)
+      s.gems.pouch.push({ id: p.item.of!, ct: p.size, value: p.value });
+      s.save();
+      s.emit();
+      this.say(`${name}, ${p.size} ct, ${grade}: into your pouch (the Jeweller pays $${p.value})`, 'good');
     } else {
       const species = p.item.of!;
       const lv = Math.max(0, Math.min(GRID_SIZES.length - 1, s.upgrades.hold | 0));
@@ -489,7 +493,8 @@ export class CaseWall {
     L.text(this.status, 500, 66, 25, this.statusInk, 'left', 600, 700);
     L.text(`$${this.state.money}`, 1344, 66, 28, 'accent', 'right', 700);
     // what's in it, commonest first, each tile in its grade's colour
-    ITEMS.forEach((item, i) => {
+    const inCase = contents(this.gems);
+    inCase.forEach((item, i) => {
       const x = 56 + (i % 9) * 104;
       const y = 108 + Math.floor(i / 9) * 128;
       const col = gradeOf(item.grade).colour;
@@ -513,6 +518,14 @@ export class CaseWall {
       c.fillRect(x, y + 108, 96, 10);
       c.restore();
     });
+    if (!this.gems) {
+      // after the last tile: what's to come
+      const i = inCase.length;
+      const x = 56 + (i % 9) * 104 + 12;
+      const y = 108 + Math.floor(i / 9) * 128;
+      L.text('+ gems, once the', x, y + 48, 22, 'dim', 'left', 600, 900 - x);
+      L.text('Jeweller’s pickaxe is yours', x, y + 78, 22, 'dim', 'left', 600, 900 - x);
+    }
     // the odds of each grade
     const ox = 1020;
     L.text('THE ODDS', ox, 128, 24, 'dim', 'left', 700);
@@ -523,7 +536,7 @@ export class CaseWall {
       L.text(g.name, ox + 34, y, 22, 'ink', 'left', 600, 220);
       L.text(`${(g.odds / 100).toFixed(g.odds < 100 ? 2 : 1)}%`, 1344, y, 22, 'ink', 'right', 700);
     });
-    L.text('returns about 92% · one fish in ten comes out Silver', ox, 432, 17, 'dim', 'left', 500, 330);
+    L.text(`returns about ${this.gems ? RETURNS.gems : RETURNS.noGems}% · one fish in ten comes out Silver`, ox, 432, 17, 'dim', 'left', 500, 330);
     const busy = this.phase === 'spinning' || this.phase === 'landed';
     L.button('open', busy ? 'OPENING…' : `OPEN · $${CASE_PRICE}`, ox, 450, 328, 88, busy ? 'off' : this.state.money >= CASE_PRICE ? 'go' : 'off', 38);
     L.end();
