@@ -68,6 +68,8 @@ export const bank = {
   currency: 'usd',
   packs: FALLBACK_PACKS,
   checkout: null as Checkout | null,
+  /** coins that landed with no checkout on the board (the boot claim, after the refresh paid.html asks for): the board shows them, and offers to save them */
+  landed: 0,
   note: '',
   account: { known: false, protected: false, email: '' },
   /** the email typed at the last paid checkout: what SAVE MY PURCHASES offers */
@@ -200,7 +202,8 @@ export async function startCheckout(packId: string): Promise<void> {
     const reply = await call<{ id: string; url: string; short: string; pack: CoinPack }>('/checkout', {
       method: 'POST',
       headers: { 'content-type': 'application/json', ...who },
-      body: JSON.stringify({ pack: packId }),
+      // so Stripe brings the buyer back to this copy of the game, not another address with its own save
+      body: JSON.stringify({ pack: packId, home: gameHome() }),
     });
     co.id = reply.id;
     co.url = reply.url;
@@ -269,6 +272,7 @@ export function claimPurchases(): Promise<number> {
       }
       if (coins > 0 && bankDeps.state) {
         payOut(bankDeps.state, coins);
+        if (bank.checkout?.state !== 'waiting') bank.landed += coins;
         bump();
       }
       return coins;
@@ -330,10 +334,14 @@ export async function protect(email: string): Promise<boolean> {
   }
 }
 
+/** This copy of the game: its address and folder, with a trailing slash. */
+function gameHome(): string {
+  return `${location.origin}${location.pathname.replace(/[^/]*$/, '')}`;
+}
+
 /** Where the emailed link lands: the login page beside the game. */
 function loginUrl(): string {
-  const dir = location.pathname.replace(/[^/]*$/, '');
-  return `${location.origin}${dir}login.html`;
+  return `${gameHome()}login.html`;
 }
 
 /** LOG IN, step one: have Firebase email a sign-in link for that address. */

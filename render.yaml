@@ -30,3 +30,6 @@ services:
         value: usd
       - key: PUBLIC_URL
         value: https://gamblefish.web.app
+      # the other address the game is served from: a checkout started there returns there
+      - key: RETURN_URLS
+        value: https://yellkell.github.io/gamblefish

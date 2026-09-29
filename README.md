@@ -32,7 +32,7 @@ npm install
 npm run dev          # bakes the island on first run, then http://localhost:5180
 npm run build        # bake + typecheck + static build in dist/
 npm run check:teleport   # and check:backpack, check:casino, check:fish, check:camps,
-                         # check:line, check:mining, check:statue
+                         # check:line, check:mining, check:statue, check:bank
 ```
 
 In dev, IWSDK's plugin injects the IWER Quest 3 emulator, so **ENTER VR** works on a
@@ -551,6 +551,7 @@ same questions as ff2's `TELEPORT_AREAS`, `floorYAt` and `crossesWall`:
 | `tools/teleport-check.mjs` | headless teleport rules check, including no landing under a house floor |
 | `tools/fish-check.mjs` | headless check that the timed fish keep their hours and the trophy fish need their gear |
 | `tools/camps-check.mjs` | headless check that the camps are hidden from the start, level, reachable, and their chests fill properly |
+| `tools/bank-check.mjs` | headless check of the bank server in dev mode: paying credits once, claiming once, the newer save wins, and wrong LOG IN codes are throttled (`server/guards.mjs`) so nobody can guess into an account |
 | `tools/line-check.mjs` | headless check that the fishing line lies over the pier's rails, posts and deck as drawn, not through them, and goes round a lamp post it's swung against (`src/world/lineWrap.ts`) rather than over or through it |
 
 Dev hook: `__fish.move.to(x, z, yaw)`, `__fish.move.snapTurn(±1)` and

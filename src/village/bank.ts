@@ -17,7 +17,9 @@
  *             is up; step 4 says to refresh the page once paid, since the
  *             boot claim is the one that always collects them.
  *   PAID      the coins that landed, and (the first time) one tap to save the
- *             purchase to the email you paid with.
+ *             purchase to the email you paid with. Coins that landed at boot (after
+ *             the refresh) bring this face up on the next visit, so the offer to save
+ *             them isn't missed.
  *   LOG IN    on a new headset: type your email, open the link on your phone,
  *             type the six-digit code it shows. The game restarts as your
  *             account, with your save and every coin you bought.
@@ -185,6 +187,7 @@ export class IslandBank {
       this.face = 'checkout';
       void startCheckout(this.chosen.id);
     } else if (id === 'back' || id === 'done') {
+      bank.landed = 0;
       if (bank.checkout) cancelCheckout();
       cancelRecovery();
       this.face = 'packs';
@@ -229,9 +232,10 @@ export class IslandBank {
     if (!inside) this.visited = false;
     const co = bank.checkout;
     const paid = co?.state === 'paid';
-    if (paid && !this.wasPaid) {
+    if ((paid && !this.wasPaid) || (bank.landed > 0 && this.face === 'packs' && inside)) {
       this.face = 'paid';
       if (inside) winFanfare(8);
+      this.paint();
     }
     this.wasPaid = paid;
     if (bank.version !== this.seen) {
@@ -347,7 +351,7 @@ export class IslandBank {
         break;
       }
       case 'paid': {
-        const got = co?.paid ?? 0;
+        const got = co?.paid || bank.landed;
         text(`+${got.toLocaleString('en-US')}`, W / 2, 300, 150, '#ffd24a', 'center', 700);
         text('coins landed in your wallet', W / 2, 370, 44, INK.hot, 'center');
         const a = bank.account;
