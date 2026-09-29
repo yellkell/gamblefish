@@ -18,11 +18,11 @@
  *  - A WIN is counted up on the meter, blip by blip, while coins pour into the tray and clink as
  *    they land; the winning symbols light up; the money lands in your wallet with the cash chime
  *    at the end of the count, and the amount rises over the reels in gold. Every win flashes
- *    light, rings the floor and throws confetti from the reels, more for bigger wins
+ *    light, rings the floor and throws glints from the reels, more for bigger wins
  *    (casino/celebrate.ts), and the winning symbols glow and the payline turns to gold.
  *    Three shells or hooks and up are a show that lasts the whole count: the win rolls up in big
  *    gold figures over the reels, a NICE WIN banner stays up with a shine crossing it, and
- *    confetti keeps popping; when the count lands the figures slam and burst. Big wins get a
+ *    glints keep popping; when the count lands the figures slam and burst. Big wins get a
  *    BIG WIN (or JACKPOT) banner with light rays turning behind it, coins fountaining out over
  *    the machine, a burst of sparks, bells and a boom. Pull again (or hit SPIN) to skip the count.
  *  - A single worm only gives your bet back, so it isn't dressed up as a win: "BAIT BACK".
@@ -171,6 +171,8 @@ export class SlotMachine {
   private countT = 0;
   private countDur = 1;
   private lastBlip = 0;
+  /** when the display last redrew during a count (it rolls at 20 frames a second: a texture upload each) */
+  private lastPaint = 0;
   private coinsDue = 0;
   private coinsPoured = 0;
   private owed = 0;
@@ -610,7 +612,7 @@ export class SlotMachine {
       this.tier = mult >= 25 ? 3 : mult >= 8 ? 2 : 1;
       this.message = mult >= 25 ? (syms[0] === 'chest' ? 'JACKPOT!' : 'BIG WIN!') : mult >= 8 ? 'NICE WIN' : 'WIN';
       for (let k = 0; k < reels; k++) this.reels[k].frame.visible = this.reels[k].glow.visible = true;
-      // light and confetti out of the reel window (big wins bring their own bells and boom); a
+      // light and glints out of the reel window (big wins bring their own bells and boom); a
       // nice win or better keeps it going for the whole count, the figures rolling up over the
       // reels and the banner up over the topper
       const show = mult >= 8 ? this.countDur : 0;
@@ -643,7 +645,10 @@ export class SlotMachine {
         this.lastBlip = this.clock;
         rollTick(k);
       }
-      this.paintDisplay();
+      if (this.clock - this.lastPaint >= 0.05) {
+        this.lastPaint = this.clock;
+        this.paintDisplay();
+      }
     }
     const due = Math.round(this.coinsDue * Math.min(1, k * 1.15));
     while (this.coinsPoured < due) {

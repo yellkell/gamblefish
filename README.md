@@ -261,7 +261,7 @@ and the vendors.
   Point at the corner arrows to turn the pages, or point at the book and flick the thumbstick
   left or right.
 - **Winning at the casinos** (`src/casino/celebrate.ts`): every win flashes light, sends
-  a ring across the table and throws confetti and glints, which settle on the felt. The
+  a ring across the table and throws a burst of glints (no confetti). The
   amount rises in gold, and both controllers buzz. All of it scales with the win.
   - **Big wins** get a banner with a shine sweeping across its letters and light rays
     turning behind it, and a fountain of gold coins that ring down and settle. (The shark's
@@ -277,7 +277,7 @@ and the vendors.
   - **Slots:** the winning symbols glow and the payline turns gold. A small win's amount
     rises when the count lands. From three shells or hooks up the win is a show that lasts
     the whole count: the amount rolls up in big gold figures over the reels, the NICE WIN,
-    BIG WIN! or JACKPOT! banner stays up and confetti keeps popping. When the count lands
+    BIG WIN! or JACKPOT! banner stays up and glints keep popping. When the count lands
     the figures slam and burst, then float away.
 - **The case wall** (`src/casino/CaseWall.ts`, rules in `src/casino/cases.ts`): on The
   Lucky Lure's right-hand wall, between the roulette table and the door. It opens THE LURE
