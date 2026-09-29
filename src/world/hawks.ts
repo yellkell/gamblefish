@@ -1,9 +1,8 @@
 /**
  * Now and then a red-tailed hawk. It comes in high from somewhere over the island, finds a
  * thermal not far from you and circles up it, banked into the turn, wings held in a shallow V
- * and fingered at the tips, teetering in the gusts and giving a few deep flaps now and then.
- * It screams once or twice (audio/sfx.ts `hawkCry`), then slides off on a long glide and is
- * gone for a few minutes. Sometimes its mate comes too. They keep a hawk's hours: none after
+ * and fingered at the tips, teetering in the gusts and giving a few deep flaps now and then,
+ * then slides off on a long glide and is gone for a few minutes. A silent visitor. Sometimes its mate comes too. They keep a hawk's hours: none after
  * dusk, and any still up when the light goes head home.
  *
  * The bird is built here, pale underneath (a dark bar along each wing's leading edge, a dark
@@ -22,7 +21,6 @@ import {
   Vector3,
   type Camera,
 } from 'three';
-import { hawkCry } from '../audio/sfx.ts';
 import type { Heightfield } from './heightfield.ts';
 import type { SkyState } from './sky.ts';
 
@@ -300,7 +298,6 @@ class Hawk {
   private flapAmp = 0;
   private phase = 0;
   private wobble = Math.random() * 100;
-  cryIn = 0;
   private altOffset = 0;
 
   constructor() {
@@ -326,7 +323,6 @@ class Hawk {
     this.soarFor = soar;
     this.altOffset = altOffset;
     this.flapIn = 2 + Math.random() * 4;
-    this.cryIn = 6 + Math.random() * 10;
     this.mesh.visible = true;
   }
 
@@ -421,7 +417,6 @@ export class Hawks {
   constructor(
     private readonly ground: Heightfield,
     private readonly sky: SkyState,
-    private readonly indoors: () => boolean = () => false,
   ) {
     this.group.name = 'hawks';
     for (const b of this.birds) this.group.add(b.mesh);
@@ -456,12 +451,6 @@ export class Hawks {
       if (b.mode === 'out' && far > GONE) {
         b.mesh.visible = false;
         if (!this.birds.some((o) => o.mesh.visible)) this.wait = 90 + Math.random() * 150;
-      }
-      // a scream, now and then, while it's near enough to hear
-      b.cryIn -= dt;
-      if (b.cryIn <= 0) {
-        b.cryIn = b.mode === 'soar' ? 16 + Math.random() * 30 : 10 + Math.random() * 10;
-        if (far < 450 && !this.indoors()) hawkCry(b.pos, 0.55);
       }
     }
   }

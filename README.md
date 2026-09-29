@@ -131,8 +131,8 @@ and the vendors.
     few times a second.
 - **Hawks:** `src/world/hawks.ts`. Every few minutes a red-tailed hawk comes in over the
   island, finds a thermal near you and circles up it, banked into the turn. Its wings are
-  fingered at the tips and held in a shallow V. It gives a few deep beats now and then and
-  screams (a synthesized "kee-eeeer", `hawkCry` in `src/audio/sfx.ts`), then glides off.
+  fingered at the tips and held in a shallow V. It gives a few deep beats now and then,
+  then glides off without a sound.
   Sometimes its mate comes along. Their paths stay clear of the hills. They keep a hawk's
   hours: none after dusk.
   - **The bird:** pale underneath with dark wing bars and fingertips, brown on top with the

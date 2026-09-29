@@ -413,7 +413,7 @@ World.create(container, {
   const music = new Music(interiors.filter((i) => i.role.role === 'casino'));
   const shore = new ShoreSound(heightfield, json.layout.pier, () => interiorAt(interiors, world.player.position.x, world.player.position.z) !== null, () => sky.state.night.value);
   // now and then a hawk, circling up a thermal near you
-  const hawks = new Hawks(heightfield, sky.state, () => interiorAt(interiors, world.player.position.x, world.player.position.z) !== null);
+  const hawks = new Hawks(heightfield, sky.state);
   scene.add(hawks.group);
   // your shack, and the shops that furnish it
   const kit = { renderer: world.renderer, props: fishingDeps.props! };
