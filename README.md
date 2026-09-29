@@ -63,7 +63,7 @@ JavaScript, though, and that does carry over:
     cove sea): light absorbed and scattered along the refracted ray down to the seabed, the sand
     and its caustics seen through it, exact Fresnel, the sky's own colours in the reflection, a
     GGX sun path, drifting ripple layers and a lace of foam at the waterline.
-  - A gradient sky with fog.
+  - A gradient sky with fog, and sprite clouds.
   - Four Lambert draws for the village.
 
   At the pier head that's about 43 draw calls and 200k triangles.
@@ -122,6 +122,23 @@ and the vendors.
   sunset, dusk and a moonlit night each have their own sky, fog, sea and light.
   After dark the windows glow, the lamps light up (`src/world/lamps.ts`), the stars
   come out and the crickets start.
+- **Clouds:** `src/world/clouds.ts` fills the sky with fair-weather cumulus drifting
+  on the trade wind, out to the horizon wherever you stand. Each cloud is a heap of soft
+  puffs on a flat base, lit by the sky's own sun and moon: white tops and grey-blue bellies
+  by day, a silver edge as one crosses the sun, gold then pink through the sunset, and dim
+  moonlit shapes against the stars. The far ones fade into the horizon haze.
+  - **Cost:** one draw for the whole sky, about a thousand sprites, sorted back to front a
+    few times a second.
+- **Hawks:** `src/world/hawks.ts`. Every few minutes a red-tailed hawk comes in over the
+  island, finds a thermal near you and circles up it, banked into the turn. Its wings are
+  fingered at the tips and held in a shallow V. It gives a few deep beats now and then,
+  then glides off without a sound.
+  Sometimes its mate comes along. Their paths stay clear of the hills. They keep a hawk's
+  hours: they come only while the sun is well up (7:30 to about 5 pm on the island's
+  clock) and are gone before sunset, so you never see one at dusk or at night.
+  - **The bird:** pale underneath with dark wing bars and fingertips, brown on top with the
+    rufous tail. It flaps in its vertex shader, at the shoulder and the wrist, so each hawk
+    costs one draw.
 - **Fish that keep their own hours:** `src/fishing/timedFish.ts` adds five species,
   each biting only in its window: bonefish at dawn, queen triggerfish at midday,
   permit at sunset, lookdown at night under the pier lamps, and glasseye snapper after
@@ -486,7 +503,7 @@ same questions as ff2's `TELEPORT_AREAS`, `floorYAt` and `crossesWall`:
 |---|---|
 | `src/main.ts` | IWSDK boot, load, Enter VR |
 | `src/locomotion/` | ff2 teleport, its tuning, the octagon |
-| `src/world/` | baked data reader, heightfield, surfaces (pure), terrain, ocean, sky, village |
+| `src/world/` | baked data reader, heightfield, surfaces (pure), terrain, ocean, sky, clouds, hawks, village |
 | `src/audio/` | ff2's synth SFX bus and cash chime; Tidewater's sampled fishing and shore sounds; the music |
 | `src/fishing/` | the rod, cast, bites, fight, landing, catch card, the line meter clipped to the rod |
 | `src/woodworks/` | the axe, the woodlots and the timber yard; the reef and deep walks, their build crates and boards, and the bucket at the end |
