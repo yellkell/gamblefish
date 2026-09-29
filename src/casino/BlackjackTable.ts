@@ -8,7 +8,7 @@
  *  DEALER The hole card turns over and the dealer draws to 17, a card at a time.
  *  PAY    Losing chips are raked away. A winner's pay is stacked beside it chip by chip, then it
  *         all slides over to you, with the cash chime and the wrist counters. The win goes up in
- *         light, confetti and gold over your hand, bigger for a blackjack (casino/celebrate.ts),
+ *         light, glints and gold over your hand, bigger for a blackjack (casino/celebrate.ts),
  *         and the felt glows gold under the winning cards.
  *         Then the cards are swept to the discard tray.
  *
@@ -110,7 +110,7 @@ export class BlackjackTable {
     const g = this.group;
     g.position.set(opts.at[0], 0, opts.at[1]);
     room.contents.add(g);
-    // confetti lands on the felt over the table's half-round, on the floor past it
+    // coins land on the felt over the table's half-round, on the floor past it
     const onTable = (x: number, z: number): number => (z >= EDGE_Z && x * x + (z - EDGE_Z) ** 2 < TABLE_R * TABLE_R ? FELT_Y + 0.002 : 0);
     this.party = new Celebration(g, onTable, () => world.renderer.xr.getSession());
 

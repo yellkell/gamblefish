@@ -10,7 +10,7 @@
  *  RESULT The number pops up over the wheel in its colour, the dolly marks it on the felt, the
  *         winning pocket lights up on the wheel, the winning spots pulse gold and losing chips are
  *         swept away. Each winning stack is paid chip by chip beside it, then slides over to you:
- *         the cash chime (pitched up), the wrist counters rolling, a fanfare, and light, confetti,
+ *         the cash chime (pitched up), the wrist counters rolling, a fanfare, and light, glints,
  *         coins and the amount in gold, sized to the win (casino/celebrate.ts). A straight-up hit
  *         gets a banner with light rays turning behind it.
  *
@@ -170,7 +170,7 @@ export class RouletteTable {
     const g = this.group;
     g.position.set(opts.at[0], 0, opts.at[1]);
     room.contents.add(g);
-    // confetti settles on the table top, or on the floor past it
+    // coins settle on the table top, or on the floor past it
     const onTable = (x: number, z: number): number => (x > TABLE.x0 && x < TABLE.x1 && Math.abs(z) < TABLE.hz ? CHIP_Y : 0);
     this.party = new Celebration(g, onTable, () => world.renderer.xr.getSession());
 

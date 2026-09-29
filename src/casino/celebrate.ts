@@ -2,31 +2,31 @@
  * What a win looks like, shared by every game in the casinos. The bigger the win, the more
  * of it there is.
  *
- *  tier 1  a small win: a flash of light, a ring across the table, a scatter of confetti and
- *          glints, the amount rising in gold ("+$40"), one buzz in each hand.
- *  tier 2  a good win: more confetti, a wider ring, a run of glitter bells, a double buzz.
- *  tier 3  a big one: a confetti cannon, a banner ("BLACKJACK!", "STRAIGHT UP!") with a shine
+ *  tier 1  a small win: a flash of light, a ring across the table, a scatter of glints, the
+ *          amount rising in gold ("+$40"), one buzz in each hand.
+ *  tier 2  a good win: more glints, a wider ring, a run of glitter bells, a double buzz.
+ *  tier 3  a big one: a shower of glints, a banner ("BLACKJACK!", "STRAIGHT UP!") with a shine
  *          sweeping across its letters and light rays turning behind it, a fountain of gold coins
  *          that ring down and settle, a rolling rumble in both hands.
  *
  * A win can be HELD (`hold`, seconds): the banner and its rays stay up and fresh bursts keep popping
- * round the spot until it's over, so a long pay-out (a jackpot's count) is a party all the way
+ * of glints round the spot until it's over, so a long pay-out (a jackpot's count) is a party all the way
  * through. A TALLY is a big gold number rolling up in the air while a win is counted; when it lands
  * it slams, bursts and floats away.
  *
  * Each game owns one, parented to its own group, so every position here is in that game's frame
- * (floor at y = 0). Confetti settles on whatever `restAt` says is under it (a table top or the
- * floor) and fades there.
+ * (floor at y = 0). Coins settle on whatever `restAt` says is under it (a table top or the floor)
+ * and fade there; the ring races out across it.
  *
- * Draw cost while it plays: confetti, glints and coins are one instanced draw each, plus a sprite
- * or three.
+ * No confetti: it was hundreds of tumbling quads in your face on every win, and it lagged.
+ *
+ * Draw cost while it plays: glints and coins are one instanced draw each, plus a sprite or three.
  * All of it is hidden when nothing is playing.
  */
 
 import {
   AdditiveBlending,
   CanvasTexture,
-  Color,
   CylinderGeometry,
   DoubleSide,
   Group,
@@ -53,24 +53,8 @@ import { roundRect } from '../ui/panel.ts';
 export type Tier = 1 | 2 | 3;
 
 const TAU = Math.PI * 2;
-const MAX_CONFETTI = 240;
 const MAX_GLINTS = 96;
 const MAX_COINS = 90;
-const CONFETTI_COLOURS = [0xffd24a, 0xffe9a0, 0xff4fa3, 0x3fe0d0, 0xff8a2a, 0xffffff, 0x8a6cff];
-
-interface Flake {
-  p: Vector3;
-  v: Vector3;
-  rot: Vector3;
-  spin: Vector3;
-  age: number;
-  life: number;
-  resting: boolean;
-  flutter: number;
-  colour: number;
-  size: number;
-}
-
 interface Glint {
   p: Vector3;
   v: Vector3;
@@ -127,7 +111,6 @@ type SessionFn = () => XRSession | null | undefined;
 
 export class Celebration {
   readonly group = new Group();
-  private readonly confetti: InstancedMesh;
   private readonly glints: InstancedMesh;
   private readonly flash: Sprite;
   private readonly ring: Mesh;
@@ -135,7 +118,6 @@ export class Celebration {
   private readonly rays: Sprite;
   private readonly coins: InstancedMesh;
   private readonly shine = { value: -1 };
-  private flakes: Flake[] = [];
   private coinList: Coin[] = [];
   private tallies: TallyState[] = [];
   private sparks: Glint[] = [];
@@ -157,17 +139,12 @@ export class Celebration {
 
   constructor(
     parent: Object3D,
-    /** the height confetti settles at over (x, z), in the parent's frame */
+    /** the height of the surface under (x, z), in the parent's frame: coins settle there, the ring runs across it */
     private readonly restAt: (x: number, z: number) => number = () => 0,
     private readonly session: SessionFn = () => null,
   ) {
     parent.add(this.group);
     const glow = glowTexture();
-
-    this.confetti = new InstancedMesh(new PlaneGeometry(0.02, 0.011), new MeshBasicMaterial({ side: DoubleSide, toneMapped: false }), MAX_CONFETTI);
-    this.confetti.count = 0;
-    this.confetti.frustumCulled = false;
-    this.confetti.setColorAt(0, _c.setHex(0xffffff)); // allocates the colour buffer
 
     this.glints = new InstancedMesh(
       new PlaneGeometry(1, 1),
@@ -220,7 +197,7 @@ export class Celebration {
     this.coins.frustumCulled = false;
     this.coins.visible = false;
 
-    this.group.add(this.confetti, this.glints, this.coins, this.flash, this.ring, this.rays, this.banner);
+    this.group.add(this.glints, this.coins, this.flash, this.ring, this.rays, this.banner);
   }
 
   /**
@@ -244,7 +221,7 @@ export class Celebration {
     this.buzz(tier);
   }
 
-  /** The light and the confetti on their own (no amount, no sound). */
+  /** The light and the glints on their own (no amount, no sound). */
   burst(at: Vector3, tier: Tier, k = 1, coins = true, tint?: number): void {
     this.flash.material.color.setHex(tint ?? 0xffe08a);
     (this.ring.material as MeshBasicMaterial).color.setHex(tint ?? 0xffd24a);
@@ -256,13 +233,13 @@ export class Celebration {
     this.ringT = 0;
     this.ringSize = [0, 0.45, 0.8, 1.3][tier] * k;
     this.ring.position.set(at.x, this.restAt(at.x, at.z) + 0.004, at.z);
-    // confetti thrown up and out, glints with it, and for the bigger wins a fountain of coins
+    // glints thrown up and out, and for the bigger wins a fountain of coins
     const power = [0, 1.3, 1.8, 2.5][tier] * Math.sqrt(k);
-    this.spray(at, [0, 26, 70, 150][tier], [0, 14, 30, 60][tier], power, k);
+    this.sparkle(at, [0, 14, 30, 60][tier], power, k);
     if (coins) this.fountain(at, [0, 0, 14, 48][tier], k);
   }
 
-  /** Keep the party going round `at` for `seconds`: a fresh pop of confetti and glints every so often. */
+  /** Keep the party going round `at` for `seconds`: a fresh pop of glints every so often. */
   hold(at: Vector3, tier: Tier, seconds: number, k = 1): void {
     this.holdAt.copy(at);
     this.holdTier = tier;
@@ -271,25 +248,8 @@ export class Celebration {
     this.nextPop = 0.45;
   }
 
-  /** Confetti and glints from `at`. */
-  private spray(at: Vector3, n: number, g: number, power: number, k: number): void {
-    for (let i = 0; i < n; i++) {
-      const a = Math.random() * TAU;
-      const out = (0.25 + Math.random() * 0.75) * power * 0.55;
-      this.flakes.push({
-        p: at.clone().add(new Vector3((Math.random() - 0.5) * 0.08, 0, (Math.random() - 0.5) * 0.08)),
-        v: new Vector3(Math.cos(a) * out, power * (0.6 + Math.random() * 0.6), Math.sin(a) * out),
-        rot: new Vector3(Math.random() * TAU, Math.random() * TAU, Math.random() * TAU),
-        spin: new Vector3((Math.random() - 0.5) * 14, (Math.random() - 0.5) * 10, (Math.random() - 0.5) * 14),
-        age: 0,
-        life: 2.4 + Math.random() * 1.4,
-        resting: false,
-        flutter: Math.random() * TAU,
-        colour: CONFETTI_COLOURS[i % CONFETTI_COLOURS.length],
-        size: Math.sqrt(k),
-      });
-    }
-    if (this.flakes.length > MAX_CONFETTI) this.flakes.splice(0, this.flakes.length - MAX_CONFETTI);
+  /** Glints from `at`. */
+  private sparkle(at: Vector3, g: number, power: number, k: number): void {
     for (let i = 0; i < g; i++) {
       const a = Math.random() * TAU;
       const e = Math.random() * 0.9 + 0.2;
@@ -421,17 +381,16 @@ export class Celebration {
   }
 
   get busy(): boolean {
-    return this.flakes.length > 0 || this.sparks.length > 0 || this.coinList.length > 0 || this.risers.length > 0 || this.tallies.length > 0 || this.flashT >= 0 || this.ringT >= 0 || this.bannerT >= 0 || this.holdT > 0;
+    return this.sparks.length > 0 || this.coinList.length > 0 || this.risers.length > 0 || this.tallies.length > 0 || this.flashT >= 0 || this.ringT >= 0 || this.bannerT >= 0 || this.holdT > 0;
   }
 
   update(dt: number, camera: Camera): void {
     if (!this.busy) {
-      this.confetti.visible = this.glints.visible = this.coins.visible = false;
+      this.glints.visible = this.coins.visible = false;
       return;
     }
     this.updateHold(dt);
     this.updateFlash(dt);
-    this.updateConfetti(dt);
     this.updateCoins(dt);
     this.updateTallies(dt);
     this.updateGlints(dt, camera);
@@ -444,13 +403,13 @@ export class Celebration {
     this.holdT -= dt;
     this.nextPop -= dt;
     if (this.nextPop > 0 || this.holdT <= 0) return;
-    // a pop somewhere round the win: confetti, glints, and on the big ones a few more coins
+    // a pop of glints somewhere round the win, and on the big ones a few more coins
     const t = this.holdTier;
     const k = this.holdK;
     this.nextPop = t === 3 ? 0.42 + Math.random() * 0.2 : 0.7 + Math.random() * 0.3;
     const at = _v.copy(this.holdAt).add(new Vector3((Math.random() - 0.5) * 0.5 * k, (Math.random() - 0.3) * 0.25 * k, (Math.random() - 0.5) * 0.1 * k));
     const power = (t === 3 ? 1.6 : 1.2) * Math.sqrt(k);
-    this.spray(at, t === 3 ? 30 : 14, t === 3 ? 12 : 6, power, k);
+    this.sparkle(at, t === 3 ? 12 : 6, power, k);
     if (t === 3) this.fountain(this.holdAt, 5, k);
   }
 
@@ -472,43 +431,6 @@ export class Celebration {
       (this.ring.material as MeshBasicMaterial).opacity = 0.8 * (1 - k);
       if (k >= 1) this.ringT = -1;
     }
-  }
-
-  private updateConfetti(dt: number): void {
-    const m = new Matrix4();
-    const o = _o;
-    let n = 0;
-    this.flakes = this.flakes.filter((f) => f.age < f.life);
-    for (const f of this.flakes) {
-      f.age += dt;
-      if (!f.resting) {
-        // paper: light, draggy, fluttering side to side on the way down
-        f.v.y -= 5.5 * dt;
-        f.v.multiplyScalar(Math.exp(-dt * 2.6));
-        f.p.addScaledVector(f.v, dt);
-        f.p.x += Math.sin(f.age * 7 + f.flutter) * 0.12 * dt;
-        f.p.z += Math.cos(f.age * 6 + f.flutter) * 0.12 * dt;
-        f.rot.addScaledVector(f.spin, dt);
-        const floor = this.restAt(f.p.x, f.p.z) + 0.003;
-        if (f.p.y < floor && f.v.y < 0) {
-          f.p.y = floor;
-          f.resting = true;
-          // lie flat where it fell
-          f.rot.set(-Math.PI / 2, 0, f.rot.z);
-          f.life = Math.min(f.life, f.age + 1.2);
-        }
-      }
-      o.position.copy(f.p);
-      o.rotation.set(f.rot.x, f.rot.y, f.rot.z);
-      o.scale.setScalar(Math.max(0.001, Math.min(1, (f.life - f.age) / 0.45)) * f.size);
-      o.updateMatrix();
-      this.confetti.setMatrixAt(n, m.copy(o.matrix));
-      this.confetti.setColorAt(n++, _c.setHex(f.colour));
-    }
-    this.confetti.count = n;
-    this.confetti.visible = n > 0;
-    this.confetti.instanceMatrix.needsUpdate = true;
-    this.confetti.instanceColor!.needsUpdate = true;
   }
 
   private updateGlints(dt: number, camera: Camera): void {
@@ -667,7 +589,6 @@ const _o = new Object3D();
 const _v = new Vector3();
 const _q = new Quaternion();
 const _q2 = new Quaternion();
-const _c = new Color();
 
 /* ── art ──────────────────────────────────────────────────────────── */
 
