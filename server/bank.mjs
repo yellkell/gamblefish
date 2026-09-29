@@ -86,7 +86,7 @@ export const PACKS = [
   { id: 'vault', coins: 7000, minor: 1799 },
 ];
 
-const packName = (pack) => `${pack.coins.toLocaleString('en-US')} Fish & Chips coins`;
+const packName = (pack) => `Support Fish & Chips: ${pack.coins.toLocaleString('en-US')} coins as thanks`;
 
 /* ── the ledger ──────────────────────────────────────────────────────── */
 
@@ -434,7 +434,7 @@ async function createCheckout(req, uid, pack, home) {
             tax_behavior: 'inclusive',
             product_data: {
               name: packName(pack),
-              description: 'In-game coins for Fish & Chips. For play only: no cash value, cannot be withdrawn or exchanged. 18+.',
+              description: 'Thank you for supporting Fish & Chips. Your coins are for play only: no cash value, cannot be withdrawn or exchanged. 18+.',
               tax_code: TAX_CODE,
             },
           },
