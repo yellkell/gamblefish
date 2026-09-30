@@ -212,8 +212,10 @@ and the vendors.
     while a fish has them. At the Bait Shop every bait you've bought (and the frozen shrimp you
     started with) has a **USE** button to put it on the hook, and at the Tackle Shop a **YOUR
     ROD AND REEL** board on the wall by the rack does the same for the rod in your hand and the
-    reel on it. That only changes the look: the bites come as fast as your best bait brings them,
-    you cast as far as your best rod and reel in as fast as your best reel. Buying new gear puts it on. The picks are saved (`looks`, by track).
+    reel on it. Every fish likes one bait best (`src/fishing/favouriteBait.ts`, from what it
+    eats in the wild) and bites twice as readily with it on the hook; otherwise it only changes
+    the look: the bites come as fast as your best bait brings them, the trophy fish go by your
+    best, you cast as far as your best rod and reel in as fast as your best reel. Buying new gear puts it on. The picks are saved (`looks`, by track).
 - **Trophy fish** (`src/fishing/trophyFish.ts`): roosterfish, opah, sailfish,
   swordfish (night only) and blue marlin. They bite only when you have the gear each one
   needs and the bobber is over deep enough water (8–13 m, out past the drop-off off the
@@ -251,7 +253,7 @@ and the vendors.
   buttons stand off the tray's left edge, above MUSIC), a book of the island's marine fauna
   (`src/backpack/fieldGuide.ts`). It has a title page with your progress, two species to
   a page, and the tarpon and the trophy fish on a page each at the back. A species you
-  haven't caught shows as a shadow with where and when to look. The first one you land
+  haven't caught shows as a shadow with where and when to look, and the bait it likes. The first one you land
   fills its entry in: its picture, names, habitat, how many you've caught and your best, and a
   true DID YOU KNOW? fact. Opposite the title page is a chart of the bay drawn from the terrain
   (`src/backpack/chart.ts`), showing depths, the drop-off, the reef, the pier, and numbered places

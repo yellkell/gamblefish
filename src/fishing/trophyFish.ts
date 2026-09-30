@@ -187,6 +187,8 @@ export interface Rig {
   depth: number;
   /** the gear levels (GameState.upgrades) */
   gear: Record<string, number>;
+  /** the bait on the hook (its level on the bait track), for the fish that like it (fishing/favouriteBait.ts) */
+  bait?: number;
   /** what's been caught so far (GameState.log): the shark waits for a full book */
   log?: Record<string, { count: number }>;
 }

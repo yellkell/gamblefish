@@ -587,8 +587,9 @@ export class FishingSystem extends createSystem({}) {
     }
     if (b.t > 0) return;
     if (b.phase === 'wait') {
-      // the rig: what the trophy fish look at (fishing/trophyFish.ts)
-      const species = pickSpecies(this.habitat(), hourNow(), Math.random, { depth: this.depth(), gear: fishingDeps.state!.upgrades, log: fishingDeps.state!.log });
+      // the rig: what the trophy fish look at (fishing/trophyFish.ts), and the bait on the hook (fishing/favouriteBait.ts)
+      const st = fishingDeps.state!;
+      const species = pickSpecies(this.habitat(), hourNow(), Math.random, { depth: this.depth(), gear: st.upgrades, log: st.log, bait: shownLevel(st.upgrades, st.looks, 'bait') });
       if (!species) {
         b.t = 8;
         return;
