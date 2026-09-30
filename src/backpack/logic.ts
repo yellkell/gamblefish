@@ -6,7 +6,7 @@
  *           backpack's width, so every fish fits an empty one, but the great white keeps its
  *           whole length and fits none), in its own silhouette, column by column from the tail
  *           (BODY): a houndfish is a bar, a snapper an S, a reef fish a plus sign, a grouper a
- *           club with its big head, a tuna a football. A fish two cells long or less is a plain
+ *           club with its big head, a tuna deep in the back. A fish two cells long or less is a plain
  *           bar, and a tail is only ever one cell, fins and all: a big catch takes its room in
  *           the depth of its body, the billfish most of all. The roosterfish's comb has gaps
  *           between its spines, where a one-cell fish can tuck in. Pieces turn in 90° steps.
@@ -54,10 +54,10 @@ const rep = (m: number, n: number): number[] => Array.from({ length: Math.max(0,
 const PLANS: Record<string, (n: number) => number[]> = {
   /** a bar: the houndfish, the silverside, the mullet, the yellowtail, the bonefish */
   bar: (n) => rep(MID, n),
-  /** slender, but a big one is two deep: the barracuda */
-  slim: (n) => (n < 4 ? PLANS.bar(n) : [MID, ...rep(LOW, n - 2), MID]),
-  /** a football, deepest in the middle: the jack, the tuna, the tarpon */
-  football: (n) => (n < 4 ? [MID, ...rep(HIGH, n - 2), MID] : [MID, HIGH, ...rep(ALL, n - 4), HIGH, MID]),
+  /** slender, but a big one is two deep in the middle: the barracuda */
+  slim: (n) => (n < 5 ? PLANS.bar(n) : [MID, MID, ...rep(LOW, n - 4), MID, MID]),
+  /** a deep back, tapering to the tail and the snout: the jack, the tuna, the tarpon */
+  deepBack: (n) => (n < 4 ? [MID, HIGH, MID] : [MID, ...rep(HIGH, n - 3), MID, MID]),
   /** deep, tail high and snout low, so it packs like an S: the snappers, grunts, parrotfish */
   deep: (n) => [MID, ...rep(LOW, n - 2), BELLY],
   /** the hogfish: an S with its long rooting snout */
@@ -66,16 +66,16 @@ const PLANS: Record<string, (n: number) => number[]> = {
   club: (n) => [MID, ...rep(LOW, n - 2), ALL],
   /** round as a coin, tail and snout a cell each: a plus sign, or a hexagon */
   disc: (n) => [MID, ...rep(ALL, n - 2), MID],
-  /** the mahi: a deep back and the bull's blunt square forehead */
-  bull: (n) => (n < 4 ? PLANS.bar(n) : [MID, ...rep(HIGH, n - 2), ALL]),
+  /** the mahi: slim behind the bull's blunt square forehead */
+  bull: (n) => (n < 4 ? PLANS.bar(n) : [...rep(MID, n - 2), HIGH, ALL]),
   /** the roosterfish: its comb of long spines, with gaps between them */
-  comb: (n) => (n < 4 ? PLANS.bar(n) : [MID, ...Array.from({ length: n - 2 }, (_, i) => (i % 2 ? LOW : ALL)), MID]),
+  comb: (n) => (n < 4 ? PLANS.bar(n) : [MID, ...Array.from({ length: n - 2 }, (_, i) => (i % 2 ? MID : HIGH)), MID]),
   /** the sailfish: a deep body under its great sail, and its bill */
-  sail: (n) => (n < 5 ? PLANS.football(n) : [MID, ...rep(ALL, n - 3), HIGH, MID]),
+  sail: (n) => (n < 5 ? PLANS.deepBack(n) : [MID, ...rep(ALL, n - 3), HIGH, MID]),
   /** the swordfish: a deep body, and its long sword */
-  sword: (n) => (n < 5 ? PLANS.football(n) : [MID, ...rep(ALL, n - 3), MID, MID]),
+  sword: (n) => (n < 5 ? PLANS.deepBack(n) : [MID, ...rep(ALL, n - 3), MID, MID]),
   /** the marlin: the heaviest, deep from its tail to its spear */
-  spear: (n) => (n < 5 ? PLANS.football(n) : [MID, ...rep(ALL, n - 2), MID]),
+  spear: (n) => (n < 5 ? PLANS.deepBack(n) : [MID, ...rep(ALL, n - 2), MID]),
   /** the great white: its dorsal fin */
   shark: (n) => (n < 4 ? PLANS.bar(n) : [...rep(MID, n - 2), HIGH, MID]),
 };
@@ -88,9 +88,9 @@ export const BODY: Record<string, keyof typeof PLANS> = {
   yellowtail: 'bar',
   bonefish: 'bar',
   barracuda: 'slim',
-  jack: 'football',
-  tuna: 'football',
-  tarpon: 'football',
+  jack: 'deepBack',
+  tuna: 'deepBack',
+  tarpon: 'deepBack',
   grunt: 'deep',
   redSnapper: 'deep',
   parrot: 'deep',

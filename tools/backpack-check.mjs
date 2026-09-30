@@ -31,7 +31,7 @@ check('a reef-round opah of 3 cells is a plus sign', opah.length === 5 && [[0, 1
   check('every tail is one cell, no forked tails', forked.length === 0, forked.join(' ') || undefined);
 }
 const bigTuna = shapeFor('tuna', 132, 14);
-check('a big tuna is a football: one cell at each end, three deep in the middle', [1, 2, 3, 3, 2, 1].every((d, c) => bigTuna.filter(([x]) => x === c).length === d), JSON.stringify(bigTuna));
+check('a big tuna is deep in the back, one cell at the tail and the snout', [1, 2, 2, 2, 1, 1].every((d, c) => bigTuna.filter(([x]) => x === c).length === d), JSON.stringify(bigTuna));
 const marlin = shapeFor('marlin', 300, 120);
 check('a marlin fills most of an empty first backpack', marlin.length >= 14, `${marlin.length} cells`);
 {
@@ -42,7 +42,7 @@ check('a marlin fills most of an empty first backpack', marlin.length >= 14, `${
 const grouper = shapeFor('grouper', 88, 12);
 check('a grouper is heaviest at the head: its snout column the deepest', grouper.filter(([c]) => c === 3).length === 3 && grouper.filter(([c]) => c === 0).length === 1, JSON.stringify(grouper));
 const rooster = shapeFor('roosterfish', 110, 20);
-check('a roosterfish\'s comb has a gap between its spines', has(rooster, 1, 2) && !has(rooster, 2, 2) && has(rooster, 3, 2), JSON.stringify(rooster));
+check('a roosterfish\'s comb has a gap between its spines', has(rooster, 1, 1) && !has(rooster, 2, 1) && has(rooster, 3, 1), JSON.stringify(rooster));
 // every shape, every length: in one piece, as long as the fish, on the grid from (0, 0), and no taller than 3
 {
   const { FISH_IDS } = await import('../src/fishing/tidewater.ts');
@@ -71,7 +71,7 @@ console.log('\nthe notches');
   // a one-cell fish tucks into the gap in a roosterfish's comb
   const [C0, R0] = GRID_SIZES[0];
   const t = piece(40, 'roosterfish', 110, 20, { x: 0, y: 0 });
-  const tiny = piece(41, 'silverside', 12, 0.03, { x: 2, y: 2 });
+  const tiny = piece(41, 'silverside', 12, 0.03, { x: 2, y: 1 });
   check('a silverside fits in the gap of a roosterfish\'s comb', fits(t, [], C0, R0) && fits(tiny, [t], C0, R0));
 }
 
