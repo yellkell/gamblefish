@@ -6,7 +6,7 @@
  *  THE DANCERS   all twelve hidden camps found (the beach party comes of that, and isn't counted)
  *  THE GEMS      every kind of stone the rocks hold, found
  *  THE SHOPS     everything the island sells that stays yours: every piece for your shack and
- *                Coral's villa, every level of rod, reel, line, hooks, bait and charm, the axe and
+ *                Coral's villa, every level of rod, reel, line, hooks, bait and gadget, the axe and
  *                the pickaxe (logs are firewood, not keepsakes)
  *  THE SKELTER   one full descent of the helter skelter: all three tiers, to the bottom
  *

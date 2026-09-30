@@ -4,10 +4,9 @@
  *
  *   shops    planks painted in the trade's colour, the name in cream, the emblem at the left: a
  *            rod for the tackle shop, a baited hook, a stack of coins, a saw and hammer, the
- *            pawnbroker's three balls, a mounted fish
+ *            pawnbroker's three balls, a mounted fish, the engineer's cog and spanner
  *   market   the fish market's board is cut in the shape of a fish
  *   fine     the jeweller's, the boutique's and the florist's: lacquer, gilt border, gilt letters
- *   mystic   the fortune teller's: midnight purple, stars, a moon, a crystal ball
  *   casinos  "island shack casino": dark timber, neon letters with a halo, a neon emblem either
  *            side (a wheel, cherries, a spade), a bulb border, and marquee bulbs along the front
  *            eaves chasing round
@@ -75,7 +74,7 @@ function toWorld(b: BuildingFrame, lx: number, ly: number, lz: number, out: Vect
 
 /* ── the emblems: a picture of the trade, painted beside the name ────────── */
 
-type Emblem = 'fish' | 'rod' | 'hook' | 'ring' | 'flower' | 'mirror' | 'coin' | 'saw' | 'balls' | 'mount' | 'ball' | 'wheel' | 'cherries' | 'spade';
+type Emblem = 'fish' | 'rod' | 'hook' | 'ring' | 'flower' | 'mirror' | 'coin' | 'saw' | 'balls' | 'mount' | 'cog' | 'wheel' | 'cherries' | 'spade';
 
 /** Each emblem drawn in a box of side `s` centred on (x, y). */
 const EMBLEMS: Record<Emblem, (c: CanvasRenderingContext2D, x: number, y: number, s: number, ink: string, hi: string) => void> = {
@@ -359,25 +358,39 @@ const EMBLEMS: Record<Emblem, (c: CanvasRenderingContext2D, x: number, y: number
     c.fill();
     fishShape(c, x, y, s * 0.5, -0.5, hi);
   },
-  // a crystal ball on its stand, a star in it
-  ball: (c, x, y, s, ink, hi) => {
+  // a cog with a spanner laid across it
+  cog: (c, x, y, s, ink, hi) => {
     c.fillStyle = ink;
     c.beginPath();
-    c.moveTo(x - s * 0.26, y + s * 0.44);
-    c.lineTo(x + s * 0.26, y + s * 0.44);
-    c.lineTo(x + s * 0.14, y + s * 0.24);
-    c.lineTo(x - s * 0.14, y + s * 0.24);
+    const n = 10;
+    for (let i = 0; i < n * 4; i++) {
+      const a = (i / (n * 4)) * Math.PI * 2;
+      const k = i % 4 < 2 ? s * 0.4 : s * 0.32;
+      c.lineTo(x + Math.cos(a) * k, y + Math.sin(a) * k);
+    }
     c.closePath();
-    c.fill();
-    const g = c.createRadialGradient(x - s * 0.1, y - s * 0.12, s * 0.02, x, y - s * 0.02, s * 0.3);
-    g.addColorStop(0, '#ffffff');
-    g.addColorStop(0.35, hi);
-    g.addColorStop(1, '#3a1a6a');
-    c.fillStyle = g;
+    c.moveTo(x + s * 0.13, y);
+    c.arc(x, y, s * 0.13, 0, Math.PI * 2, true);
+    c.fill('evenodd');
+    // the spanner: a handle, an open jaw at each end
+    c.save();
+    c.translate(x, y);
+    c.rotate(-Math.PI / 4);
+    c.fillStyle = hi;
+    c.strokeStyle = 'rgba(0, 0, 0, 0.35)';
+    c.lineWidth = s * 0.015;
     c.beginPath();
-    c.arc(x, y - s * 0.02, s * 0.3, 0, Math.PI * 2);
+    c.rect(-s * 0.36, -s * 0.045, s * 0.72, s * 0.09);
+    for (const e of [-1, 1]) {
+      c.moveTo(e * s * 0.36 + s * 0.1, 0);
+      c.arc(e * s * 0.36, 0, s * 0.1, 0, Math.PI * 2);
+    }
     c.fill();
-    star(c, x + s * 0.06, y + s * 0.02, s * 0.08, '#fff6c8');
+    c.stroke();
+    // the jaws' mouths, cut out in the cog's ink
+    c.fillStyle = ink;
+    for (const e of [-1, 1]) c.fillRect(e * s * 0.36 + (e > 0 ? 0 : -s * 0.11), -s * 0.035, s * 0.11, s * 0.07);
+    c.restore();
   },
   // neon: a roulette wheel
   wheel: (c, x, y, s, ink) => {
@@ -457,18 +470,6 @@ function fishShape(c: CanvasRenderingContext2D, x: number, y: number, len: numbe
   c.restore();
 }
 
-function star(c: CanvasRenderingContext2D, x: number, y: number, r: number, fill: string): void {
-  c.fillStyle = fill;
-  c.beginPath();
-  for (let i = 0; i < 10; i++) {
-    const a = (i / 10) * Math.PI * 2 - Math.PI / 2;
-    const rr = i % 2 ? r * 0.42 : r;
-    c.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr);
-  }
-  c.closePath();
-  c.fill();
-}
-
 /* ── the boards ─────────────────────────────────────────────────────────── */
 
 /**
@@ -478,10 +479,9 @@ function star(c: CanvasRenderingContext2D, x: number, y: number, r: number, fill
  *            serif with a painted shadow, the emblem at the left
  *   fine     the jeweller's, the boutique's and the florist's: oiled dark hardwood with a routed
  *            border, the lettering and emblem in gold leaf
- *   mystic   the fortune teller's: painted midnight purple, stars and a moon painted on by hand
  *   neon     the casinos: stained timber with the name in glass tubes, the line under it painted
  */
-type Style = 'painted' | 'fine' | 'mystic' | 'neon';
+type Style = 'painted' | 'fine' | 'neon';
 interface Look {
   style: Style;
   emblem?: Emblem;
@@ -503,7 +503,7 @@ const LOOKS: Record<string, Look> = {
   F: { style: 'painted', emblem: 'saw', board: '#9a7448', text: '#fbf0d8', ink: '#3a2a1a', hi: '#c8ccd0' },
   J: { style: 'painted', emblem: 'balls', board: '#2e3040', text: '#f2e6c8', ink: '#b8a880', hi: '#d8a830' },
   K: { style: 'painted', emblem: 'mount', board: '#5a3a24', text: '#f2e6c8', ink: '#7a5236', hi: '#c0ccd4' },
-  N: { style: 'mystic', emblem: 'ball', board: '#2a1a44', text: '#e0bc60', ink: '#b89048', hi: '#a88af0' },
+  N: { style: 'painted', emblem: 'cog', board: '#2c3a44', text: '#f2e6c8', ink: '#e8b830', hi: '#d0d4d8' },
   C: { style: 'neon', emblem: 'wheel', board: '#2a2019', text: '#ff3fb4', ink: '#ff3fb4', hi: '#ffe08a' },
   B: { style: 'neon', emblem: 'cherries', board: '#2a2019', text: '#3fd6ff', ink: '#ff4a4a', hi: '#7dff5a' },
   G: { style: 'neon', emblem: 'spade', board: '#2a2019', text: '#7dff5a', ink: '#7dff5a', hi: '#7dff5a' },
@@ -760,24 +760,6 @@ function paintSign(c: CanvasRenderingContext2D, ox: number, oy: number, name: st
       pinstripe(c, 16.5, w, h, 'rgba(255, 230, 190, 0.18)', 1.5, seed);
       if (emblem) gilt((fill, dx, dy) => emblem(c, 86 + dx, h / 2 + dy, 104, fill === '#c9a048' ? look.ink : fill, fill === '#c9a048' ? look.hi : fill));
       gilt((fill, dx, dy) => lettering(c, r, fill, null, 150 + dx, w - 28 + dx, h + dy * 2, seed));
-      break;
-    }
-    case 'mystic': {
-      plankBoard(c, 0, 0, w, h, look.board, seed);
-      const r2 = rngOf(seed + 99);
-      for (let i = 0; i < 22; i++) star(c, 150 + r2() * (w - 180), 12 + r2() * (h - 24), 2 + r2() * 3.5, 'rgba(240, 220, 160, 0.7)');
-      c.fillStyle = '#e8d49a';
-      c.beginPath();
-      c.arc(w - 40, 36, 16, 0, Math.PI * 2);
-      c.fill();
-      c.fillStyle = look.board;
-      c.beginPath();
-      c.arc(w - 33, 31, 14, 0, Math.PI * 2);
-      c.fill();
-      pinstripe(c, 12, w, h, look.ink, 3, seed);
-      if (emblem) emblem(c, 82, h / 2, 108, look.ink, look.hi);
-      lettering(c, r, look.text, 'rgba(10, 4, 20, 0.7)', 150, w - 44, h, seed, 60);
-      weather(c, w, h, seed, 0.8);
       break;
     }
     default: {

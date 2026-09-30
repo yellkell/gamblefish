@@ -80,7 +80,7 @@ const NOTES: Record<string, string> = {
   opah: 'Round as the moon and rose-red, with scarlet fins, and warm-blooded, the only fish that is. Out past the drop-off, for live squid on a surf rod.',
   sailfish: 'The fastest fish in the sea. Raises its cobalt sail to herd baitfish, then slashes through them with its bill. Needs the big-game rod to reach it.',
   swordfish: 'Comes up from the deep only at night, hunting by the light of the squid. Its broad flat sword is a third of its length.',
-  marlin: 'The king of the sea. Cobalt back, silver belly, a spear for a bill, and weights you can hardly believe. Everything at the top, and a little luck.',
+  marlin: 'The king of the sea. Cobalt back, silver belly, a spear for a bill, and weights you can hardly believe. Everything at the top, and a little engineering.',
 };
 
 /** one true thing about each, from the natural history books (shown once you've caught one) */
