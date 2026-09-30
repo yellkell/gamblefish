@@ -639,9 +639,9 @@ export function tassel(b: Batch, mat: Material, x: number, top: number, z: numbe
 }
 
 /**
- * For a thing made with this kit that stands OUTDOORS (the bucket and rope at the end of a walk).
+ * For a thing made with this kit that's used OUTDOORS (the hook and bait under the float).
  * The kit's finishes take their shine from the casinos' studio light (casinoEnv), which knows
- * nothing of the time of day: indoors that's right, but out on the pier at night it lit a bucket
+ * nothing of the time of day: indoors that's right, but out on the water at night it lit things
  * up like noon. Here each material is its own copy, and its studio light fades with the daylight
  * (`night`: world/sky.ts), leaving it lit by the moon like everything round it.
  */
