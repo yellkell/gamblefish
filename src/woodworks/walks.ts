@@ -59,7 +59,6 @@ import type { BoxCollider } from '../world/data.ts';
 import { buildLamps } from '../world/lamps.ts';
 import { bucketAndRope } from './bucket.ts';
 import { lifeRing } from './buoy.ts';
-import { outdoors } from '../village/craft.ts';
 import { BuildSign, type SignText } from './buildSign.ts';
 import { CRATES, DECK, HEAD_STEPS, logsFor, stepsOf, WALK_W, WALKS, type WalkDef, type WalkId } from './gates.ts';
 
@@ -459,8 +458,8 @@ export class Walks {
     let corner: Group | null = null;
     const cornerAt = toWorld(hw / 2 - 0.95, L0 + hd - 0.85);
     if (this.deps.renderer) {
-      // (its studio shine fading with the daylight, so it isn't lit up at night: craft.ts outdoors)
-      corner = outdoors(bucketAndRope(this.deps.renderer, 0.85), this.deps.night);
+      // (matte, lit like the rest of the walk; the rope is the pier's own)
+      corner = bucketAndRope(ropeMaterial(), 0.85);
       // and a life ring on the rail across the platform from it, facing in
       const ring = lifeRing(0.99 + 0.025);
       ring.position.set(-hw + 1.082, 0, -0.9);
