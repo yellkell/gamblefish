@@ -72,6 +72,33 @@ export function placeAt(p: Place, buildings: BuildingFrame[]): [number, number] 
 const INK = '#2e2214';
 
 /**
+ * Write `text` with its ink centred on (x, y): measured, not by the font's baseline (a digit's
+ * "middle" baseline sits it low in a round marker).
+ */
+export function centredText(c: CanvasRenderingContext2D, text: string, x: number, y: number): void {
+  c.textAlign = 'center';
+  c.textBaseline = 'alphabetic';
+  const m = c.measureText(text);
+  // (centre-aligned, the ink runs actualBoundingBoxLeft left of x and actualBoundingBoxRight right)
+  c.fillText(text, x - (m.actualBoundingBoxRight - m.actualBoundingBoxLeft) / 2, y + (m.actualBoundingBoxAscent - m.actualBoundingBoxDescent) / 2);
+}
+
+/** A dancers' camp's fire on a map: a flame, lit orange (found, or on the bought map), dark ink if not. Its bulb's middle is (x, y + 3k). */
+export function flame(c: CanvasRenderingContext2D, x: number, y: number, k: number, lit: boolean): void {
+  c.beginPath();
+  c.moveTo(x, y - 20 * k);
+  c.quadraticCurveTo(x + 15 * k, y - 2 * k, x + 9 * k, y + 10 * k);
+  c.quadraticCurveTo(x, y + 16 * k, x - 9 * k, y + 10 * k);
+  c.quadraticCurveTo(x - 15 * k, y - 2 * k, x, y - 20 * k);
+  c.closePath();
+  c.fillStyle = lit ? '#d2461c' : 'rgba(242, 230, 204, 0.92)';
+  c.fill();
+  c.lineWidth = 2.5 * Math.max(1, k * 0.8);
+  c.strokeStyle = lit ? '#7a1e0c' : '#6a4a2a';
+  c.stroke();
+}
+
+/**
  * The chart's picture (no key, no "you are here": the page adds those), and where its markers went.
  * `bounds` is the part of the island it covers (the bay, or the whole island for the camp map, which
  * leaves the village's numbered markers off: they'd be a smudge at that scale).
@@ -218,9 +245,7 @@ export function drawChart(src: ChartSource, w: number, h: number, bounds: Bounds
     g.stroke();
     g.fillStyle = '#fff6e0';
     g.font = `700 ${m.n > 9 ? 15 : 18}px 'Rajdhani', 'Arial Black', sans-serif`;
-    g.textAlign = 'center';
-    g.textBaseline = 'middle';
-    g.fillText(String(m.n), m.x, m.y + 1);
+    centredText(g, String(m.n), m.x, m.y);
   }
 
   // a neat ink border

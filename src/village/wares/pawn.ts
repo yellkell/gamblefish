@@ -6,6 +6,7 @@
  */
 
 import { CylinderGeometry, SphereGeometry, TorusGeometry, Vector3, type Object3D } from 'three';
+import { centredText, CHART, drawChart, flame, ISLAND, type ChartSource } from '../../backpack/chart.ts';
 import { CAMPS } from '../../camps/sites.ts';
 import { Batch, blade, M, rng, rounded, stalk, turned, type Kit } from '../craft.ts';
 
@@ -393,70 +394,49 @@ export function divingHelmet(k: Kit): Object3D {
 
 /* ── the map of the dancers' camps (new) ─────────────────────────────── */
 
-/** the part of the island the map shows (world m: the field guide's camp page, backpack/chart.ts ISLAND) */
-const MAP = { x0: -500, x1: 570, z0: -610, z1: 230 };
-/** the south shore across it: in 40 steps west to east, how far down the map (0..1) the sea starts */
-const COAST = [0.422, 0.47, 0.49, 0.537, 0.583, 0.723, 0.875, 0.927, 0.95, 0.958, 0.945, 0.895, 0.69, 0.672, 0.665, 0.67, 0.675, 0.677, 0.677, 0.68, 0.677, 0.675, 0.672, 0.667, 0.665, 0.675, 0.865, 0.93, 0.963, 0.975, 0.978, 0.96, 0.92, 0.75, 0.505, 0.477, 0.45, 0.443, 0, 0, 0];
+/**
+ * The island, for the map's picture: the same chart the field guide draws (backpack/chart.ts),
+ * from the baked terrain. main.ts sets it before the shops and the shack are built.
+ */
+export const campMapSource: { chart: ChartSource | null } = { chart: null };
 
-/** An old hand-drawn map: the island in buff on a hatched sea, a fire marked at every camp, dotted trails between. */
+/** the picture, in canvas px: the whole island (backpack/chart.ts ISLAND) and a margin of old paper */
+const MAP_PX: [number, number] = [900, 760];
+const MARGIN = 26;
+const TITLE = 56;
+
+/**
+ * The map: the island charted from the terrain, hills shaded and the sea by depth, the bay's
+ * chart outlined, a fire at every one of the dancers' camps numbered as in the book, and dotted
+ * trails between them; a title across the top, a compass rose, all of it aged to old paper.
+ */
 function campChart(g: CanvasRenderingContext2D, w: number, h: number): void {
   const r = rng(73);
-  // parchment, browning at the edges, a few stains
-  g.fillStyle = '#e9d6a8';
+  g.fillStyle = '#ead8aa';
   g.fillRect(0, 0, w, h);
-  const vig = g.createRadialGradient(w / 2, h / 2, h * 0.25, w / 2, h / 2, w * 0.62);
-  vig.addColorStop(0, 'rgba(120, 80, 30, 0)');
-  vig.addColorStop(1, 'rgba(110, 70, 25, 0.5)');
-  g.fillStyle = vig;
-  g.fillRect(0, 0, w, h);
-  for (let i = 0; i < 7; i++) {
-    g.fillStyle = `rgba(130, 90, 40, ${0.05 + r() * 0.07})`;
-    g.beginPath();
-    g.ellipse(r() * w, r() * h, 20 + r() * 50, 14 + r() * 36, r() * 3, 0, Math.PI * 2);
-    g.fill();
+  const cw = w - MARGIN * 2;
+  const ch = h - MARGIN * 2 - TITLE;
+  const X = MARGIN;
+  const Y = MARGIN + TITLE;
+  const px = (x: number, z: number): [number, number] => [X + ((x - ISLAND.x0) / (ISLAND.x1 - ISLAND.x0)) * cw, Y + ((z - ISLAND.z0) / (ISLAND.z1 - ISLAND.z0)) * ch];
+  const src = campMapSource.chart;
+  if (src) {
+    g.drawImage(drawChart(src, cw, ch, ISLAND, false).canvas, X, Y);
+    // the bay's chart, dashed in (that's the book's other chart)
+    const [b0x, b0y] = px(CHART.x0, CHART.z0);
+    const [b1x, b1y] = px(CHART.x1, CHART.z1);
+    g.setLineDash([7, 5]);
+    g.strokeStyle = 'rgba(46, 34, 20, 0.6)';
+    g.lineWidth = 2;
+    g.strokeRect(b0x, b0y, b1x - b0x, b1y - b0y);
+    g.setLineDash([]);
   }
-  const px = (x: number, z: number): [number, number] => [((x - MAP.x0) / (MAP.x1 - MAP.x0)) * w, ((z - MAP.z0) / (MAP.z1 - MAP.z0)) * h];
-  // the sea: ruled lines
-  g.strokeStyle = 'rgba(60, 80, 110, 0.28)';
-  g.lineWidth = 1.5;
-  for (let y = 8; y < h; y += 9) {
-    g.beginPath();
-    g.moveTo(0, y);
-    g.lineTo(w, y);
-    g.stroke();
-  }
-  // the island: all land to the north, down to its south shore (traced off the baked terrain: how far
-  // down the map, column by column across it, the sea starts), the bay bitten out of the middle
-  g.beginPath();
-  g.moveTo(0, 0);
-  COAST.forEach((v, i) => g.lineTo((i / (COAST.length - 1)) * w, v * h));
-  g.closePath();
-  g.fillStyle = '#d8c48a';
-  g.fill();
-  g.strokeStyle = '#3a2a16';
-  g.lineWidth = 3;
-  g.stroke();
-  // hills: little inked humps, up in the island's back country
-  g.strokeStyle = 'rgba(70, 50, 26, 0.7)';
-  g.lineWidth = 2;
-  for (let i = 0; i < 18; i++) {
-    const [hx, hy] = px(-420 + r() * 900, -580 + r() * 300);
-    g.beginPath();
-    g.arc(hx, hy, 8 + r() * 6, Math.PI * 1.1, Math.PI * 1.9);
-    g.stroke();
-  }
-  // the village above the bay
-  g.fillStyle = 'rgba(60, 40, 24, 0.85)';
-  for (let i = 0; i < 6; i++) {
-    const [vx, vy] = px(-10 + i * 20, -150 + (i % 2) * 16);
-    g.fillRect(vx - 4, vy - 4, 8, 8);
-  }
-  // dotted trails from camp to camp, then a fire at each
+  // dotted trails, the shortest that join them all (from the camps joined so far, always the
+  // nearest one not yet), then a fire at each, numbered as in the book's list
   const spots = CAMPS.map((c) => px(c.x, c.z));
-  g.strokeStyle = 'rgba(150, 30, 20, 0.75)';
-  g.lineWidth = 2;
-  g.setLineDash([4, 5]);
-  // (the shortest trails that join them all: from the camps joined so far, always the nearest one not yet)
+  g.strokeStyle = 'rgba(150, 30, 20, 0.8)';
+  g.lineWidth = 2.5;
+  g.setLineDash([5, 6]);
   const joined = [0];
   while (joined.length < spots.length) {
     let best: [number, number, number] = [0, 0, Infinity];
@@ -472,48 +452,57 @@ function campChart(g: CanvasRenderingContext2D, w: number, h: number): void {
     g.stroke();
   }
   g.setLineDash([]);
-  for (const [x, y] of spots) {
-    g.fillStyle = '#d2461c';
+  g.font = "700 16px 'Rajdhani', 'Arial Black', sans-serif";
+  spots.forEach(([x, y], i) => {
+    flame(g, x, y, 1.1, true);
+    g.fillStyle = '#fff6e0';
+    centredText(g, String(i + 1), x, y + 3.3);
+  });
+  // aged: the paper's brown creeping in from the edges, a few stains, two fold lines
+  const vig = g.createRadialGradient(w / 2, h / 2, h * 0.3, w / 2, h / 2, w * 0.64);
+  vig.addColorStop(0, 'rgba(120, 80, 30, 0)');
+  vig.addColorStop(1, 'rgba(110, 70, 25, 0.5)');
+  g.fillStyle = vig;
+  g.fillRect(0, 0, w, h);
+  for (let i = 0; i < 6; i++) {
+    g.fillStyle = `rgba(130, 90, 40, ${0.04 + r() * 0.06})`;
     g.beginPath();
-    g.moveTo(x, y - 14);
-    g.quadraticCurveTo(x + 9, y - 2, x, y + 4);
-    g.quadraticCurveTo(x - 9, y - 2, x, y - 14);
-    g.fill();
-    g.fillStyle = '#ffc640';
-    g.beginPath();
-    g.ellipse(x, y - 1, 3, 4.5, 0, 0, Math.PI * 2);
+    g.ellipse(r() * w, r() * h, 20 + r() * 50, 14 + r() * 36, r() * 3, 0, Math.PI * 2);
     g.fill();
   }
-  // a title in a scroll, and a compass rose
-  g.fillStyle = 'rgba(240, 225, 185, 0.9)';
-  g.fillRect(w * 0.26, 10, w * 0.48, 38);
+  g.fillStyle = 'rgba(255, 245, 220, 0.14)';
+  g.fillRect(w / 2 - 1, 0, 2, h);
+  g.fillRect(0, h / 2 - 1, w, 2);
+  g.fillStyle = 'rgba(80, 50, 20, 0.12)';
+  g.fillRect(w / 2 + 1, 0, 2, h);
+  g.fillRect(0, h / 2 + 1, w, 2);
+  // a neat ink border round the chart, the title over it, a compass rose in the sea
   g.strokeStyle = '#3a2a16';
-  g.lineWidth = 2;
-  g.strokeRect(w * 0.26, 10, w * 0.48, 38);
+  g.lineWidth = 3;
+  g.strokeRect(X, Y, cw, ch);
   g.fillStyle = '#3a2a16';
-  g.font = 'bold 24px Georgia, serif';
+  g.font = 'bold 40px Georgia, serif';
   g.textAlign = 'center';
   g.textBaseline = 'middle';
-  g.fillText('THE DANCERS’ CAMPS', w / 2, 30);
-  const [ox, oy] = [w - 46, h - 50];
-  g.fillStyle = '#3a2a16';
+  g.fillText('THE DANCERS’ CAMPS', w / 2, MARGIN + TITLE / 2 - 2);
+  const [ox, oy] = [X + cw - 50, Y + ch - 56];
   for (let i = 0; i < 4; i++) {
     const a = (i * Math.PI) / 2;
     g.beginPath();
-    g.moveTo(ox + Math.cos(a) * 26, oy + Math.sin(a) * 26);
-    g.lineTo(ox + Math.cos(a + Math.PI / 2) * 6, oy + Math.sin(a + Math.PI / 2) * 6);
-    g.lineTo(ox + Math.cos(a - Math.PI / 2) * 6, oy + Math.sin(a - Math.PI / 2) * 6);
+    g.moveTo(ox + Math.cos(a) * 30, oy + Math.sin(a) * 30);
+    g.lineTo(ox + Math.cos(a + Math.PI / 2) * 7, oy + Math.sin(a + Math.PI / 2) * 7);
+    g.lineTo(ox + Math.cos(a - Math.PI / 2) * 7, oy + Math.sin(a - Math.PI / 2) * 7);
     g.fill();
   }
-  g.font = 'bold 14px Georgia, serif';
-  g.fillText('N', ox, oy - 36);
+  g.font = 'bold 18px Georgia, serif';
+  g.fillText('N', ox, oy - 42);
 }
 
 export function campMap(k: Kit): Object3D {
   const b = new Batch();
   const drift = M.wood(k.renderer, 'drift', 0.3);
-  const W = 0.64;
-  const H = 0.46;
+  const W = 0.66;
+  const H = (W * MAP_PX[1]) / MAP_PX[0];
   const d = 0.04;
   // a driftwood frame, its bars running past each other at the corners, lashed with twine
   b.at(drift, rounded(W + d * 3, d, 0.03, d * 0.4), 0, H / 2 + d / 2, 0.02, 0, 0, 0.02);
@@ -522,6 +511,6 @@ export function campMap(k: Kit): Object3D {
   b.at(drift, rounded(d, H + d * 3, 0.03, d * 0.4), W / 2 + d / 2, 0.005, 0.022, 0, 0, -0.02);
   const twine = M.wood(k.renderer, 'bamboo', 0.2);
   for (const sx of [-1, 1]) for (const sy of [-1, 1]) b.at(twine, new CylinderGeometry(0.024, 0.024, 0.02, 10).rotateX(Math.PI / 2), sx * (W / 2 + d / 2), sy * (H / 2 + d / 2), 0.03);
-  b.at(M.painted(k.renderer, 'campmap', 768, 552, campChart, 0.85), rounded(W, H, 0.004, 0.001, 1), 0, 0, 0.012);
+  b.at(M.painted(k.renderer, 'campmap', MAP_PX[0], MAP_PX[1], campChart, 0.85), rounded(W, H, 0.004, 0.001, 1), 0, 0, 0.012);
   return b.group();
 }

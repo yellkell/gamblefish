@@ -41,7 +41,7 @@ import { roundRect } from '../ui/panel.ts';
 import { InteractivePanel, register } from '../ui/pointer.ts';
 import { silhouette, thumbnail } from '../ui/thumbnail.ts';
 import { SHARK_ID } from '../fishing/shark.ts';
-import { drawChart, KEY, CHART, ISLAND, type ChartSource, type Place } from './chart.ts';
+import { centredText, drawChart, flame, KEY, CHART, ISLAND, type ChartSource, type Place } from './chart.ts';
 import { BEACH_CAMP, CAMPS, campStand, type CampSite } from '../camps/sites.ts';
 import { WALKS } from '../woodworks/gates.ts';
 import { PLINTH_RADIUS, TOWER_RADIUS } from '../skelter/constants.ts';
@@ -834,8 +834,7 @@ export class FieldGuide {
       c.fill();
       c.fillStyle = '#fff6e0';
       c.font = font(700, i + 1 > 9 ? 15 : 18);
-      c.textAlign = 'center';
-      c.fillText(String(i + 1), x + 14, y - 2);
+      centredText(c, String(i + 1), x + 14, y - 8);
       c.textAlign = 'left';
       c.fillStyle = INK_BROWN;
       c.font = font(600, 21);
@@ -903,11 +902,8 @@ export class FieldGuide {
       const on = hover === id;
       flame(c, x, y, on ? 1.35 : 1, found);
       c.font = font(700, 16);
-      c.textAlign = 'center';
-      c.textBaseline = 'middle';
       c.fillStyle = found ? '#fff6e0' : '#6a4a2a';
-      c.fillText(String(i + 1), x, y + 3);
-      c.textBaseline = 'alphabetic';
+      centredText(c, String(i + 1), x, y + 3);
       if (on) {
         c.strokeStyle = '#ffd24a';
         c.lineWidth = 4;
@@ -983,11 +979,8 @@ export class FieldGuide {
       }
       flame(c, 90, y + 28, 1, got);
       c.font = font(700, 16);
-      c.textAlign = 'center';
-      c.textBaseline = 'middle';
       c.fillStyle = got ? '#fff6e0' : '#6a4a2a';
-      c.fillText(String(i + 1), 90, y + 31);
-      c.textBaseline = 'alphabetic';
+      centredText(c, String(i + 1), 90, y + 31);
       c.textAlign = 'left';
       c.fillStyle = got ? INK_BROWN : INK_FADED;
       c.font = font(700, 30);
@@ -999,21 +992,6 @@ export class FieldGuide {
     });
     return buttons;
   }
-}
-
-/** A camp's fire on the map: a flame, lit orange if you've found it, dark ink if not. */
-function flame(c: CanvasRenderingContext2D, x: number, y: number, k: number, lit: boolean): void {
-  c.beginPath();
-  c.moveTo(x, y - 20 * k);
-  c.quadraticCurveTo(x + 15 * k, y - 2 * k, x + 9 * k, y + 10 * k);
-  c.quadraticCurveTo(x, y + 16 * k, x - 9 * k, y + 10 * k);
-  c.quadraticCurveTo(x - 15 * k, y - 2 * k, x, y - 20 * k);
-  c.closePath();
-  c.fillStyle = lit ? '#d2461c' : 'rgba(242, 230, 204, 0.92)';
-  c.fill();
-  c.lineWidth = 2.5;
-  c.strokeStyle = lit ? '#7a1e0c' : '#6a4a2a';
-  c.stroke();
 }
 
 /**

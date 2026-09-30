@@ -43,6 +43,7 @@ import { CaseWall } from './casino/CaseWall.ts';
 import { PointerSystem } from './ui/pointer.ts';
 import { buildInteriors, interiorAt, openColliders, type Interior } from './village/interiors.ts';
 import { GOODS, HOME, HOME_SHOPS, HomeShopCounter, Shack, VILLA, VILLA_SHOPS } from './village/homeGoods.ts';
+import { campMapSource } from './village/wares/pawn.ts';
 import { GearShopCounter, RodRackBoard } from './village/gearShop.ts';
 import { CASE_WALL_Z, GEAR_COUNTERS, JEWELLER } from './village/interiors.ts';
 import { GemWindows } from './village/gemWindows.ts';
@@ -273,6 +274,8 @@ World.create(container, {
   backpackDeps.state = game;
   backpackDeps.props = fishingDeps.props;
   backpackDeps.chart = { heightAt: (x, z) => heightfield.heightAt(x, z), layout: json.layout, buildings: frames };
+  // (and the pawn shop's map of the camps draws the same island)
+  campMapSource.chart = backpackDeps.chart;
   backpackDeps.where = () => world.camera.getWorldPosition(new Vector3());
   // (and the helter skelter, once it's up, and the golden statue once it's unveiled)
   backpackDeps.walks = () => ({ ...(woodView.walks?.() ?? {}), skelter: skelterView.progress(), statue: game.journey.unveiled ? 1 : 0 });
