@@ -11,7 +11,9 @@
  * all along the walkway and the head, every which way, taut and drooping, and fish in under the
  * deck. A line may lie on what it rests on; it may not go in through the side of anything. And
  * a line swung against a lamp post (the pier's, or a walk's lantern post) goes round it, not over
- * it or through it (world/lineWrap.ts), and lets go of it when it's swung back.
+ * it or through it (world/lineWrap.ts), and lets go of it when it's swung back. And a fish swimming
+ * about under the pier has the line held where it comes out from under the deck, sliding along
+ * the edge, not leaping across the pier head and back from one frame to the next.
  */
 
 import { readFileSync } from 'node:fs';
@@ -107,11 +109,11 @@ const V = (x, y, z) => ({ x, y, z });
 const LINE_N = 128;
 /** a line laid as it is on one frame, round the posts `W` has it caught on (a fresh one: as it is
  *  the first frame it's out) */
-function lay(a, b, sag, W = new LineWraps(S), SS = S) {
+function lay(a, b, sag, W = new LineWraps(S), SS = S, was = null) {
   const pts = [a];
   const top = V(0, 0, 0);
   const under = V(0, 0, 0);
-  const end = SS.lineUnder(a, b, top, under) ? top : b;
+  const end = SS.lineUnder(a, b, top, under, was) ? top : b;
   const m = W.lay(a, end);
   for (let k = 0; k <= m; k++) {
     for (let j = 0; j < W.restCounts[k]; j++) pts.push({ ...W.rests[k][j] });
@@ -325,6 +327,65 @@ for (let z = P.zStart + 10; z < P.zEnd - 1; z += 1.1) {
 // (what's left: a fish right in a row of piles, among its cross-braces, and the pier head's tyre
 // fenders; the old line, round the deck's edge, went through the piles and beams one time in four)
 check('the line comes down outside the posts and in between the piles to it', underBad <= under * 0.08, pct(underBad, under));
+
+/* ── a fish swimming about under the pier, a frame at a time ───────────── */
+
+console.log('\na fish swimming about under the pier (sat on the edge, the rod tip low)');
+// Where the line comes out from under the deck is held from one frame to the next (as
+// FishingSystem holds it): it slides along the edge as the fish swims, where laid afresh each frame
+// it leapt across the pier head and back whenever another way out was a hair shorter (or a pile
+// had just stopped being in the way of one). Held, it goes no more often through the timber.
+{
+  const HX = P.headWidth / 2;
+  const runs = [
+    // [the rod tip, the fish at time t (s)]
+    [V(X, DK + 1.0, P.zEnd + 0.1), (t) => V(X + 3 * Math.sin(t * 0.7), -0.4, P.zEnd + 6 - t * 1.2)],
+    [V(X, DK + 0.9, P.zEnd - 0.4), (t) => V(X + 4 * Math.sin(t * 0.5), -0.4, P.zEnd + 6 - t * 1.2)],
+    [V(X + HX - 0.3, DK + 0.9, P.zEnd - P.headDepth / 2), (t) => V(X + HX + 6 - t * 1.5, -0.4, P.zEnd - P.headDepth / 2 + Math.sin(t) * 2)],
+    [V(X + HW + 0.3, DK + 0.8, 0), (t) => V(X + 5 - t * 0.6, -0.4, 2 * Math.sin(t * 0.4))],
+    [V(X + HW + 0.3, DK + 0.8, 0), (t) => V(X + 0.8 * Math.sin(t * 1.3), -0.4, 4 - t)],
+    [V(X, DK + 1.0, P.zEnd + 0.1), (t) => V(X - 5 + t * 1.2, -0.4, P.zEnd - 4 + Math.sin(t * 0.9))],
+  ];
+  const edgeOf = (res) => res.pts[res.pts.length - 3];
+  let frames = 0;
+  const held = { leaps: 0, bad: 0 };
+  const fresh = { leaps: 0, bad: 0 };
+  let sampled = 0;
+  for (const [tip, at] of runs) {
+    const W = new LineWraps(S);
+    const W0 = new LineWraps(S);
+    let was = null;
+    let was0 = null;
+    for (let f = 0; f < 72 * 10; f++) {
+      const t = f / 72;
+      // (a hand held out still, as still as one is)
+      const a = V(tip.x + 0.05 * Math.sin(t * 3), tip.y + 0.035 * Math.sin(t * 2.3), tip.z + 0.025 * Math.sin(t * 1.7));
+      const b = at(t);
+      if (S.deckOver(b.x, b.z) < b.y + 0.3) {
+        was = was0 = null;
+        continue;
+      }
+      const res = lay(a, b, 0.02, W, S, was);
+      const res0 = lay(a, b, 0.02, W0);
+      const e = edgeOf(res);
+      const e0 = edgeOf(res0);
+      frames++;
+      if (was && Math.hypot(e.x - was.x, e.z - was.z) > 1) held.leaps++;
+      if (was0 && Math.hypot(e0.x - was0.x, e0.z - was0.z) > 1) fresh.leaps++;
+      if (f % 6 === 0) {
+        sampled++;
+        if (clips(res)) held.bad++;
+        if (clips(res0)) fresh.bad++;
+      }
+      was = { x: e.x, z: e.z };
+      was0 = { x: e0.x, z: e0.z };
+    }
+  }
+  // (what's left: going round to the other side of the pier head once the fish is well over that
+  // way, and grazing the braces and tyre fenders on the head's sides, as a line laid afresh does)
+  check('where the line comes out from under the deck moves with the fish, not leaping about', held.leaps <= 8, `${held.leaps} leaps over 1 m in ${frames} frames (laid afresh each frame: ${fresh.leaps})`);
+  check('held there, it goes through the timber no more than laid afresh', held.bad <= fresh.bad, `${pct(held.bad, sampled)} (afresh: ${pct(fresh.bad, sampled)})`);
+}
 
 const failed = results.filter((r) => !r).length;
 console.log(`\n${results.length - failed}/${results.length} passed`);

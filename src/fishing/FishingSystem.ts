@@ -196,6 +196,9 @@ export class FishingSystem extends createSystem({}) {
   private readonly linePts: Vec3[] = [];
   /** the posts the line's caught round (world/lineWrap.ts) */
   private wraps: LineWraps | null = null;
+  /** where the line to a fish under the pier came out from under the deck last frame (it's held
+   *  there, sliding along the edge: Surfaces.lineUnder), or null */
+  private edgeHeld: Vector3 | null = null;
 
   private bite: Bite | null = null;
   private fight: FishFight | SharkFight | null = null;
@@ -971,7 +974,7 @@ export class FishingSystem extends createSystem({}) {
     // under the pier, it's drawn out past the deck's edge through the water before it comes up
     const S = fishingDeps.surfaces;
     let out: Vector3 | null = null;
-    if (S?.lineUnder(this.rod.tip, this.bob, _edgeTop, _edgeUnder)) {
+    if (S?.lineUnder(this.rod.tip, this.bob, _edgeTop, _edgeUnder, this.edgeHeld)) {
       _x.set(_edgeUnder.x - this.bob.x, 0, _edgeUnder.z - this.bob.z);
       const d = _x.length();
       out = new Vector3(_edgeUnder.x, this.bob.y, _edgeUnder.z);
@@ -1366,7 +1369,10 @@ export class FishingSystem extends createSystem({}) {
   private updateLine(): void {
     const show = this.state !== 'stowed';
     this.line.visible = show;
-    if (!show) return;
+    if (!show) {
+      this.edgeHeld = null;
+      return;
+    }
     const a = this.rod.tip;
     const b = this.bob;
     const f = this.fight;
@@ -1389,7 +1395,10 @@ export class FishingSystem extends createSystem({}) {
       if (dangling) W.reset();
       let end: Vector3 = b;
       // (a float dangling off the tip is never a fish under the pier)
-      if (!dangling && S.lineUnder(a, b, _edgeTop, _edgeUnder)) end = _edgeTop;
+      if (!dangling && S.lineUnder(a, b, _edgeTop, _edgeUnder, this.edgeHeld)) {
+        end = _edgeTop;
+        (this.edgeHeld ??= new Vector3()).copy(_edgeTop);
+      } else this.edgeHeld = null;
       const m = W.lay(a, end);
       for (let k = 0; k <= m; k++) {
         for (let j = 0; j < W.restCounts[k]; j++) pts.push(W.rests[k][j]);
