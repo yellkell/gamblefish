@@ -63,6 +63,9 @@ const KEY = 'skelter';
  * the HUD's canvas: at a tenth of a second the height ticking over had it doing that every frame
  * or two down the slide) */
 const HUD_REFRESH = 0.25;
+/** and the HUD's repainted at most this often, whatever changed (a string of coins had it
+ *  repainting and re-uploading its canvas seven times a second down the slide) */
+const HUD_PAINT = 0.2;
 
 export const skelterDeps: {
   state: GameState | null;
@@ -80,12 +83,15 @@ export const skelterDeps: {
 export const skelterView: {
   /** you're up the tower (the teleport's off, the rod's away, the backpack stays shut) */
   onTower: boolean;
+  /** up in the first two tiers, 100 m and more over the plants: the near plants needn't be kept at
+   *  full detail round the tower's foot (main.ts), only for the last tier down to them */
+  high: boolean;
   /** how far it's built, 0..1 (the chart draws it at 1) */
   progress: () => number;
   /** where you stand to get on, and what you face (the chart's "go there") */
   gate: { at: [number, number]; face: [number, number] } | null;
   system?: SkelterSystem;
-} = { onTower: false, progress: () => 0, gate: null };
+} = { onTower: false, high: false, progress: () => 0, gate: null };
 
 const _v = new Vector3();
 const _w = new Vector3();
@@ -136,6 +142,7 @@ export class SkelterSystem extends createSystem({}) {
   private hudText = { tier: '', coins: '', big: '', unit: '', alt: '', status: '' };
   private hudDirty = true;
   private hudTick = 0;
+  private hudPaintT = 0;
   private bannerTimer = 0;
   private beepAt = 0;
   private winWait = 0;
@@ -502,7 +509,9 @@ export class SkelterSystem extends createSystem({}) {
       rig.add(p.mesh);
     };
     // the HUD: above the eyeline, well ahead
-    this.hud = new Panel([880, 600], [1.1, 0.75], { depthTest: false });
+    // (painted at half the canvas it's laid out on: plenty for 1.1 m a few metres off, and a
+    // quarter of the upload each time it changes)
+    this.hud = new Panel([440, 300], [1.1, 0.75], { depthTest: false });
     this.hud.mesh.position.set(0, 2.45, -3.6);
     this.hud.mesh.rotation.x = 0.14;
     onTop(this.hud);
@@ -593,6 +602,8 @@ export class SkelterSystem extends createSystem({}) {
     const c = p.ctx;
     const t = this.hudText;
     p.clear();
+    c.save();
+    c.scale(0.5, 0.5);
     roundRect(c, 8, 8, 864, 584, 44);
     c.fillStyle = '#fff4e0';
     c.fill();
@@ -620,6 +631,7 @@ export class SkelterSystem extends createSystem({}) {
     c.font = font(600, 40);
     c.fillStyle = '#1a1614';
     c.fillText(t.status, 440, 540, 800);
+    c.restore();
     p.commit();
   }
 
@@ -843,6 +855,8 @@ export class SkelterSystem extends createSystem({}) {
     this.toast.update(dt, this.camera);
     this.lightByDay();
     skelterAudio.update();
+    // (the last tier's plants are picked in the landing's hold before it, standing still)
+    skelterView.high = skelterView.onTower && game.tier < TOTAL_TIERS;
     if (!this.tower || !this.track) return;
     const t = time / 1000;
     this.tower.uniforms.uTime.value = t;
@@ -855,8 +869,10 @@ export class SkelterSystem extends createSystem({}) {
     }
     this.coins.update(dt, time, game.phase === 'SLIDE' ? this.sweep() : null);
     this.effects(dt);
-    if (this.hud.mesh.visible && this.hudDirty) {
+    this.hudPaintT -= dt;
+    if (this.hud.mesh.visible && this.hudDirty && this.hudPaintT <= 0) {
       this.hudDirty = false;
+      this.hudPaintT = HUD_PAINT;
       this.paintHud();
     }
   }

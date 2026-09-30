@@ -49,6 +49,10 @@ const MAX_GEMS = 12;
 const COIN_RADIUS = 0.27;
 /** Only pickups within this many metres of the rig spin and bob. */
 const NEAR = 80;
+/** only the coins this far ahead along the slide (and a few behind) are drawn at all (m): the
+ *  rest are specks down the spiral, and drawing every coin on the tower cost ~75k triangles */
+const AHEAD = 240;
+const BEHIND = 12;
 
 interface Pickup {
   s: number;
@@ -61,8 +65,6 @@ interface Pickup {
   taken: boolean;
   /** Instance slot in its mesh. */
   index: number;
-  /** Was animated last frame — so it gets one final static write on leaving the window. */
-  near: boolean;
 }
 
 interface Pop {
@@ -147,6 +149,8 @@ export class Coins {
     // rider: the raised rim and the bevels are real geometry so the coin
     // keeps a crisp shape from every angle, in a few hundred triangles.
     const coinGeo = makeCoinGeometry(COIN_RADIUS, 24);
+    // the ones on the slide, many at once and a few metres off at the nearest, with fewer sides
+    const trackCoinGeo = makeCoinGeometry(COIN_RADIUS, 14);
     const coinMaterial = createPickupMaterial(this.uTime, {
       gem: false,
       face: 0xffd23f,
@@ -163,7 +167,7 @@ export class Coins {
       dark: 0x0f8f6a,
       radius: 0.3
     });
-    this.coins = new InstancedMesh(coinGeo, coinMaterial, MAX_COINS);
+    this.coins = new InstancedMesh(trackCoinGeo, coinMaterial, MAX_COINS);
     this.gems = new InstancedMesh(gemGeo, gemMaterial, MAX_GEMS);
     for (const mesh of [this.coins, this.gems]) {
       mesh.instanceMatrix.setUsage(DynamicDrawUsage);
@@ -355,11 +359,8 @@ export class Coins {
 
     game.coinsTotal = this.pickups.reduce((n, p) => n + (p.gem ? GEM_VALUE : COIN_VALUE), 0);
     game.coins = 0;
-    // Every pickup gets its resting pose once; after that only the ones
-    // near the rider are touched each frame.
-    for (const p of this.pickups) this.writePickup(p, 0, false);
-    this.coins.instanceMatrix.needsUpdate = true;
-    this.gems.instanceMatrix.needsUpdate = true;
+    // (each frame from here the ones within reach are packed in and drawn: updatePickups)
+    this.updatePickups(0);
   }
 
   private place(s: number, lane: number, gem: boolean): void {
@@ -378,8 +379,7 @@ export class Coins {
       phase: Math.random() * Math.PI * 2,
       gem,
       taken: false,
-      index: mesh.count,
-      near: false
+      index: mesh.count
     });
     mesh.count += 1;
   }
@@ -402,22 +402,25 @@ export class Coins {
     mesh.setMatrixAt(p.index, this.matrix);
   }
 
-  /** Animate the pickups around the rider; the rest stay as they were. */
+  /**
+   * The pickups within reach down the slide are packed into the front of their instanced meshes
+   * each frame (the ones near the rider spinning and bobbing), and only those are drawn.
+   */
   private updatePickups(t: number): void {
     const here = game.distance;
-    let coinsDirty = false;
-    let gemsDirty = false;
+    let coins = 0;
+    let gems = 0;
     for (const p of this.pickups) {
       if (p.taken) continue;
-      const near = Math.abs(p.s - here) < NEAR;
-      if (!near && !p.near) continue;
-      p.near = near;
-      this.writePickup(p, t, near);
-      if (p.gem) gemsDirty = true;
-      else coinsDirty = true;
+      const d = p.s - here;
+      if (d < -BEHIND || d > AHEAD) continue;
+      p.index = p.gem ? gems++ : coins++;
+      this.writePickup(p, t, Math.abs(d) < NEAR);
     }
-    if (coinsDirty) this.coins.instanceMatrix.needsUpdate = true;
-    if (gemsDirty) this.gems.instanceMatrix.needsUpdate = true;
+    this.coins.count = coins;
+    this.gems.count = gems;
+    this.coins.instanceMatrix.needsUpdate = true;
+    this.gems.instanceMatrix.needsUpdate = true;
   }
 
   private collect(p: Pickup): void {

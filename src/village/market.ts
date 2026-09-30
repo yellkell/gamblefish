@@ -4,7 +4,7 @@
  * Joe (Tidewater's Rocketbox fish buyer) stands behind the counter. At the counter's end is a
  * hanging-dial scale: hold a fish over its pan — straight from your hand, or lifted out of the
  * backpack — and a ghost settles on it with its price. Click: the fish drops on the pan, the dial
- * swings to its weight, the price pops, and it's sold — coins in the bowl, ff2's cash chime (up),
+ * swings to its weight (a great white, carried here by the tail, pegs it), the price pops, and it's sold — coins in the bowl, ff2's cash chime (up),
  * the wrist counters roll. Then Joe slides it onto the ice.
  *
  * The chalkboard by the scale has SELL ALL (everything in the backpack) and his two cents. (He
@@ -31,6 +31,7 @@ import { MIX, shot } from '../audio/samples.ts';
 import { backpackView, type DropTarget } from '../backpack/BackpackSystem.ts';
 import type { Piece } from '../backpack/logic.ts';
 import { TIERS } from '../backpack/logic.ts';
+import { SHARK_ID } from '../fishing/shark.ts';
 import type { GameState } from '../fishing/tidewater.ts';
 import { font } from '../ui/fonts.ts';
 import { Lettering, lookFor, mount } from '../ui/boards.ts';
@@ -44,6 +45,7 @@ const LINES = {
   silver: ['Silver! The restaurants love these.'],
   gold: ['Gold? Where do you FIND these?'],
   legendary: ["I... I've never seen one like it."],
+  shark: ['A GREAT WHITE?! I’m going to need a bigger scale.', 'You carried that here? By hand?'],
   empty: ['Nothing to sell? The fish are biting off the pier.'],
   all: ['The whole lot? Pleasure doing business.'],
 };
@@ -194,7 +196,7 @@ export class FishMarket {
         window.setTimeout(() => {
           const r = this.state.sell([p.id]);
           shot('coins', MIX.coins, { rate: 1 });
-          this.line = p.tier === 3 ? pick(LINES.legendary) : p.tier === 2 ? pick(LINES.gold) : p.tier === 1 ? pick(LINES.silver) : pick(LINES.sold);
+          this.line = p.species === SHARK_ID ? pick(LINES.shark) : p.tier === 3 ? pick(LINES.legendary) : p.tier === 2 ? pick(LINES.gold) : p.tier === 1 ? pick(LINES.silver) : pick(LINES.sold);
           this.pop(`+$${r.total}${p.tier ? `  ${TIERS[p.tier].toUpperCase()}` : ''}`, to);
           this.paint();
           // onto the ice

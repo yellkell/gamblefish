@@ -14,7 +14,8 @@
  *    cork, and when you've held it long enough the run is broken and it tires;
  *  - one hand doesn't. It strips line off the reel, and reeling against a run snaps the line.
  *    Let it take all the line and it's gone;
- *  - break three runs and it's beaten. Reel it in alongside the pier.
+ *  - break three runs and it's beaten. Reel it in and it hangs off the rod like any catch; it's
+ *    too big for the backpack, so you carry it to the fish market to sell.
  *
  * Its body is its own (fishing/sharkGeometry.ts: a pointed snout, a jaw that opens, real
  * teeth), painted by pattern 21 in fishing/fishSkin.ts; the anatomy registered here only keeps
@@ -22,6 +23,11 @@
  */
 
 export const SHARK_ID = 'shark';
+
+/** how long it hangs off your rod tip, landed (m: smaller than life, or it'd stand over the tip),
+ *  and carried by the tail in your hand to the market */
+export const SHARK_HANG = 2;
+export const SHARK_CARRY = 1.4;
 
 /** how many runs you must hold through to beat it */
 export const RUNS = 3;

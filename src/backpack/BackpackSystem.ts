@@ -16,6 +16,9 @@
  *      the partner in, flashes, and pops the new fish out in its tier's colours with the gain
  *      rising off it.
  *
+ *  THE GREAT WHITE won't go in: it hangs from your hand by the tail, and you carry it to the fish
+ *  market's scale to sell it (village/market.ts). While it's in your hand the rod won't cast.
+ *
  *  Also: grip a fish in the tray to lift it back into your hand; drop one in the RELEASE net at
  *  the tray's side to let it go. Close the tray (A) with a fish in hand and you keep holding it.
  *
@@ -56,6 +59,7 @@ import { MIX, shot } from '../audio/samples.ts';
 import { mergeChime, uiClick, uiDeny } from '../audio/sfx.ts';
 import type { FishUniforms, Props } from '../fishing/props.ts';
 import { FISH, type GameState } from '../fishing/tidewater.ts';
+import { SHARK_CARRY, SHARK_ID } from '../fishing/shark.ts';
 import { pulseHand } from '../input/haptics.ts';
 import { InteractivePanel, pointerView, register } from '../ui/pointer.ts';
 import { locomotion } from '../locomotion/TeleportSystem.ts';
@@ -109,13 +113,15 @@ export const backpackView: {
   holding: boolean;
   /** which hand has a fish in it (fishing keeps that hand off the reel) */
   hand: Hand | null;
+  /** it's the great white: too big for the backpack, carried to the market (no casting till then) */
+  heavy: boolean;
   /** drop targets around the world (they add and remove themselves) */
   targets: Set<DropTarget>;
   /** a caught fish goes into `hand` (its save entry id) */
   takeInHand?: (id: number, hand: Hand) => void;
   toggle?: () => void;
   system?: BackpackSystem;
-} = { open: false, holding: false, hand: null, targets: new Set() };
+} = { open: false, holding: false, hand: null, heavy: false, targets: new Set() };
 
 interface FishModel {
   mesh: Mesh;
@@ -311,6 +317,9 @@ export class BackpackSystem extends createSystem({}) {
 
   /* ── the save's fish as pieces ───────────────────────────────────────── */
 
+  /** a great white that was in your hand when the game last shut (its save entry id): it's handed back */
+  private carrying: number | null = null;
+
   private get state(): GameState {
     return backpackDeps.state!;
   }
@@ -335,8 +344,10 @@ export class BackpackSystem extends createSystem({}) {
         changed = true;
       }
       if (!p.placed) {
-        const s = findSpot(p, this.pieces, C, R);
+        const s = p.species === SHARK_ID ? null : findSpot(p, this.pieces, C, R);
         if (s) Object.assign(p, s, { placed: true });
+        // the great white you were carrying when the game shut: back in your hand once you're in
+        else if (p.species === SHARK_ID) this.carrying = p.id;
         changed = true;
       }
     }
@@ -412,6 +423,7 @@ export class BackpackSystem extends createSystem({}) {
     if (!h) return;
     this.player.gripSpaces[h.hand].getWorldPosition(_v);
     this.player.raySpaces[h.hand].getWorldQuaternion(_q);
+    if (h.piece.species === SHARK_ID) return this.poseCarried(h.model, _v, _q, time);
     const k = this.overTray;
     // full size: its real length (capped); over the tray: its slot's length
     const real = Math.min(0.9, h.piece.cm / 100);
@@ -434,6 +446,25 @@ export class BackpackSystem extends createSystem({}) {
     mesh.scale.setScalar(len);
     h.model.u.uTime.value = time;
     h.model.u.uSwim.value = 0.015 + 0.07 * (1 - k) * (0.6 + 0.4 * Math.sin(time * 1.3));
+  }
+
+  /**
+   * The great white, carried: it hangs head down from your fist by the tail, turned the way your
+   * hand is, swaying a little and working its tail now and then.
+   */
+  private poseCarried(model: FishModel, at: Vector3, hand: Quaternion, time: number): void {
+    const len = SHARK_CARRY;
+    const yaw = new Euler().setFromQuaternion(hand, 'YXZ').y;
+    const sway = Math.sin(time * 1.7) * 0.08;
+    const mesh = model.mesh;
+    mesh.matrixAutoUpdate = true;
+    mesh.rotation.order = 'YXZ';
+    // snout (+z) straight down: the tail's in your fist, the body hanging under it
+    mesh.rotation.set(Math.PI / 2 + sway, yaw + Math.PI / 2, 0);
+    mesh.scale.setScalar(len);
+    mesh.position.set(at.x, at.y - len * 0.46, at.z);
+    model.u.uTime.value = time;
+    model.u.uSwim.value = 0.02 + 0.05 * Math.max(0, Math.sin(time * 0.6)) ** 4;
   }
 
   private paintDayButton(): void {
@@ -579,6 +610,10 @@ export class BackpackSystem extends createSystem({}) {
       }
     }
     locomotion.enabled = locomotion.enabled && !backpackView.open;
+    if (this.carrying !== null && !this.held && this.player.gripSpaces.left) {
+      this.takeInHand(this.carrying, 'left');
+      this.carrying = null;
+    }
     this.trackTargets(time);
     if (backpackView.open) {
       this.handleInput();
@@ -593,6 +628,7 @@ export class BackpackSystem extends createSystem({}) {
     this.animate(dt, time);
     backpackView.holding = !!this.held;
     backpackView.hand = this.held?.hand ?? null;
+    backpackView.heavy = this.held?.piece.species === SHARK_ID;
   }
 
   /** Where's the fish hand relative to the tray: over it (and which slot), or away. */
@@ -600,7 +636,7 @@ export class BackpackSystem extends createSystem({}) {
     const h = this.held;
     let over = 0;
     this.drop = null;
-    if (h && !this.target) {
+    if (h && !this.target && h.piece.species !== SHARK_ID) {
       this.player.gripSpaces[h.hand].getWorldPosition(_v);
       this.tray.group.worldToLocal(_loc.copy(_v));
       const inX = Math.abs(_loc.x) < this.tray.width / 2 + 0.08;
@@ -678,6 +714,12 @@ export class BackpackSystem extends createSystem({}) {
     if (!d || !d.ok) {
       uiDeny();
       this.buzz(h.hand, 0.6, 70);
+      if (h.piece.species === SHARK_ID) {
+        const tag = label('too big for the backpack · sell it at the fish market', '#ffb000', 34, 1024);
+        tag.position.set(0, 0.16, 0);
+        this.tray.group.add(tag);
+        this.anims.push({ kind: 'gain', t: 0, dur: 1.8, obj: tag });
+      }
       return;
     }
     const p = h.piece;

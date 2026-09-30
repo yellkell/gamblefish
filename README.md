@@ -270,8 +270,8 @@ and the vendors.
   a ring across the table and throws a burst of glints (no confetti). The
   amount rises in gold, and both controllers buzz. All of it scales with the win.
   - **Big wins** get a banner with a shine sweeping across its letters and light rays
-    turning behind it, and a fountain of gold coins that ring down and settle. (The shark's
-    bounty gets the coins too; the statue, the helter skelter and the walks opening don't.)
+    turning behind it, and a fountain of gold coins that ring down and settle. (The statue,
+    the great white, the helter skelter and the walks opening don't get the coins.)
   - **Chips** (`src/casino/chips.ts`) have a real chip's edge spots and inlay ring, so a
     pay stack reads as money.
   - **Roulette:** the winning pocket lights up on the wheel and the winning spots pulse
@@ -317,8 +317,11 @@ and the vendors.
   - Every few seconds it breaches and runs. A ring lights on the rod's rear grip, below your rod hand: grab it with
     your other hand and hold on until the run breaks. One-handed it strips line, and reeling
     against a run snaps it.
-  - Three held runs beat it. It rolls up alongside you under a GREAT WHITE! banner, and you let
-    it go for a bounty.
+  - Three held runs beat it. It comes up out of the sea under a GREAT WHITE! banner and hangs
+    off your rod like any catch. It's too big for the backpack: grab it and it hangs from your
+    hand by the tail, and you carry it to the fish market and sell it on the scale (which it
+    pegs). The rod won't cast while it's in your hand. Shut the game with it in hand and it's
+    back in your left hand next time.
   - Its skin is its own pattern: denticles, scars, gill slits, snout pores and teeth.
 - **The woodworks** (`src/woodworks/`): build your own way out to the reef and deep water.
   - **Timber yard:** an open stall on the beach west of the pier foot. It sells the AXE

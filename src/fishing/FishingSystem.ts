@@ -25,8 +25,9 @@
  *  THE GREAT WHITE  The last catch (fishing/shark.ts): once the field guide is full it takes a
  *                   bait in deep water. It breaches as each run begins; grab the rod's rear grip,
  *                   below your rod hand, with your OTHER hand too and hold on (fishing/sharkShow.ts shows where) until
- *                   the run breaks. Three held runs beat it; it rolls up alongside, and you let
- *                   it go for the bounty.
+ *                   the run breaks. Three held runs beat it; it comes up out of the sea and hangs
+ *                   off the rod like any catch. Too big for the backpack: grab it, carry it to the
+ *                   fish market and sell it on the scale.
  *
  * Teleporting with the line out brings it in.
  */
@@ -39,7 +40,6 @@ import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
 import { Bed, loadSamples, MIX, setListener, shot, surfaceThrash, waterEntrySmall, waterExitFish, waterExitSmall } from '../audio/samples.ts';
 import { bigWinHit, catchSting, winFanfare } from '../audio/sfx.ts';
 import { Celebration } from '../casino/celebrate.ts';
-import { payOut } from '../casino/money.ts';
 import type { WaterFx } from '../fx/water.ts';
 import { backpackView } from '../backpack/BackpackSystem.ts';
 import { pointerView } from '../ui/pointer.ts';
@@ -62,7 +62,7 @@ import { CLAMP_Y, RodGauge } from './rodGauge.ts';
 import { swim, type FishUniforms, type Props } from './props.ts';
 import { LINE_PER_CRANK, Rod } from './rod.ts';
 import { LINE } from './rodLook.ts';
-import { SHARK_ID, SharkFight, sharkUnlocked } from './shark.ts';
+import { SHARK_HANG, SHARK_ID, SharkFight, sharkUnlocked } from './shark.ts';
 import { GRIP_Y, SharkShow } from './sharkShow.ts';
 import {
   biteDelay,
@@ -400,7 +400,11 @@ export class FishingSystem extends createSystem({}) {
         if (down && !inside && backpackView.hand !== this.hand) this.equip(this.hand);
         break;
       case 'idle':
-        if (down) {
+        if (down && backpackView.heavy) {
+          // a great white hanging off your other hand: sell it first
+          if (this.hintT <= 0) this.toast.show('Your hands are full: take the shark to the fish market', 2.4, INK.amber, true);
+          this.hintT = 2;
+        } else if (down) {
           this.setState('windup');
           shot('bail_click', MIX.bail, { rate: 1.08 + Math.random() * 0.06 });
         }
@@ -432,7 +436,7 @@ export class FishingSystem extends createSystem({}) {
       case 'landing': {
         // take it off the hook: grip it with your free hand (or the rod's trigger / the card timing out)
         const free = this.other(this.hand);
-        const grabbed = this.squeeze(free) > 0.6 && this.landing && this.grip(free).getWorldPosition(_h).distanceTo(this.landing.mesh.position) < 0.45;
+        const grabbed = this.squeeze(free) > 0.6 && this.landing && this.grip(free).getWorldPosition(_h).distanceTo(this.landing.mesh.position) < (this.sharkLanding ? 0.9 : 0.45);
         const lasts = this.sharkLanding ? FISHING.cardSeconds + 5 : FISHING.cardSeconds;
         if (grabbed || (this.t > (this.sharkLanding ? 3 : 1) && down) || this.t > lasts) this.endLanding(free);
         break;
@@ -829,32 +833,27 @@ export class FishingSystem extends createSystem({}) {
     }
   }
 
-  /** Beaten and alongside: into the log, a bounty, the party; then you let it go. */
+  /**
+   * Beaten: into the log and up out of the sea, to hang off your rod tip like any catch, under a
+   * GREAT WHITE! banner. It's too big for any backpack: grip it and you carry it by the tail, all
+   * the way to the fish market's scale (village/market.ts), where it's sold.
+   */
   private landShark(kg: number): void {
     const state = fishingDeps.state!;
-    const entry = state.addFish(SHARK_ID, kg, hourNow());
-    // it's too big for any backpack: it goes back, and the bounty is paid for it
-    if (entry) state.release(entry.id);
-    const info = state.lastCatch;
-    const bounty = info?.value ?? 0;
+    this.caughtId = state.addFish(SHARK_ID, kg, hourNow())?.id ?? null;
     this.sharkLanding = true;
-    this.setState('landing');
-    this.bobVel.set(0, 0, 0);
-    this.camera.getWorldPosition(_w);
-    const toward = _x.copy(_w).sub(this.bob).setY(0).normalize();
-    // it rolls up four and a half metres out along the line, side on to you (clear of the piles)
-    const at = _w.clone().addScaledVector(toward, -4.5);
-    at.y = this.bob.y;
-    this.shark.alongside(at, toward);
-    if (info) this.card.show(info);
+    this.shark.stop();
+    waterExitFish(this.bob, 400);
+    fishingDeps.fx?.splash(this.bob, 1.4);
     this.buzz(this.hand, 1, 400);
     this.buzz(this.other(this.hand), 1, 400);
     catchSting(true);
     bigWinHit();
     window.setTimeout(() => winFanfare(40), 350);
-    this.party.win({ at: at.clone().add(new Vector3(0, 1.2, 0)), tier: 3, amount: bounty, banner: 'GREAT WHITE!', bannerAt: at.clone().add(new Vector3(0, 2.9, 0)), quiet: true, scale: 3 });
-    window.setTimeout(() => payOut(state, bounty), 900);
-    this.toast.show('Landed! The great white, the last fish in the book', 4, INK.amber);
+    this.startLanding(SHARK_ID, kg);
+    const at = this.rod.tip.clone();
+    this.party.win({ at: at.clone().add(new Vector3(0, 0.4, 0)), tier: 3, banner: 'GREAT WHITE!', bannerAt: at.clone().add(new Vector3(0, 1.4, 0)), quiet: true, scale: 2, coins: false });
+    this.toast.show('Landed! Too big for your backpack: grab it and carry it to the fish market', 5, INK.amber);
   }
 
   private updateShark(dt: number, time: number): void {
@@ -863,17 +862,6 @@ export class FishingSystem extends createSystem({}) {
     if (this.shark.active) this.shark.update(dt, time, this.bob, this.rod.tip);
     const show = this.state === 'fighting' && f instanceof SharkFight && (f.phase === 'warn' || f.phase === 'run');
     this.shark.updateRing(show, this.holding, f instanceof SharkFight ? f.holdProgress : 0, time);
-    if (this.sharkLanding) {
-      // the line to its jaw; the card up in front of you, off to the side of it
-      const m = this.shark.mesh;
-      this.bob.set(0, 0, 0.47).applyMatrix4(m.matrixWorld);
-      this.camera.getWorldPosition(_w);
-      this.camera.getWorldDirection(_v).setY(0).normalize();
-      _x.set(-_v.z, 0, _v.x);
-      this.card.group.position.copy(_w).addScaledVector(_v, 0.75).addScaledVector(_x, 0.28);
-      this.card.group.position.y -= 0.22;
-      this.card.group.lookAt(_w);
-    }
   }
 
   /* ── landing ─────────────────────────────────────────────────────────── */
@@ -972,7 +960,8 @@ export class FishingSystem extends createSystem({}) {
     this.hooked = null;
     if (!H) {
       const { mesh, uniforms } = fishingDeps.props!.makeFish(species);
-      const len = (fishingDeps.state!.lastCatch?.cm ?? 30) / 100;
+      // (the great white hangs smaller than life, or it'd stand on the deck over the rod tip)
+      const len = Math.min(species === SHARK_ID ? SHARK_HANG : Infinity, (fishingDeps.state!.lastCatch?.cm ?? 30) / 100);
       mesh.scale.setScalar(len);
       mesh.rotation.order = 'YXZ';
       this.scene.add(mesh);
@@ -1120,15 +1109,7 @@ export class FishingSystem extends createSystem({}) {
   }
 
   private endLanding(into: Hand | null = null): void {
-    if (this.sharkLanding) {
-      // let it go
-      this.sharkLanding = false;
-      this.shark.release();
-      this.card.hide();
-      this.toast.show('Back it goes. The island is yours.', 3, INK.amber);
-      if (this.state === 'landing') this.reelInNow();
-      return;
-    }
+    this.sharkLanding = false;
     const L = this.landing;
     if (L) {
       this.scene.remove(L.mesh);

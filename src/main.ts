@@ -63,6 +63,10 @@ import { onFontsReady } from './ui/fonts.ts';
 import { drawLogo, drawLogoFish, hasLogoFish, setLogoFish } from './ui/logo.ts';
 import { thumbnail } from './ui/thumbnail.ts';
 
+/** out at sea past the bay, where nothing grows: the plants are picked round here while you're high up
+ *  the helter skelter (none near, so every tree is its far card) */
+const OFFSHORE = { x: 0, z: 700 };
+
 /** ff2's fixed-foveation level: sharp centre, cheap rim. */
 const FOVEATION = 0.33;
 
@@ -201,8 +205,10 @@ World.create(container, {
     lastT = t;
     clouds.update(dt, camera);
     ocean.update(t, camera);
-    // up the helter skelter the plants and the grass stay picked round its tower, not round you
-    const hold = skelterView.onTower ? SKELTER : null;
+    // up the helter skelter the plants and the grass stay picked round its tower, not round you;
+    // and up in its first two tiers, 100 m and more over them, round nothing at all (out at sea):
+    // from up there the near plants were specks, a couple of hundred thousand triangles of them
+    const hold = skelterView.high ? OFFSHORE : skelterView.onTower ? SKELTER : null;
     vegetation.update(t, camera, hold);
     grass?.update(t, camera, hold);
     signs.update(1 / 72);
