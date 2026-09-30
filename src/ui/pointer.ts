@@ -7,7 +7,9 @@
  * trigger pull clicks it — with ff2's hover and click sounds and a tick in the hand.
  *
  * A hand whose ray is on a button CLAIMS its trigger for that frame (`pointerView.claimed`), so
- * pointing at a shop never also casts the rod or drops a fish.
+ * pointing at a shop never also casts the rod or drops a fish. A click keeps the claim until the
+ * trigger's let go: a button that goes away under it (SELL ALL, with nothing left to sell) mustn't
+ * leave the rest of that pull to the rod, which would take it for a new one and cast.
  */
 
 import { createSystem, InputComponent } from '@iwsdk/core';
@@ -76,6 +78,8 @@ const _q = new Quaternion();
 export class PointerSystem extends createSystem({}) {
   private cursors!: Record<Hand, { dot: Mesh; beam: Line }>;
   private readonly trig: Record<Hand, boolean> = { left: false, right: false };
+  /** a click on a button, its trigger not yet let go: still the UI's */
+  private readonly clicking: Record<Hand, boolean> = { left: false, right: false };
   private readonly ray = new Ray();
   private readonly plane = new Plane();
 
@@ -111,7 +115,8 @@ export class PointerSystem extends createSystem({}) {
       const t = pad?.getButtonValue(InputComponent.Trigger) ?? 0;
       const down = !this.trig[hand] && t > 0.6;
       if (t > 0.6) this.trig[hand] = true;
-      else if (t < 0.3) this.trig[hand] = false;
+      else if (t < 0.3) this.trig[hand] = this.clicking[hand] = false;
+      pointerView.claimed[hand] = this.clicking[hand];
 
       // nearest visible panel along this hand's ray
       const rs = this.player.raySpaces[hand];
@@ -154,6 +159,7 @@ export class PointerSystem extends createSystem({}) {
         pointerView.claimed[hand] = true;
         hovered.set(best.p, b.id);
         if (down) {
+          this.clicking[hand] = true;
           uiClick();
           pulseHand(this.renderer.xr.getSession() ?? undefined, hand, 0.35, 30);
           best.p.onClick(b.id, hand);

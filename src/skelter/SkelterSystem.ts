@@ -178,7 +178,7 @@ export class SkelterSystem extends createSystem({}) {
     skelterView.gate = { at: gate, face: [SKELTER.x, SKELTER.z] };
     skelterView.system = this;
     this.sign.draw();
-    this.state.onChange(() => this.sign.draw());
+    this.state.onChange(() => this.sign.draw(), { logs: true });
     on('slide-complete', () => this.onTierComplete());
     on('final-slide-complete', () => this.onWin());
   }
@@ -319,8 +319,7 @@ export class SkelterSystem extends createSystem({}) {
     if (!this.open() || n <= 0) return uiDeny();
     ww.wood -= n;
     ww.built[KEY] = this.logsIn() + n;
-    this.state.save();
-    this.state.emit();
+    this.state.logs();
     this.queued += Math.min(n, 16);
   }
 

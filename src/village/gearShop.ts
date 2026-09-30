@@ -18,8 +18,9 @@
  * button: that's the one that goes on your hook and hangs under the float, and the fish that like
  * it best bite it more often (fishing/favouriteBait.ts; the field guide says which). At the tackle
  * shop a board by the rack of rods does the same for the rod in your hand and the reel on it.
- * Otherwise it's only the look: the bites come as fast as your best bait brings them, the trophy
- * fish go by your best, you cast as far as your best rod and reel in as fast as your best reel.
+ * What you use is what you fish with (fishing/gear.ts usedGear): the bites come as fast as that
+ * bait brings them, the trophy fish look at what's on your line, you cast as far as that rod and
+ * reel in as fast as that reel.
  */
 
 import { CircleGeometry, DoubleSide, Group, MeshBasicMaterial, SphereGeometry, TorusGeometry, Vector3, type Object3D } from 'three';
@@ -417,9 +418,8 @@ export class GearShopCounter {
   /** Put a bait you've bought on the hook. */
   private use(track: string, level: number): void {
     if (track !== 'bait' || !pickLook(this.state, track, level)) return;
-    const best = this.state.upgrades.bait | 0;
     const lv = UPGRADES.bait.levels;
-    this.note = `On your hook: ${lv[level].label.toLowerCase()}. The fish that like it bite more often` + (level < best ? `, and the bites come as fast as for your ${lv[best].label.toLowerCase()}.` : '.');
+    this.note = `On your hook: ${lv[level].label.toLowerCase()}. The fish that like it bite more often.`;
     this.noteColour = 'good';
     this.paint();
   }
@@ -436,7 +436,7 @@ export class GearShopCounter {
     const sub = !single
       ? 'the big ones need big-game tackle'
       : t0 === 'bait'
-        ? `on your hook: ${UPGRADES.bait.levels[onHook].label}` + (onHook < (u.bait | 0) ? `  ·  bites as fast as ${UPGRADES.bait.levels[u.bait | 0].label}` : '')
+        ? `on your hook: ${UPGRADES.bait.levels[onHook].label}`
         : `yours now: ${UPGRADES[t0].levels[u[t0] | 0].label}`;
     L.text(sub, 44, 122, 28, 'dim', 'left', 600, 700);
     L.text(`wallet $${Math.floor(this.state.money).toLocaleString('en-US')}`, BW - 44, 80, 34, 'accent', 'right', 700);
@@ -478,8 +478,8 @@ export class GearShopCounter {
 }
 
 /**
- * Show a level of a track you've bought (fishing/gear.ts LOOK_TRACKS): only its look. Your best
- * clears the pick, so the next one you buy is the one you use. Saved and told if it changed.
+ * Fish with a level of a track you've bought (fishing/gear.ts LOOK_TRACKS). Your best clears the
+ * pick, so the next one you buy is the one you use. Saved and told if it changed.
  */
 function pickLook(state: GameState, track: string, level: number): boolean {
   const best = state.upgrades[track] | 0;
@@ -501,15 +501,15 @@ const RW = 1240;
 const RH = 560;
 
 /** the board's two columns: what each track's pick is called, and what its number is */
-const RACK: { track: 'rod' | 'reel'; on: string; stat: (lv: Record<string, unknown>) => string; same: string; you: string }[] = [
-  { track: 'rod', on: 'IN HAND ✓', stat: (lv) => `casts ${lv.castM} m`, same: 'casts as far as', you: 'cast as far as' },
-  { track: 'reel', on: 'ON ROD ✓', stat: (lv) => `reels in ${lv.reelSpeed} m/s`, same: 'reels in as fast as', you: 'reel in as fast as' },
+const RACK: { track: 'rod' | 'reel'; on: string; stat: (lv: Record<string, unknown>) => string }[] = [
+  { track: 'rod', on: 'IN HAND ✓', stat: (lv) => `casts ${lv.castM} m` },
+  { track: 'reel', on: 'ON ROD ✓', stat: (lv) => `reels in ${lv.reelSpeed} m/s` },
 ];
 
 /**
  * A board on the wall by the rack of rods: every rod and every reel, the ones you've bought with
- * a USE button, the ones you fish with ticked. You cast as far as your best rod and reel in as
- * fast as your best reel, whichever you use.
+ * a USE button, the ones you fish with ticked. You cast as far as the rod you use and reel in as
+ * fast as the reel on it.
  */
 export class RodRackBoard {
   private readonly board: InteractivePanel;
@@ -545,9 +545,8 @@ export class RodRackBoard {
     const level = Number(lv);
     const col = RACK.find((c) => c.track === track);
     if (act !== 'use' || !col || !pickLook(this.state, track, level)) return;
-    const best = this.state.upgrades[track] | 0;
     const lvs = UPGRADES[track].levels;
-    this.note = `${track === 'rod' ? 'In your hand' : 'On your rod'}: the ${lvs[level].label.toLowerCase()}.` + (level < best ? ` It ${col.same} your ${lvs[best].label.toLowerCase()}.` : '');
+    this.note = `${track === 'rod' ? 'In your hand' : 'On your rod'}: the ${lvs[level].label.toLowerCase()}. It ${col.stat(lvs[level])}.`;
     this.paint();
   }
 
@@ -556,8 +555,7 @@ export class RodRackBoard {
     const u = this.state.upgrades;
     L.begin();
     L.title('YOUR ROD AND REEL', 36, 70, 48, 'left', RW - 72);
-    const behind = RACK.filter((c) => shownLevel(u, this.state.looks, c.track) < (u[c.track] | 0)).map((c) => `${c.you} your ${UPGRADES[c.track].levels[u[c.track] | 0].label}`);
-    L.text(behind.length ? `you still ${behind.join(' and ')}` : 'pick the ones you fish with: only the look changes', 36, 108, 24, 'dim', 'left', 600, RW - 72);
+    L.text('pick the ones you fish with: they cast and reel as they say', 36, 108, 24, 'dim', 'left', 600, RW - 72);
     const rowH = 90;
     RACK.forEach((c, k) => {
       const x0 = 32 + k * 604;

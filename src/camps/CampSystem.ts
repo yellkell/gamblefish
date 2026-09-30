@@ -584,8 +584,7 @@ export class CampSystem extends createSystem({}) {
     const s = this.state;
     s.woodworks.wood += n;
     e.logs = 0;
-    s.save();
-    s.emit();
+    s.logs();
     // a few of them fly to you; the thunks land with them
     this.logs.mesh.getWorldPosition(_w);
     for (let i = 0; i < Math.min(n, 5); i++) {
