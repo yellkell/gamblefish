@@ -25,10 +25,13 @@ check('nothing longer than 6', bounds(shapeFor('tarpon', 250, 40)).w === 6 && bo
 const has = (sh, c, r) => sh.some(([x, y]) => x === c && y === r);
 const opah = shapeFor('opah', 66, 10);
 check('a reef-round opah of 3 cells is a plus sign', opah.length === 5 && [[0, 1], [1, 0], [1, 1], [1, 2], [2, 1]].every(([c, r]) => has(opah, c, r)), JSON.stringify(opah));
-const tuna = shapeFor('tuna', 88, 12);
-check('a big tuna has a forked tail, with a one-cell notch in it', has(tuna, 0, 0) && has(tuna, 0, 2) && !has(tuna, 0, 1), JSON.stringify(tuna));
-const tuna3 = shapeFor('tuna', 66, 5);
-check('a three-cell tuna\'s tail is one cell', tuna3.filter(([c]) => c === 0).length === 1, JSON.stringify(tuna3));
+{
+  const { FISH_IDS } = await import('../src/fishing/tidewater.ts');
+  const forked = FISH_IDS.flatMap((id) => [3, 4, 5, 6].filter((n) => shapeFor(id, n * 22, 10).filter(([c]) => c === 0).length !== 1).map((n) => `${id}@${n}`));
+  check('every tail is one cell, no forked tails', forked.length === 0, forked.join(' ') || undefined);
+}
+const bigTuna = shapeFor('tuna', 132, 14);
+check('a big tuna is a football: one cell at each end, three deep in the middle', [1, 2, 3, 3, 2, 1].every((d, c) => bigTuna.filter(([x]) => x === c).length === d), JSON.stringify(bigTuna));
 const marlin = shapeFor('marlin', 300, 120);
 check('a marlin fills most of an empty first backpack', marlin.length >= 14, `${marlin.length} cells`);
 {
@@ -39,7 +42,7 @@ check('a marlin fills most of an empty first backpack', marlin.length >= 14, `${
 const grouper = shapeFor('grouper', 88, 12);
 check('a grouper is heaviest at the head: its snout column the deepest', grouper.filter(([c]) => c === 3).length === 3 && grouper.filter(([c]) => c === 0).length === 1, JSON.stringify(grouper));
 const rooster = shapeFor('roosterfish', 110, 20);
-check('a roosterfish\'s comb has a gap between its tail and its spine', has(rooster, 1, 2) && !has(rooster, 2, 2) && has(rooster, 3, 2), JSON.stringify(rooster));
+check('a roosterfish\'s comb has a gap between its spines', has(rooster, 1, 2) && !has(rooster, 2, 2) && has(rooster, 3, 2), JSON.stringify(rooster));
 // every shape, every length: in one piece, as long as the fish, on the grid from (0, 0), and no taller than 3
 {
   const { FISH_IDS } = await import('../src/fishing/tidewater.ts');
@@ -65,11 +68,11 @@ check('a roosterfish\'s comb has a gap between its tail and its spine', has(roos
 
 console.log('\nthe notches');
 {
-  // a one-cell fish tucks into a tuna's tail fork
+  // a one-cell fish tucks into the gap in a roosterfish's comb
   const [C0, R0] = GRID_SIZES[0];
-  const t = piece(40, 'tuna', 88, 12, { x: 0, y: 0 });
-  const tiny = piece(41, 'silverside', 12, 0.03, { x: 0, y: 1 });
-  check('a silverside fits in the notch of a tuna\'s tail', fits(t, [], C0, R0) && fits(tiny, [t], C0, R0));
+  const t = piece(40, 'roosterfish', 110, 20, { x: 0, y: 0 });
+  const tiny = piece(41, 'silverside', 12, 0.03, { x: 2, y: 2 });
+  check('a silverside fits in the gap of a roosterfish\'s comb', fits(t, [], C0, R0) && fits(tiny, [t], C0, R0));
 }
 
 console.log('\nrotation');
