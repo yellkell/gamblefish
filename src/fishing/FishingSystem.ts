@@ -15,8 +15,9 @@
  *                   grab the reel's handle with your OTHER hand (grip) and crank it round. Keep
  *                   the tension in the green; ease off when it runs, or the line snaps. The rod
  *                   bows and the controller shakes with every surge. Hooked, it runs first, and
- *                   it won't come to the rod until it's tired (fishing/fight.ts). Teleport is
- *                   closed until it's over.
+ *                   it won't come to the rod until it's tired (fishing/fight.ts); ease off and it
+ *                   swims away, taking line, until it's taken it all. Teleport is closed until
+ *                   it's over.
  *  LAND             The fish swings up out of the water and hangs off your rod tip, thrashing,
  *                   with its card beside it; it goes in the cooler (trigger or B/Y, or wait).
  *  REEL IN          With nothing biting, reel (trigger or crank) to skim the bobber back. Let go
@@ -719,7 +720,7 @@ export class FishingSystem extends createSystem({}) {
       this.buzz(this.hand, 1, 80);
       this.reelInNow();
     } else {
-      this.toast.show(`The ${name.toLowerCase()} threw the hook`, 2, INK.dim);
+      this.toast.show(f instanceof FishFight && f.spooled ? `The ${name.toLowerCase()} took all your line` : `The ${name.toLowerCase()} threw the hook`, 2, INK.dim);
       this.setState(this.lineOut > 3 ? 'retrieving' : 'idle');
     }
   }

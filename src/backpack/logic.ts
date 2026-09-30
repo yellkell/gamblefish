@@ -3,10 +3,11 @@
  * three.js, no DOM), so tools/backpack-check.mjs runs the same code the headset does.
  *
  *  SHAPES   A fish takes the cells its real length needs (CELL_CM per cell, up to 6: the first
- *           backpack's width, so every fish but the great white fits an empty one). Slender
- *           and small fish are one cell tall; deep-bodied or heavy fish three cells long or more
- *           are two tall with a one-cell tail fin at the tail end — so a snapper packs like a
- *           Tetris piece and a houndfish like a bar. Pieces turn in 90° steps.
+ *           backpack's width, so every fish but the great white fits an empty one), in its own
+ *           silhouette, column by column from the tail (BODY): a houndfish is a bar, a snapper
+ *           an S, a reef fish a plus sign, a grouper a club with its big head. Fast swimmers have
+ *           a forked tail with a notch in it, and the roosterfish a comb with gaps between its
+ *           spines, where a one-cell fish can tuck in. Pieces turn in 90° steps.
  *  GRID     The backpack's size follows the fish-hold upgrade (Tidewater's `hold` track):
  *           6×4, then 8×5, then 10×6.
  *  MERGING  Put a fish down touching another of the same species and tier and they fuse into
@@ -31,21 +32,105 @@ export const GRID_SIZES: [number, number][] = [
   [10, 6],
 ];
 
-/** Deep-bodied species (two cells tall from 2 cells long). */
-const DEEP = new Set(['angel', 'tang', 'chromis', 'sergeant', 'grunt', 'parrot', 'grouper', 'redSnapper', 'jack', 'mahi', 'tuna', 'wrasse', 'yellowtail']);
+/**
+ * A column of a fish's piece: which of three rows it fills (1 the belly, 2 the middle, 4 the
+ * back). A piece lies with its back toward the higher rows (backpack/tray.ts slotMatrix).
+ */
+const MID = 0b010;
+const BELLY = 0b001;
+/** the middle and the belly, the middle and the back, all three */
+const LOW = 0b011;
+const HIGH = 0b110;
+const ALL = 0b111;
+/** a forked tail: the two lobes, and the notch between them */
+const FORK = 0b101;
+
+const rep = (m: number, n: number): number[] => Array.from({ length: Math.max(0, n) }, () => m);
+/** a forked tail and the root of it (two columns), for the fast swimmers */
+const tail = [FORK, ALL];
+
+/**
+ * Each body plan's columns, tail first, for a fish `n` cells long (one cell is one cell for
+ * everyone). The tails and fins make the notches and gaps.
+ */
+const PLANS: Record<string, (n: number) => number[]> = {
+  /** a bar: the houndfish, the silverside */
+  bar: (n) => rep(MID, n),
+  /** slender, with a forked tail: the mullet, the yellowtail, the bonefish, the barracuda */
+  fork: (n) => (n === 2 ? [LOW, MID] : [...tail, ...rep(MID, n - 2)]),
+  /** forked tail and a deep back behind the head: the jack, the tuna, the tarpon */
+  deepFork: (n) => (n === 2 ? [ALL, MID] : [...tail, ...rep(HIGH, n - 3), MID]),
+  /** deep, tail high and snout low, so it packs like an S: the snappers, grunts, parrotfish */
+  deep: (n) => (n === 2 ? [MID, LOW] : [MID, ...rep(LOW, n - 2), BELLY]),
+  /** the hogfish: an S with its long rooting snout */
+  hog: (n) => (n < 4 ? PLANS.deep(n) : [MID, ...rep(LOW, n - 3), BELLY, BELLY]),
+  /** the grouper: a slim tail, a heavy body and a great head, like a club */
+  club: (n) => (n === 2 ? [MID, ALL] : [MID, ...rep(LOW, n - 2), ALL]),
+  /** round as a coin, tail and snout a cell each: a plus sign, or a hexagon */
+  disc: (n) => (n === 2 ? [MID, ALL] : [MID, ...rep(ALL, n - 2), MID]),
+  /** a disc with long trailing fins (or a deep forked tail): the angelfish, the permit */
+  kite: (n) => (n === 2 ? [FORK, ALL] : [FORK, ...rep(ALL, n - 2), MID]),
+  /** the triggerfish: its spine up at the front */
+  trigger: (n) => (n === 2 ? [MID, HIGH] : PLANS.disc(n)),
+  /** the mahi: a forked tail and the bull's blunt square forehead */
+  bull: (n) => (n < 4 ? PLANS.fork(n) : [...tail, ...rep(MID, n - 3), ALL]),
+  /** the roosterfish: its comb of long spines, with gaps between them */
+  comb: (n) => (n < 5 ? PLANS.fork(n) : [...tail, ...Array.from({ length: n - 3 }, (_, i) => (i % 2 ? HIGH : MID)), MID]),
+  /** the sailfish: the sail along its back, and its bill */
+  sail: (n) => (n < 5 ? PLANS.fork(n) : [...tail, MID, ...rep(HIGH, n - 4), MID]),
+  /** the swordfish: a tall dorsal, and a long sword */
+  sword: (n) => (n < 5 ? PLANS.fork(n) : [...tail, ...rep(MID, n - 5), HIGH, MID, MID]),
+  /** the marlin: the heaviest, a dorsal just behind the head, and its spear */
+  spear: (n) => (n < 5 ? PLANS.deepFork(n) : [...tail, ...rep(ALL, n - 5), HIGH, MID, MID]),
+  /** the great white: its dorsal fin */
+  shark: (n) => (n < 4 ? PLANS.fork(n) : [...tail, ...rep(MID, n - 4), HIGH, MID]),
+};
+
+/** each species' body plan (any other: a bar, or deep if it's heavy) */
+export const BODY: Record<string, keyof typeof PLANS> = {
+  silverside: 'bar',
+  needlefish: 'bar',
+  mullet: 'fork',
+  yellowtail: 'fork',
+  bonefish: 'fork',
+  barracuda: 'fork',
+  jack: 'deepFork',
+  tuna: 'deepFork',
+  tarpon: 'deepFork',
+  grunt: 'deep',
+  redSnapper: 'deep',
+  parrot: 'deep',
+  glasseye: 'deep',
+  wrasse: 'hog',
+  grouper: 'club',
+  sergeant: 'disc',
+  chromis: 'disc',
+  tang: 'disc',
+  lookdown: 'disc',
+  opah: 'disc',
+  angel: 'kite',
+  permit: 'kite',
+  trigger: 'trigger',
+  mahi: 'bull',
+  roosterfish: 'comb',
+  sailfish: 'sail',
+  swordfish: 'sword',
+  marlin: 'spear',
+  shark: 'shark',
+};
 
 /** The piece a fish of `cm` makes, at rotation 0: cells [col, row], tail at col 0. */
 export function shapeFor(species: string, cm: number, kg: number): Cell[] {
   const len = Math.max(1, Math.min(MAX_LEN, Math.round(cm / CELL_CM)));
-  // a second row only where the fish is long enough to look that deep in its slot
-  const tall = len >= 3 && (DEEP.has(species) || kg >= 5);
+  if (len === 1) return [[0, 0]];
+  const plan = PLANS[BODY[species] ?? (len >= 3 && kg >= 5 ? 'deep' : 'bar')];
   const cells: Cell[] = [];
-  for (let c = 0; c < len; c++) {
-    cells.push([c, 0]);
-    // the tail fin column stays one cell; the body behind the head is two deep
-    if (tall && c > 0) cells.push([c, 1]);
-  }
-  return cells;
+  plan(len).forEach((m, c) => {
+    for (let r = 0; r < 3; r++) if (m & (1 << r)) cells.push([c, r]);
+  });
+  // down to row 0 (a piece with no belly row starts on its middle one)
+  const minR = Math.min(...cells.map((p) => p[1]));
+  return cells.map(([c, r]) => [c, r - minR] as Cell);
 }
 
 /** Rotate a shape by `rot` quarter turns and shift it back to start at (0, 0). */

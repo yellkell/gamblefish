@@ -7,7 +7,7 @@
  * its depth of water, does bite with them, and bites more with a luck charm. The great white
  * (fishing/shark.ts) waits for a full field guide and deep water, and is only beaten by holding
  * its runs two-handed. A fish hooked straight under the rod off the pier (fishing/fight.ts) still
- * runs, and doesn't come in until it's tired. Every fish but the shark has a bait it likes, and
+ * runs, and doesn't come in until it's tired, and swims off when you ease off the reel. Every fish but the shark has a bait it likes, and
  * bites more with it on the hook.
  *
  *   node tools/fish-check.mjs
@@ -191,6 +191,27 @@ console.log('\nthe fight, dropped straight down off the pier (3 m of line, a ste
   f.run = 0;
   for (let t = 0; t < 1.5 && f.state === 'fighting'; t += 1 / 72) f.update(1 / 72, true);
   check('a fresh fish reeled right in bolts again', f.state === 'fighting' && f.bolts > 0, `${f.bolts} bolt(s), ${f.distance.toFixed(1)} m out`);
+  // ease off mid-fight (its first run over): it swims away, and the hook holds
+  const ease = (species, kg, secs) => {
+    const g = new FishFight({ species, kg, lineKg: 13, reelSpeed: 1.6, distance: 8, rng });
+    g.run = 0;
+    const from = g.distance;
+    for (let t = 0; t < secs && g.state === 'fighting'; t += 1 / 72) g.update(1 / 72, false);
+    return { g, gone: g.distance - from };
+  };
+  const j = ease('jack', 6, 3);
+  const s = ease('sergeant', 0.2, 3);
+  check('ease off and a jack swims off, taking line', j.g.state === 'fighting' && j.gone > 3, `${j.gone.toFixed(1)} m in 3 s`);
+  check('a sergeant major swims off too, but slower', s.g.state === 'fighting' && s.gone > 1 && s.gone < j.gone, `${s.gone.toFixed(1)} m in 3 s`);
+  const held = ease('grunt', 0.5, 6);
+  check('the line stays tight while it runs: the hook holds', held.g.state === 'fighting' && held.g.tension > 0.12, `tension ${held.g.tension.toFixed(2)}`);
+  const long = ease('jack', 6, 120);
+  check('leave it long enough and it takes all your line', long.g.state === 'escaped' && long.g.spooled, long.g.state);
+  const back = new FishFight({ species: 'jack', kg: 6, lineKg: 13, reelSpeed: 1.6, distance: 8, rng });
+  back.run = 0;
+  for (let t = 0; t < 2; t += 1 / 72) back.update(1 / 72, false);
+  for (let t = 0; t < 0.5; t += 1 / 72) back.update(1 / 72, true);
+  check('reel again and it stops swimming off at once', back.flee < 0.05, `flee ${back.flee.toFixed(2)}`);
 }
 
 console.log('\nthe gear you show (the bait on your hook, the rod and reel in your hand)');

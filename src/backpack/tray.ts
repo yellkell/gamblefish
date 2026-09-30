@@ -162,8 +162,9 @@ export class Tray {
     const centre = this.cellCentre((minC + maxC) / 2, (minR + maxR) / 2, _c, lift);
     const b0 = bounds(rotate(p.shape, 0));
     const len = b0.w * CELL * 0.96;
-    // a two-row piece: the fish drawn a little deeper, so it fills its footprint
-    const deep = b0.h > 1 ? 1.4 : 1;
+    // a deep piece: the fish drawn a little deeper, so it fills its footprint (by how many rows
+    // its columns fill on average: a bar 1, a disc 2 or more; the fins and tails don't count for much)
+    const deep = 1 + 0.4 * Math.min(1, p.shape.length / b0.w - 1);
     // rot 0: head toward +X (the tail cell is column 0); each quarter turn swings it toward +Z
     const H = HEADS[p.rot];
     const Y = _y.crossVectors(H, UP);

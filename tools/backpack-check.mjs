@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * THE BACKPACK — headless. Drives src/backpack/logic.ts (Node strips the types):
- * shapes from real lengths, rotation, fitting, merging and chain merges.
+ * shapes from real lengths and body plans, rotation, fitting, merging and chain merges.
  *
  *   node tools/backpack-check.mjs
  */
@@ -19,9 +19,49 @@ console.log('\nshapes');
 const needle = shapeFor('needlefish', 94, 1.57);
 check('a 94 cm houndfish is a 4-long bar', needle.length === 4 && bounds(needle).h === 1, JSON.stringify(needle));
 const snapper = shapeFor('redSnapper', 75, 5.29);
-check('a 75 cm snapper is 3 long, 2 deep with a 1-cell tail', snapper.length === 5 && bounds(snapper).w === 3 && bounds(snapper).h === 2, JSON.stringify(snapper));
+check('a 75 cm snapper is an S: 3 long, 2 deep, tail high and snout low', JSON.stringify(snapper) === '[[0,1],[1,0],[1,1],[2,0]]', JSON.stringify(snapper));
 check('a tiny silverside is one cell', shapeFor('silverside', 12, 0.03).length === 1);
-check('nothing longer than 6', shapeFor('tarpon', 250, 40).length <= 12 && bounds(shapeFor('tarpon', 250, 40)).w === 6);
+check('nothing longer than 6', bounds(shapeFor('tarpon', 250, 40)).w === 6 && bounds(shapeFor('marlin', 300, 120)).w === 6);
+const has = (sh, c, r) => sh.some(([x, y]) => x === c && y === r);
+const opah = shapeFor('opah', 66, 10);
+check('a reef-round opah of 3 cells is a plus sign', opah.length === 5 && [[0, 1], [1, 0], [1, 1], [1, 2], [2, 1]].every(([c, r]) => has(opah, c, r)), JSON.stringify(opah));
+const tuna = shapeFor('tuna', 88, 12);
+check('a tuna has a forked tail, with a one-cell notch in it', has(tuna, 0, 0) && has(tuna, 0, 2) && !has(tuna, 0, 1), JSON.stringify(tuna));
+const grouper = shapeFor('grouper', 88, 12);
+check('a grouper is heaviest at the head: its snout column the deepest', grouper.filter(([c]) => c === 3).length === 3 && grouper.filter(([c]) => c === 0).length === 1, JSON.stringify(grouper));
+const rooster = shapeFor('roosterfish', 110, 20);
+check('a roosterfish\'s comb has a gap between its tail and its spine', has(rooster, 1, 2) && !has(rooster, 2, 2) && has(rooster, 3, 2), JSON.stringify(rooster));
+// every shape, every length: in one piece, as long as the fish, on the grid from (0, 0), and no taller than 3
+{
+  const { FISH_IDS } = await import('../src/fishing/tidewater.ts');
+  const bad = [];
+  for (const id of FISH_IDS)
+    for (let n = 1; n <= 6; n++) {
+      const sh = shapeFor(id, n * 22, 10);
+      const b = bounds(sh);
+      const seen = new Set(['0']);
+      const key = (i) => String(i);
+      const stack = [0];
+      while (stack.length) {
+        const [c, r] = sh[stack.pop()];
+        sh.forEach(([x, y], j) => {
+          if (!seen.has(key(j)) && Math.abs(x - c) + Math.abs(y - r) === 1) (seen.add(key(j)), stack.push(j));
+        });
+      }
+      const dupes = new Set(sh.map(([c, r]) => `${c},${r}`)).size !== sh.length;
+      if (seen.size !== sh.length || b.w !== n || b.h > 3 || dupes || Math.min(...sh.map((p) => p[0])) !== 0 || Math.min(...sh.map((p) => p[1])) !== 0) bad.push(`${id}@${n}`);
+    }
+  check('every fish at every length is one joined piece, its length long, at most 3 deep', bad.length === 0, bad.join(' ') || undefined);
+}
+
+console.log('\nthe notches');
+{
+  // a one-cell fish tucks into a tuna's tail fork
+  const [C0, R0] = GRID_SIZES[0];
+  const t = piece(40, 'tuna', 88, 12, { x: 0, y: 0 });
+  const tiny = piece(41, 'silverside', 12, 0.03, { x: 0, y: 1 });
+  check('a silverside fits in the notch of a tuna\'s tail', fits(t, [], C0, R0) && fits(tiny, [t], C0, R0));
+}
 
 console.log('\nrotation');
 const r1 = rotate(needle, 1);
