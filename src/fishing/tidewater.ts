@@ -11,6 +11,7 @@ import { CatchMinigame as CatchMinigameJs } from '../../vendor/tidewater/src/gam
 import { GameState as GameStateJs } from '../../vendor/tidewater/src/game/GameState.js';
 import * as GearJs from '../../vendor/tidewater/src/game/Gear.js';
 import { baitShift, registerGear } from './gear.ts';
+import { baitOdds } from './favouriteBait.ts';
 import { biting, registerTimedFish } from './timedFish.ts';
 import { registerTrophyFish, trophyOdds, type Rig } from './trophyFish.ts';
 import type { CampSave, ChestFish } from '../camps/stock.ts';
@@ -71,8 +72,9 @@ const activity = BitesJs.activity as (pref: string, hour: number) => number;
 /**
  * Tidewater's weighted pick of what bites here (Bites.js pickSpecies), with the timed fish kept
  * to their hours (fishing/timedFish.ts), the trophy fish to the rigs that can take them
- * (fishing/trophyFish.ts: no rig, no trophies) and the shark to a full field guide and deep
- * water (fishing/shark.ts).
+ * (fishing/trophyFish.ts: no rig, no trophies), the shark to a full field guide and deep
+ * water (fishing/shark.ts), and each fish keener with its favourite bait on the hook
+ * (fishing/favouriteBait.ts).
  */
 export function pickSpecies(h: Habitat, hour: number, rng: () => number = Math.random, rig?: Rig): string | null {
   let total = 0;
@@ -83,7 +85,7 @@ export function pickSpecies(h: Habitat, hour: number, rng: () => number = Math.r
     const f = FISH[id];
     let hw = 0;
     for (const k in f.habitat) hw += (f.habitat[k as HabitatKey] ?? 0) * h[k as HabitatKey];
-    const x = hw * f.rarity * activity(f.time, hour) * biting(id, hour) * trophyOdds(id, hour, rig, luck) * sharkOdds(id, rig?.depth ?? 0, shark, (rig?.log?.[id]?.count ?? 0) > 0);
+    const x = hw * f.rarity * activity(f.time, hour) * biting(id, hour) * trophyOdds(id, hour, rig, luck) * sharkOdds(id, rig?.depth ?? 0, shark, (rig?.log?.[id]?.count ?? 0) > 0) * baitOdds(id, rig?.bait);
     w.push(x);
     total += x;
   }

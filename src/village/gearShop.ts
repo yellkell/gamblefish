@@ -15,10 +15,11 @@
  * have (fishing/gear.ts gearEffect), and which trophy fish need it.
  *
  * At the bait shop every bait you've bought (and the frozen shrimp you started with) has a USE
- * button: that's the one that goes on your hook and hangs under the float. At the tackle shop a
- * board by the rack of rods does the same for the rod in your hand and the reel on it. It's only
- * the look: the bites come as fast as your best bait brings them, you cast as far as your best
- * rod and reel in as fast as your best reel.
+ * button: that's the one that goes on your hook and hangs under the float, and the fish that like
+ * it best bite it more often (fishing/favouriteBait.ts; the field guide says which). At the tackle
+ * shop a board by the rack of rods does the same for the rod in your hand and the reel on it.
+ * Otherwise it's only the look: the bites come as fast as your best bait brings them, the trophy
+ * fish go by your best, you cast as far as your best rod and reel in as fast as your best reel.
  */
 
 import { Group, MeshBasicMaterial, SphereGeometry, TorusGeometry, Vector3, type Object3D } from 'three';
@@ -309,7 +310,7 @@ export class GearShopCounter {
     if (track !== 'bait' || !pickLook(this.state, track, level)) return;
     const best = this.state.upgrades.bait | 0;
     const lv = UPGRADES.bait.levels;
-    this.note = `On your hook: ${lv[level].label.toLowerCase()}.` + (level < best ? ` The fish bite as fast as for your ${lv[best].label.toLowerCase()}.` : '');
+    this.note = `On your hook: ${lv[level].label.toLowerCase()}. The fish that like it bite more often` + (level < best ? `, and the bites come as fast as for your ${lv[best].label.toLowerCase()}.` : '.');
     this.noteColour = 'good';
     this.paint();
   }

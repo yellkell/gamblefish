@@ -7,7 +7,8 @@
  * its depth of water, does bite with them, and bites more with a luck charm. The great white
  * (fishing/shark.ts) waits for a full field guide and deep water, and is only beaten by holding
  * its runs two-handed. A fish hooked straight under the rod off the pier (fishing/fight.ts) still
- * runs, and doesn't come in until it's tired.
+ * runs, and doesn't come in until it's tired. Every fish but the shark has a bait it likes, and
+ * bites more with it on the hook.
  *
  *   node tools/fish-check.mjs
  */
@@ -16,6 +17,7 @@ import { DEEP_FROM, DEEP_FULL, FISH, FISH_IDS, UPGRADES, createGameState, fishVa
 import { shownLevel } from '../src/fishing/gear.ts';
 import { TIMED, biting } from '../src/fishing/timedFish.ts';
 import { TROPHY } from '../src/fishing/trophyFish.ts';
+import { FAVOURITE_BAIT, FAVOURITE_MUL } from '../src/fishing/favouriteBait.ts';
 import { SHARK_DEPTH, SHARK_ID, SharkFight, RUNS } from '../src/fishing/shark.ts';
 import { FishFight, LAND_AT } from '../src/fishing/fight.ts';
 
@@ -211,6 +213,29 @@ console.log('\nthe gear you show (the bait on your hook, the rod and reel in you
   check("a pick beyond the save's gear is dropped", Object.keys(t.looks).length === 0);
   t.fromJSON({ ...d, looks: undefined });
   check('an older save has none: your best shows', Object.keys(t.looks).length === 0);
+}
+
+console.log('\nthe bait they like (fishing/favouriteBait.ts)');
+{
+  const baits = UPGRADES.bait.levels.length;
+  const without = FISH_IDS.filter((id) => id !== SHARK_ID && !(Number.isInteger(FAVOURITE_BAIT[id]) && FAVOURITE_BAIT[id] >= 0 && FAVOURITE_BAIT[id] < baits));
+  check('every fish but the great white likes a bait the bait shop sells', without.length === 0 && FAVOURITE_BAIT[SHARK_ID] === undefined, without.join(', ') || undefined);
+  // what a trophy fish needs to bite at all, it likes at least as much
+  const short = Object.entries(TROPHY).filter(([id, t]) => FAVOURITE_BAIT[id] < (t.needs.bait ?? 0)).map(([id]) => id);
+  check('no trophy fish likes a bait it won\'t take', short.length === 0, short.join(', ') || undefined);
+  // the grunt round the pier by day: plain, and with frozen shrimp (its favourite) or goop on the hook
+  const pier = spot(FISH.grunt.habitat);
+  const gear = Object.fromEntries(Object.keys(UPGRADES).map((k) => [k, 0]));
+  gear.bait = 1;
+  const count = (bait) => {
+    seed = 777;
+    let n = 0;
+    for (let i = 0; i < 6000; i++) if (pickSpecies(pier, 12, rng, { depth: 3, gear, bait }) === 'grunt') n++;
+    return n;
+  };
+  const fav = count(FAVOURITE_BAIT.grunt);
+  const other = count(1);
+  check(`grunts bite more with frozen shrimp on the hook than goop (${FAVOURITE_MUL}× the weight)`, fav > other * 1.3, `${fav} / ${other} of 6,000`);
 }
 
 const failed = results.filter((r) => !r).length;

@@ -5,7 +5,8 @@
  * It lies open in the tray (the tray's slots and fish put away while it's out), two pages at a
  * time: a title page with how many you've found, then two species to a page — and the big,
  * rare ones (the tarpon and the trophy fish) a page each, at the back. A species you haven't
- * caught is a shadow and a hint of where and when to look; the first one you land fills its
+ * caught is a shadow and a hint of where and when to look, and the bait it likes
+ * (fishing/favouriteBait.ts); the first one you land fills its
  * entry in: its picture (Tidewater's own model, photographed once), its names, where it lives
  * and when it bites, how many you've had and your best, and a true fact about it from the
  * natural history books. Opposite the title page is a chart of the bay (backpack/chart.ts) with
@@ -27,7 +28,8 @@ import { Group, Mesh, MeshLambertMaterial, BoxGeometry, Vector3, type Points } f
 import type { WebGLRenderer } from 'three';
 import { uiClick } from '../audio/sfx.ts';
 import type { Props } from '../fishing/props.ts';
-import { FISH, FISH_IDS, fishLengthCm, type GameState, type HabitatKey } from '../fishing/tidewater.ts';
+import { FISH, FISH_IDS, UPGRADES, fishLengthCm, type GameState, type HabitatKey } from '../fishing/tidewater.ts';
+import { FAVOURITE_BAIT } from '../fishing/favouriteBait.ts';
 import { TIMED } from '../fishing/timedFish.ts';
 import { TROPHY } from '../fishing/trophyFish.ts';
 import { font } from '../ui/fonts.ts';
@@ -450,6 +452,13 @@ export class FieldGuide {
     return `${where}  ·  ${when}`;
   }
 
+  /** the bait it likes best, for the hint on a fish you haven't caught */
+  private likes(id: string): string {
+    const lv = FAVOURITE_BAIT[id];
+    const bait = lv === undefined ? undefined : UPGRADES.bait?.levels[lv];
+    return bait ? `Likes: ${bait.label.toLowerCase()}` : '';
+  }
+
   private record(id: string): string {
     const e = this.state.log[id];
     if (!e) return '';
@@ -502,7 +511,8 @@ export class FieldGuide {
     c.font = font(600, 25);
     c.fillStyle = INK_BROWN;
     c.fillText(`Found: ${this.whereWhen(id)}`, 60, y + 280, W - 120);
-    if (got) {
+    if (!got) c.fillText(this.likes(id), 60, y + 311, W - 120);
+    else {
       c.fillText(this.record(id), 60, y + 311, W - 120);
       c.font = `italic ${font(500, 24)}`;
       c.fillStyle = INK_FADED;
@@ -546,7 +556,8 @@ export class FieldGuide {
       wrap(c, `To catch one: ${t.when}`, 70, y, W - 140, 36, 2);
       y += 80;
     }
-    if (got) {
+    if (!got) c.fillText(this.likes(id), 70, y, W - 140);
+    else {
       c.font = font(600, 28);
       c.fillStyle = INK_BROWN;
       c.fillText(this.record(id), 70, y, W - 140);
