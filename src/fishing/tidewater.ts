@@ -10,7 +10,7 @@ import * as BitesJs from '../../vendor/tidewater/src/game/Bites.js';
 import { CatchMinigame as CatchMinigameJs } from '../../vendor/tidewater/src/game/CatchMinigame.js';
 import { GameState as GameStateJs } from '../../vendor/tidewater/src/game/GameState.js';
 import * as GearJs from '../../vendor/tidewater/src/game/Gear.js';
-import { baitShift, registerGear } from './gear.ts';
+import { baitShift, registerGear, usedGear } from './gear.ts';
 import { baitOdds } from './favouriteBait.ts';
 import { biting, registerTimedFish } from './timedFish.ts';
 import { registerTrophyFish, trophyOdds, type Rig } from './trophyFish.ts';
@@ -186,12 +186,15 @@ export interface GameState {
   /** the journey (statue/): full helter skelter descents, and whether the golden statue is up */
   journey: JourneySave;
   /**
-   * The gear you've chosen to use for its look, by track (fishing/gear.ts shownLevel): the rod in
-   * your hand and the reel on it (the tackle shop's rack board) and the bait on your hook (the bait shop), any level you've
-   * bought. A track that isn't here shows your best. It's only the look: what the gear does is
-   * always your best's.
+   * The gear you've chosen to fish with, by track (fishing/gear.ts shownLevel): the rod in your
+   * hand and the reel on it (the tackle shop's rack board) and the bait on your hook (the bait
+   * shop), any level you've bought. A track that isn't here is your best. It's what the gear
+   * does, not just its look: `gear` and `stats` go by it.
    */
   looks: Record<string, number>;
+  /** the levels you're fishing with (fishing/gear.ts usedGear): your picks, your best of the rest */
+  readonly gear: Record<string, number>;
+  /** what that gear does (Tidewater's gearStats of `gear`) */
   readonly stats: GearStats;
   readonly holdKg: number;
   readonly holdValue: number;
@@ -201,11 +204,19 @@ export interface GameState {
   release(id: number): void;
   spend(amount: number): boolean;
   buy(key: string): unknown;
-  /** told of a change a frame or so later (deliver), with the others in turn */
-  onChange(fn: (s: GameState) => void): () => void;
+  /**
+   * told of a change a frame or so later (deliver), with the others in turn; `logs`: of the log
+   * count changing too (logs), for the few boards that show it
+   */
+  onChange(fn: (s: GameState) => void, opts?: { logs?: boolean }): () => void;
   /** told of a change the moment it's made: only for what must hear at once, and is cheap */
   onChangeNow(fn: (s: GameState) => void): () => void;
   emit(): void;
+  /**
+   * Only the logs you carry changed (woodworks: into your backpack, into a crate): saved, and told
+   * to just the onChange listeners that show them, not every board on the island.
+   */
+  logs(): void;
   /** once a frame: tell the onChange listeners owed news, for up to budgetMs (at least one) */
   deliver(budgetMs?: number): void;
   toJSON(): unknown;
@@ -304,6 +315,9 @@ export function createGameState(): GameState {
   s.gems = freshGems();
   s.journey = freshJourney();
   s.looks = {};
+  // the gear in your hand, not the best you've bought: Tidewater's stats read the upgrades
+  Object.defineProperty(s, 'gear', { get: () => usedGear(s.upgrades, s.looks) });
+  Object.defineProperty(s, 'stats', { get: () => gearStats(s.gear) });
   const toJSON = s.toJSON.bind(s);
   const fromJSON = s.fromJSON.bind(s);
   const reset = s.reset.bind(s);
@@ -331,10 +345,15 @@ export function createGameState(): GameState {
   const now = new Set<(s: GameState) => void>();
   const later = new Set<(s: GameState) => void>();
   const owed = new Set<(s: GameState) => void>();
-  s.onChange = (fn) => {
+  // (logs coming in off a felled tree, or going out into a crate, were telling all of them, one
+  // repaint round the island a log: just the log count's boards hear of those)
+  const logs = new Set<(s: GameState) => void>();
+  s.onChange = (fn, opts) => {
     later.add(fn);
+    if (opts?.logs) logs.add(fn);
     return () => {
       later.delete(fn);
+      logs.delete(fn);
       owed.delete(fn);
     };
   };
@@ -345,6 +364,10 @@ export function createGameState(): GameState {
   s.emit = () => {
     for (const fn of now) fn(s);
     for (const fn of later) owed.add(fn);
+  };
+  s.logs = () => {
+    s.save();
+    for (const fn of logs) owed.add(fn);
   };
   s.deliver = (budgetMs = 2) => {
     const t0 = performance.now();

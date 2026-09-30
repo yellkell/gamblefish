@@ -12,8 +12,9 @@
  *           a flasher, a sea-caller). A gadget makes the trophy fish bite more often. (The track
  *           is still `charm` in the save, and its stat still `luck`.)
  *
- * Everything reads through Tidewater's gearStats(state.upgrades), so buying a level is
- * state.buy(key) and the stats follow; a save from before these tracks just starts them at 0.
+ * Everything reads through Tidewater's gearStats on the gear you're fishing with (usedGear: your
+ * best, but the rod, reel and bait you've picked), so buying a level is state.buy(key) and the
+ * stats follow; a save from before these tracks just starts them at 0.
  * Plain data, so Node runs this file as it is (tools/fish-check.mjs).
  */
 
@@ -99,9 +100,8 @@ export function gearEffect(levels: Level[], track: string, level: number, have: 
 export const baitShift = (d: { baitGoop?: unknown; upgrades?: { bait?: unknown } }): number => (d.baitGoop !== true && Number(d.upgrades?.bait) >= 1 ? 1 : 0);
 
 /**
- * The level of a track you're showing: the one you picked (`looks`: the rod and reel on the
- * tackle shop's rack board, the bait at the bait shop) if you still have it, else your best. Only the look: what the
- * gear does always goes by your best.
+ * The level of a track you're fishing with: the one you picked (`looks`: the rod and reel on the
+ * tackle shop's rack board, the bait at the bait shop) if you still have it, else your best.
  */
 export const shownLevel = (upgrades: Record<string, number>, looks: Record<string, number> | undefined, track: string): number => {
   const best = upgrades[track] | 0;
@@ -109,8 +109,20 @@ export const shownLevel = (upgrades: Record<string, number>, looks: Record<strin
   return look !== undefined && Number.isInteger(look) && look >= 0 && look <= best ? look : best;
 };
 
-/** The tracks whose look you can pick, and where (village/gearShop.ts). */
+/** The tracks you pick from, and where (village/gearShop.ts). */
 export const LOOK_TRACKS = ['rod', 'reel', 'bait'];
+
+/**
+ * The gear you're fishing with, level by track: your picks for the rod, the reel and the bait
+ * (shownLevel), your best of everything else. What the gear does goes by this: a rod casts as far
+ * as that rod, a reel reels in as fast as that reel, a bait brings the bites as that bait does,
+ * and the trophy fish look at what's really on the line.
+ */
+export const usedGear = (upgrades: Record<string, number>, looks: Record<string, number> | undefined): Record<string, number> => {
+  const u = { ...upgrades };
+  for (const t of LOOK_TRACKS) u[t] = shownLevel(upgrades, looks, t);
+  return u;
+};
 
 /** Which tracks each village shop sells (village/gearShop.ts). */
 export const GEAR_SHOPS: Record<string, string[]> = {

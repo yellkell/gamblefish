@@ -14,9 +14,9 @@
  */
 
 import { DEEP_FROM, DEEP_FULL, FISH, FISH_IDS, UPGRADES, createGameState, fishValue, fishLengthCm, habitatAt, pickSpecies } from '../src/fishing/tidewater.ts';
-import { shownLevel } from '../src/fishing/gear.ts';
+import { shownLevel, usedGear } from '../src/fishing/gear.ts';
 import { TIMED, biting } from '../src/fishing/timedFish.ts';
-import { TROPHY } from '../src/fishing/trophyFish.ts';
+import { TROPHY, missing } from '../src/fishing/trophyFish.ts';
 import { FAVOURITE_BAIT, FAVOURITE_MUL } from '../src/fishing/favouriteBait.ts';
 import { SHARK_DEPTH, SHARK_ID, SharkFight, RUNS } from '../src/fishing/shark.ts';
 import { FishFight, LAND_AT } from '../src/fishing/fight.ts';
@@ -214,7 +214,7 @@ console.log('\nthe fight, dropped straight down off the pier (3 m of line, a ste
   check('reel again and it stops swimming off at once', back.flee < 0.05, `flee ${back.flee.toFixed(2)}`);
 }
 
-console.log('\nthe gear you show (the bait on your hook, the rod and reel in your hand)');
+console.log('\nthe gear you fish with (the bait on your hook, the rod and reel in your hand)');
 {
   const u = { bait: 4, rod: 2 };
   check('with nothing picked, your best shows', shownLevel(u, {}, 'bait') === 4 && shownLevel(u, undefined, 'rod') === 2);
@@ -229,7 +229,11 @@ console.log('\nthe gear you show (the bait on your hook, the rod and reel in you
   const t = createGameState();
   t.fromJSON(d);
   check('the picks are saved and read back', t.looks.bait === 1 && t.looks.rod === 0 && t.looks.reel === 1, JSON.stringify(d.looks));
-  check('and the bites, the cast and the reeling still go by your best', t.stats.biteMul === UPGRADES.bait.levels[3].biteMul && t.stats.castM === UPGRADES.rod.levels[2].castM && t.stats.reelSpeed === UPGRADES.reel.levels[3].reelSpeed, `${t.stats.biteMul}, ${t.stats.castM} m, ${t.stats.reelSpeed} m/s`);
+  check('and the bites, the cast and the reeling go by what you picked', t.stats.biteMul === UPGRADES.bait.levels[1].biteMul && t.stats.castM === UPGRADES.rod.levels[0].castM && t.stats.reelSpeed === UPGRADES.reel.levels[1].reelSpeed, `${t.stats.biteMul}, ${t.stats.castM} m, ${t.stats.reelSpeed} m/s`);
+  check('the gear you fish with is your picks, and your best of the rest', t.gear.bait === 1 && t.gear.rod === 0 && t.gear.reel === 1 && t.gear.line === (t.upgrades.line | 0));
+  check("a trophy won't bite a rig you've set down to less than it needs", missing('marlin', { rod: 4, reel: 4, line: 4, bait: 5, charm: 1 }) === null && missing('marlin', usedGear({ rod: 4, reel: 4, line: 4, bait: 5, charm: 1 }, { bait: 2 })) === 'bait');
+  t.looks = {};
+  check('with nothing picked, it all goes by your best again', t.stats.biteMul === UPGRADES.bait.levels[3].biteMul && t.stats.castM === UPGRADES.rod.levels[2].castM);
   t.fromJSON({ ...d, looks: { bait: 9, rod: 'x' } });
   check("a pick beyond the save's gear is dropped", Object.keys(t.looks).length === 0);
   t.fromJSON({ ...d, looks: undefined });

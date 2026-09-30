@@ -402,6 +402,9 @@ export class BackpackSystem extends createSystem({}) {
   private takeInHand(id: number, hand: Hand): void {
     const p = this.pieces.find((f) => f.id === id);
     if (!p) return;
+    // a fish already in your hand (another's come off the hook meanwhile): into the backpack with
+    // it, never left hanging in the air where your hand last was
+    if (this.held && this.held.piece !== p) this.stowHeld();
     p.shape = shapeFor(p.species, p.cm, p.kg);
     p.tier = p.tier ?? 0;
     const b = bounds(p.shape);
@@ -415,6 +418,33 @@ export class BackpackSystem extends createSystem({}) {
     this.held = { piece: p, model, hand, from: null };
     this.buzz(hand, 0.7, 90);
     shot('fish_flop', MIX.fishFlop, { rate: 0.95 + Math.random() * 0.1 });
+  }
+
+  /**
+   * The fish in your hand goes in the backpack by itself: back in its slot if it came out of one
+   * and that's still free, else wherever it fits. With no room it's left loose in the save, to be
+   * found a spot when there is one (adoptOld). Its model goes: the tray makes its own.
+   */
+  private stowHeld(): void {
+    const h = this.held;
+    if (!h) return;
+    this.held = null;
+    this.drop = null;
+    this.overTray = 0;
+    this.clearGhost();
+    this.scene.remove(h.model.mesh);
+    h.model.mat.dispose();
+    const p = h.piece;
+    if (p.species === SHARK_ID) {
+      // too big for the backpack: back in your hand once it's free
+      this.carrying = p.id;
+      return;
+    }
+    const [C, R] = this.grid;
+    const spot = h.from && fits({ ...p, ...h.from }, this.pieces, C, R) ? h.from : findSpot(p, this.pieces, C, R);
+    if (spot) Object.assign(p, spot, { placed: true });
+    this.state.save();
+    shot('fish_flop', MIX.fishFlop - 4, { rate: 1.1, slice: 1 });
   }
 
   /** Pose the held fish: full size across your palm, shrinking to slot size over the tray. */
@@ -594,6 +624,8 @@ export class BackpackSystem extends createSystem({}) {
     this.tray.group.visible = false;
     this.clearGhost();
     this.overTray = 0;
+    // (the slot the fish in hand was over: gone with the tray, not a place to drop it on reopening)
+    this.drop = null;
     shot('bail_click', MIX.bail + 6, { rate: 0.7 });
   }
 
@@ -753,7 +785,7 @@ export class BackpackSystem extends createSystem({}) {
         uiClick();
         this.buzz(h.hand, 0.5, 45);
         this.burst(p, TIER_HEX[p.tier], 0.6);
-        this.mergeFrom(p, h.hand);
+        if (p.placed) this.mergeFrom(p, h.hand);
       },
     });
     this.state.save();
@@ -837,7 +869,8 @@ export class BackpackSystem extends createSystem({}) {
     const p = this.pieces.find((f) => f.placed && cellsOf(f).some(([x, y]) => x === c && y === r));
     if (!p) return;
     const model = this.models.get(p.id);
-    if (!model) return;
+    // (one still dropping into its slot, or fusing, isn't there to take yet)
+    if (!model || this.anims.some((a) => a.obj === model.mesh)) return;
     this.models.delete(p.id);
     this.tray.group.remove(model.mesh);
     this.scene.add(model.mesh);
@@ -920,7 +953,7 @@ export class BackpackSystem extends createSystem({}) {
       this.anims.push({ kind: 'gain', t: 0, dur: 1.6, obj: tag });
       this.infoKey = '';
       // and on: does the new fish touch a match of ITS tier?
-      window.setTimeout(() => this.mergeFrom(merged, hand), 380);
+      window.setTimeout(() => merged.placed && this.mergeFrom(merged, hand), 380);
     }, 280);
   }
 

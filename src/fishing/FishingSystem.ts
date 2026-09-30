@@ -56,7 +56,6 @@ import type { Surfaces, Vec3 } from '../world/surfaces.ts';
 import type { Kit } from '../village/craft.ts';
 import { BaitRig } from './baitRig.ts';
 import { FishFight } from './fight.ts';
-import { shownLevel } from './gear.ts';
 import { CatchCard, Toast } from './hud.ts';
 import { CLAMP_Y, RodGauge } from './rodGauge.ts';
 import { swim, type FishUniforms, type Props } from './props.ts';
@@ -430,7 +429,7 @@ export class FishingSystem extends createSystem({}) {
         if (reelIn <= 0.15 && this.onWater()) {
           // let go: it sits where it is, and something may find it
           this.setState('floating');
-          this.bite = { phase: 'wait', t: biteDelay(this.habitat(), hourNow(), fishingDeps.state!.upgrades) };
+          this.bite = { phase: 'wait', t: biteDelay(this.habitat(), hourNow(), fishingDeps.state!.gear) };
         }
         break;
       case 'fighting':
@@ -575,7 +574,7 @@ export class FishingSystem extends createSystem({}) {
     this.buzz(this.hand, 0.18, 35);
     this.rippleT = 1.2;
     const h = this.habitat();
-    this.bite = { phase: 'wait', t: biteDelay(h, hourNow(), fishingDeps.state!.upgrades) };
+    this.bite = { phase: 'wait', t: biteDelay(h, hourNow(), fishingDeps.state!.gear) };
     if (!Number.isFinite(this.bite.t)) this.toast.show('Too shallow: nothing lives here', 2, INK.dim);
   }
 
@@ -599,7 +598,8 @@ export class FishingSystem extends createSystem({}) {
     if (b.phase === 'wait') {
       // the rig: what the trophy fish look at (fishing/trophyFish.ts), and the bait on the hook (fishing/favouriteBait.ts)
       const st = fishingDeps.state!;
-      const species = pickSpecies(this.habitat(), hourNow(), Math.random, { depth: this.depth(), gear: st.upgrades, log: st.log, bait: shownLevel(st.upgrades, st.looks, 'bait') });
+      const gear = st.gear;
+      const species = pickSpecies(this.habitat(), hourNow(), Math.random, { depth: this.depth(), gear, log: st.log, bait: gear.bait });
       if (!species) {
         b.t = 8;
         return;
@@ -629,7 +629,7 @@ export class FishingSystem extends createSystem({}) {
       }
     } else {
       this.toast.show('It took the bait and ran', 1.8, INK.dim);
-      this.bite = { phase: 'wait', t: biteDelay(this.habitat(), hourNow(), fishingDeps.state!.upgrades) };
+      this.bite = { phase: 'wait', t: biteDelay(this.habitat(), hourNow(), fishingDeps.state!.gear) };
     }
   }
 
@@ -1131,12 +1131,11 @@ export class FishingSystem extends createSystem({}) {
 
   /* ── rod, bobber, line ───────────────────────────────────────────────── */
 
-  /** The rod, the line and what's on the hook, as you've bought them (the shops' upgrades). */
+  /** The rod, the line and what's on the hook, as you fish with them (the shops' upgrades, your picks). */
   private dressGear(): void {
-    const u = fishingDeps.state!.upgrades;
-    const looks = fishingDeps.state!.looks;
-    this.rod.dress({ rod: shownLevel(u, looks, 'rod'), reel: shownLevel(u, looks, 'reel'), line: u.line | 0 });
-    this.bait.setGear(shownLevel(u, looks, 'bait'), u.hooks | 0);
+    const u = fishingDeps.state!.gear;
+    this.rod.dress({ rod: u.rod | 0, reel: u.reel | 0, line: u.line | 0 });
+    this.bait.setGear(u.bait | 0, u.hooks | 0);
     const line = Math.max(0, Math.min(LINE.length - 1, u.line | 0));
     if (line !== this.lineLevel) {
       this.lineLevel = line;

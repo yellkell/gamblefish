@@ -269,7 +269,7 @@ export class WoodSystem extends createSystem({}) {
       const t = this.nearestTree(this.player.head.getWorldPosition(_v));
       if (t) for (let i = 0; i < BLOWS; i++) this.blow(t.t, t.t.base.clone().setY(t.t.base.y + 1.2), 'right', true);
     };
-    d.state.onChange(() => this.paintBoard());
+    d.state.onChange(() => this.paintBoard(), { logs: true });
   }
 
   private nearestTree(p: Vector3): { t: Tree; d: number } | null {
@@ -642,9 +642,11 @@ export class WoodSystem extends createSystem({}) {
         this.scene.remove(f.mesh);
         logThunk();
         s.woodworks.wood++;
-        s.save();
-        s.emit();
-        if (!this.flying.some((g) => g !== f && g.t < 1)) this.toast.show(`+${LOGS_PER_TREE} logs, into your backpack (${s.woodworks.wood})`, 2.4, INK.good);
+        // (the backpack counts each one in; the boards hear once, when the last has landed)
+        if (!this.flying.some((g) => g !== f && g.t < 1)) {
+          s.logs();
+          this.toast.show(`+${LOGS_PER_TREE} logs, into your backpack (${s.woodworks.wood})`, 2.4, INK.good);
+        }
         return false;
       }
       return true;

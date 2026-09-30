@@ -212,7 +212,7 @@ export class Walks {
       this.paintBoard(w);
     }
     this.sync();
-    deps.state.onChange(() => this.walks.forEach((w) => this.paintBoard(w)));
+    deps.state.onChange(() => this.walks.forEach((w) => this.paintBoard(w)), { logs: true });
   }
 
   /** logs in a walk's crate */
@@ -518,8 +518,7 @@ export class Walks {
     if (!this.open(w.def) || n <= 0) return uiDeny();
     ww.wood -= n;
     ww.built[w.def.id] = this.logsIn(w.def) + n;
-    this.deps.state.save();
-    this.deps.state.emit();
+    this.deps.state.logs();
     // they fly from you to the crate, a few at a time (the rest thunk in unseen)
     w.queued += Math.min(n, 14);
   }

@@ -224,7 +224,8 @@ export class FieldGuide {
     // (once both pages exist: this can run straight away)
     this.right.repaintOnFonts(() => (this.dirty = true));
     this.group.visible = false;
-    state.onChange(() => (this.dirty = true));
+    // (the chart draws the walks as they're built)
+    state.onChange(() => (this.dirty = true), { logs: true });
   }
 
   private page(x: number): InteractivePanel {
