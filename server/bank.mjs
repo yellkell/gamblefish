@@ -15,7 +15,7 @@
  *   POST /claim       {} → {coins, credit, claimed, email}      (signed)
  *   GET  /whoami      {uid, protected, email (masked)}          (signed)
  *   POST /protect     {email} → attach it to this uid           (signed)
- *   POST /handoff     {} → {code} for a new headset to redeem   (signed)
+ *   POST /handoff     {} → {code, purchases, token?} for a new headset to redeem (signed)
  *   POST /redeem      {code} → {token} that signs it in as you  (public, throttled)
  *   GET  /save        {data, at} — this account's game save     (signed)
  *   POST /save        {data, at} → keep it                      (signed)
@@ -23,6 +23,17 @@
  * SIGNED means a Firebase ID token in `Authorization: Bearer …`, verified here
  * with the service account that writes the ledger. The uid in the token is the
  * uid that is credited, and nothing the client sends can name another.
+ *
+ * LOGGING IN WITH THE EMAIL YOU PAID WITH. The email link (login.html) signs the
+ * phone in as whichever uid wears that email, and if none does, Firebase makes a
+ * new, empty one. A player who paid but never tapped SAVE MY PURCHASES has no uid
+ * wearing their email: their purchases sit under an anonymous uid, with the email
+ * Stripe took at checkout written beside them in the ledger. So /handoff, asked by
+ * a phone that has just proved it owns an email (a verified email in its token)
+ * and that holds no purchases of its own, looks the email up in the ledger and
+ * hands off the account that paid with it instead, moving the email onto it so
+ * the next LOG IN goes straight there. No purchases anywhere for that email, on a
+ * brand-new uid, and it says so rather than handing the headset an empty account.
  *
  * THE LEDGER is `bank/{uid}` in Firestore: `credit` (what Stripe has been paid
  * for, ever), `claimed` (what the headset has collected), and one receipt per
@@ -93,12 +104,12 @@ const packName = (pack) => `Support Fish & Chips: ${pack.coins.toLocaleString('e
 /** Dev only: forgets everything on restart. */
 class MemoryLedger {
   persistent = false;
-  accounts = new Map(); // uid → { credit, claimed, receipts: Map, lastEmail }
+  accounts = new Map(); // uid → { credit, claimed, receipts: Map, lastEmail, emails: Set, at }
   saves = new Map(); // uid → { data, at }
   account(uid) {
     let a = this.accounts.get(uid);
     if (!a) {
-      a = { credit: 0, claimed: 0, receipts: new Map(), lastEmail: '' };
+      a = { credit: 0, claimed: 0, receipts: new Map(), lastEmail: '', emails: new Set(), at: 0 };
       this.accounts.set(uid, a);
     }
     return a;
@@ -108,8 +119,20 @@ class MemoryLedger {
     if (a.receipts.has(receipt)) return { credited: false, duplicate: true, credit: a.credit };
     a.receipts.set(receipt, { coins, ...meta, at: Date.now() });
     a.credit += coins;
-    if (meta.email) a.lastEmail = meta.email;
+    a.at = Date.now();
+    if (meta.email) {
+      a.lastEmail = meta.email;
+      a.emails.add(meta.email);
+    }
     return { credited: true, credit: a.credit };
+  }
+  async creditOf(uid) {
+    return this.accounts.get(uid)?.credit ?? 0;
+  }
+  async byEmail(email) {
+    const out = [];
+    for (const [uid, a] of this.accounts) if (a.emails.has(email) || a.lastEmail === email) out.push({ uid, credit: a.credit, at: a.at });
+    return out.sort((x, y) => y.at - x.at);
   }
   async claim(uid) {
     const a = this.account(uid);
@@ -131,8 +154,9 @@ class MemoryLedger {
 /** The real thing: `bank/{uid}` + receipts, and `saves/{uid}`. */
 class FirestoreLedger {
   persistent = true;
-  constructor(db) {
+  constructor(db, FieldValue) {
     this.db = db;
+    this.FieldValue = FieldValue;
   }
   async credit(uid, receipt, coins, meta) {
     const acct = this.db.collection('bank').doc(uid);
@@ -144,9 +168,21 @@ class FirestoreLedger {
       if (r.exists) return { credited: false, duplicate: true, credit: prev.credit ?? 0 };
       const credit = (prev.credit ?? 0) + coins;
       tx.set(rcpt, { coins, ...meta, at: Date.now() });
-      tx.set(acct, { credit, claimed: prev.claimed ?? 0, at: Date.now(), lastEmail: meta.email || prev.lastEmail || '' }, { merge: true });
+      tx.set(acct, { credit, claimed: prev.claimed ?? 0, at: Date.now(), lastEmail: meta.email || prev.lastEmail || '', ...(meta.email ? { emails: this.FieldValue.arrayUnion(meta.email) } : {}) }, { merge: true });
       return { credited: true, credit };
     });
+  }
+  async creditOf(uid) {
+    const a = await this.db.collection('bank').doc(uid).get();
+    return a.exists ? (a.data().credit ?? 0) : 0;
+  }
+  /** Every account that paid with this email, newest purchase first. `emails` is every checkout's; older accounts only have `lastEmail`. */
+  async byEmail(email) {
+    const bank = this.db.collection('bank');
+    const snaps = await Promise.all([bank.where('emails', 'array-contains', email).limit(10).get(), bank.where('lastEmail', '==', email).limit(10).get()]);
+    const found = new Map();
+    for (const snap of snaps) for (const d of snap.docs) found.set(d.id, { uid: d.id, credit: d.data().credit ?? 0, at: d.data().at ?? 0 });
+    return [...found.values()].sort((x, y) => y.at - x.at);
   }
   async claim(uid) {
     const acct = this.db.collection('bank').doc(uid);
@@ -182,10 +218,10 @@ async function openLedger() {
   try {
     const json = JSON.parse(raw.startsWith('{') ? raw : Buffer.from(raw, 'base64').toString('utf8'));
     const { initializeApp, cert, getApps } = await import('firebase-admin/app');
-    const { getFirestore } = await import('firebase-admin/firestore');
+    const { getFirestore, FieldValue } = await import('firebase-admin/firestore');
     const { getAuth } = await import('firebase-admin/auth');
     const app = getApps()[0] ?? initializeApp({ credential: cert(json), projectId: json.project_id });
-    return { ledger: new FirestoreLedger(getFirestore(app)), auth: getAuth(app) };
+    return { ledger: new FirestoreLedger(getFirestore(app), FieldValue), auth: getAuth(app) };
   } catch (err) {
     console.error(`[bank] FIREBASE_SERVICE_ACCOUNT unusable (${err?.message ?? err}) — memory ledger`);
     return { ledger: new MemoryLedger(), auth: null };
@@ -278,22 +314,72 @@ async function emailOf(uid) {
   return '';
 }
 
-/** Attach an email to a uid (the uid never changes, so nothing moves). 'taken' when another uid wears it. */
-async function protect(uid, email) {
+/** The uid wearing an email, or ''. */
+async function ownerOf(email) {
+  if (auth) return (await auth.getUserByEmail(email).catch(() => null))?.uid ?? '';
+  return devEmails.get(email) ?? '';
+}
+
+/** Nothing bought, nothing saved: an account an email link made and nothing ever used. */
+async function isEmpty(uid) {
+  return (await ledger.creditOf(uid)) === 0 && !(await ledger.getSave(uid));
+}
+
+/** Delete a uid's sign-in (its ledger and save, if any, stay where they are). */
+async function dropUser(uid) {
+  if (auth) await auth.deleteUser(uid);
+  for (const [email, owner] of devEmails) if (owner === uid) devEmails.delete(email);
+}
+
+/**
+ * Attach an email to a uid (the uid never changes, so nothing moves). 'taken' when another uid
+ * wears it, unless that uid is empty (a LOG IN that found nothing): then the email comes here.
+ */
+async function protect(uid, email, verified = false) {
+  const other = await ownerOf(email);
+  if (other && other !== uid) {
+    if (!(await isEmpty(other))) return { ok: false, taken: true };
+    await dropUser(other);
+    console.log(`[bank] ${maskEmail(email)} taken back from empty ${other}`);
+  }
+  if (other === uid && !verified) return { ok: true };
   if (auth) {
     try {
-      await auth.updateUser(uid, { email, emailVerified: false });
-      return { ok: true };
+      await auth.updateUser(uid, { email, emailVerified: verified });
     } catch (err) {
-      if (err?.code !== 'auth/email-already-exists') throw err;
-      const other = await auth.getUserByEmail(email).catch(() => null);
-      return other && other.uid === uid ? { ok: true } : { ok: false, taken: true };
+      if (err?.code === 'auth/email-already-exists') return { ok: false, taken: true };
+      throw err;
+    }
+  } else devEmails.set(email, uid);
+  return { ok: true };
+}
+
+/**
+ * Which account a LOG IN hands off (see LOGGING IN WITH THE EMAIL YOU PAID WITH above). `uid` is
+ * the phone's, `email` the verified email it signed in with ('' for anything else).
+ */
+async function loginTarget(uid, email) {
+  const credit = await ledger.creditOf(uid);
+  if (!email || credit > 0) return { uid, credit };
+  const payers = (await ledger.byEmail(email)).filter((p) => p.uid !== uid && p.credit > 0);
+  if (!payers.length) {
+    if (await ledger.getSave(uid)) return { uid, credit };
+    // a brand-new uid the link just made: gone again, so the email stays free for SAVE MY PURCHASES
+    await dropUser(uid).catch((err) => console.error(`[bank] could not drop ${uid}: ${err?.message ?? err}`));
+    return { uid: '', credit: 0 };
+  }
+  const to = payers[0];
+  // this uid bought nothing: the email moves to the account that paid with it (unless that one already has an email of its own)
+  if (!(await emailOf(to.uid))) {
+    try {
+      await dropUser(uid);
+      await protect(to.uid, email, true);
+    } catch (err) {
+      console.error(`[bank] could not move ${maskEmail(email)} from ${uid} to ${to.uid}: ${err?.message ?? err}`);
     }
   }
-  const owner = devEmails.get(email);
-  if (owner && owner !== uid) return { ok: false, taken: true };
-  devEmails.set(email, uid);
-  return { ok: true };
+  console.log(`[bank] LOG IN with ${maskEmail(email)} → ${to.uid} (paid with it; ${uid} had nothing)`);
+  return { uid: to.uid, credit: to.credit, moved: true };
 }
 
 function newHandoff(uid) {
@@ -328,7 +414,16 @@ function selfBase(req) {
 
 /* ── identity ────────────────────────────────────────────────────────── */
 
-/** The uid behind a request, or null. Dev mode trusts an unverified token or an `x-dev-uid`. */
+/** A token's email, only when Firebase has seen it proved (an email link was opened). */
+function verifiedEmail(claims) {
+  const email = String(claims.email ?? '').trim().toLowerCase();
+  return claims.email_verified === true && EMAIL_OK.test(email) ? email : '';
+}
+
+/**
+ * Who is behind a request: {uid, email} (email '' unless verified), or null. Dev mode trusts an
+ * unverified token, or an `x-dev-uid` with an `x-dev-email` standing in for an opened email link.
+ */
 async function whoIs(req) {
   const bearer = String(req.headers.authorization ?? '');
   const token = bearer.startsWith('Bearer ') ? bearer.slice(7).trim() : '';
@@ -336,7 +431,7 @@ async function whoIs(req) {
     if (auth) {
       try {
         const decoded = await auth.verifyIdToken(token);
-        return UID_OK.test(decoded.uid) ? decoded.uid : null;
+        return UID_OK.test(decoded.uid) ? { uid: decoded.uid, email: verifiedEmail(decoded) } : null;
       } catch {
         return null;
       }
@@ -345,7 +440,7 @@ async function whoIs(req) {
       try {
         const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString('utf8'));
         const uid = String(payload.sub ?? payload.user_id ?? '');
-        return UID_OK.test(uid) ? uid : null;
+        return UID_OK.test(uid) ? { uid, email: verifiedEmail(payload) } : null;
       } catch {
         return null;
       }
@@ -354,7 +449,7 @@ async function whoIs(req) {
   }
   if (DEV) {
     const dev = String(req.headers['x-dev-uid'] ?? '');
-    if (UID_OK.test(dev)) return dev;
+    if (UID_OK.test(dev)) return { uid: dev, email: verifiedEmail({ email: req.headers['x-dev-email'], email_verified: true }) };
   }
   return null;
 }
@@ -507,10 +602,10 @@ em{color:#3fd6c6;font-style:normal}</style><main>${body}</main>`;
 /** Run a signed handler: 401 without a valid identity, 502 when the ledger throws. */
 function signed(req, res, fn) {
   void (async () => {
-    const uid = await whoIs(req);
-    if (!uid) return json(res, 401, { error: 'sign in first' });
+    const who = await whoIs(req);
+    if (!who) return json(res, 401, { error: 'sign in first' });
     try {
-      await fn(uid);
+      await fn(who.uid, who.email);
     } catch (err) {
       console.error(`[bank] ${req.method} ${req.url} failed: ${err?.message ?? err}`);
       if (!res.headersSent) json(res, 502, { error: 'the bank is not answering' });
@@ -520,7 +615,7 @@ function signed(req, res, fn) {
 
 export function handleHttp(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Headers', 'content-type, authorization, x-dev-uid');
+  res.setHeader('Access-Control-Allow-Headers', 'content-type, authorization, x-dev-uid, x-dev-email');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   if (req.method === 'OPTIONS') {
     res.writeHead(204);
@@ -571,10 +666,15 @@ export function handleHttp(req, res) {
     });
 
   if (req.method === 'POST' && path === '/handoff')
-    return signed(req, res, async (uid) => {
-      const code = newHandoff(uid);
+    return signed(req, res, async (uid, email) => {
+      const to = await loginTarget(uid, email);
+      if (!to.uid) return json(res, 404, { error: 'nothing is saved to that email, and no coins were bought with it. Try the email on your Stripe receipt', empty: true });
+      const code = newHandoff(to.uid);
       if (!code) return json(res, 429, { error: 'too many codes on the go: wait ten minutes' });
-      json(res, 200, { code, ttl: HANDOFF_TTL_MS });
+      const reply = { code, ttl: HANDOFF_TTL_MS, purchases: to.credit };
+      // the phone signed in as a uid that isn't the account: this signs its browser in as the account too
+      if (to.moved) reply.token = auth ? await auth.createCustomToken(to.uid) : `dev:${to.uid}`;
+      json(res, 200, reply);
     });
 
   if (req.method === 'POST' && path === '/redeem') {

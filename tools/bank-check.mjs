@@ -3,8 +3,9 @@
  * THE ISLAND BANK — headless. Starts server/bank.mjs in its dev mode (memory ledger, no
  * Stripe, an `x-dev-uid` header for a player) on a spare port and walks it over HTTP: packs,
  * checkouts, paying, claiming (once), the short links, the save (newer wins), handing an
- * account to a new headset, and the throttle that stops anyone guessing a LOG IN code. Then
- * the guards themselves (server/guards.mjs) on a stopped clock.
+ * account to a new headset (by the email it was saved to, or the one it was paid with), and
+ * the throttle that stops anyone guessing a LOG IN code. Then the guards themselves
+ * (server/guards.mjs) on a stopped clock.
  *
  *   node tools/bank-check.mjs
  */
@@ -168,6 +169,41 @@ console.log('\nlogging in on a new headset');
   const late = await hand();
   const fresh = await req('/redeem', { method: 'POST', headers: { 'content-type': 'application/json', 'x-forwarded-for': '10.2.0.1' }, body: { code: late } });
   check('while it is stopped, even a right code waits a minute', fresh.status === 429);
+}
+
+console.log('\nlogging in with the email you paid with');
+{
+  // (the redeem throttle above is still shut: these read the handoff itself, which is what decides the account)
+  const hand = (uid, email) => req('/handoff', { method: 'POST', headers: as(uid, email ? { 'x-dev-email': email } : {}), body: {} });
+  // bought coins on a headset, never tapped SAVE MY PURCHASES, then lost the headset's save
+  const co = await req('/checkout', { method: 'POST', headers: as('lost-headset'), body: { pack: 'chest' } });
+  await req('/dev-pay', { method: 'POST', headers: { 'content-type': 'application/json', accept: 'application/json' }, body: { s: co.json.id, email: 'payer@example.com' } });
+  // the email link signs the phone in as a new uid wearing that email
+  await req('/protect', { method: 'POST', headers: as('link-made'), body: { email: 'payer@example.com' } });
+  const r = await hand('link-made', 'payer@example.com');
+  check('a LOG IN with the email you paid with hands off the account that paid', r.status === 200 && /^\d{6}$/.test(r.json?.code ?? '') && r.json?.purchases === 3000, `${r.status} ${JSON.stringify(r.json)}`);
+  check('and signs the phone in as that account too', r.json?.token === 'dev:lost-headset');
+  const paid = await req('/whoami', { headers: as('lost-headset') });
+  check('the email moves onto the account that paid', paid.json?.protected === true && paid.json?.email === 'p***@example.com', JSON.stringify(paid.json));
+  const made = await req('/whoami', { headers: as('link-made') });
+  check('and off the empty one the link made', made.json?.protected === false);
+  const next = await hand('lost-headset', 'payer@example.com');
+  check('the next LOG IN goes straight there', next.status === 200 && next.json?.token === undefined && next.json?.purchases === 3000);
+
+  const none = await hand('stranger', 'nobody@example.com');
+  check('an email with nothing saved or bought says so, instead of handing off an empty account', none.status === 404 && none.json?.empty === true, none.json?.error);
+  await req('/save', { method: 'POST', headers: as('player'), body: { data: JSON.stringify({ money: 5 }), at: 1000 } });
+  const saved = await hand('player', 'player@example.com');
+  check('an account with a save but no purchases still logs in as itself', saved.status === 200 && saved.json?.purchases === 0 && saved.json?.token === undefined);
+  const plain = await hand('player');
+  check('a handoff with no email is the plain one', plain.status === 200 && plain.json?.token === undefined);
+
+  await req('/protect', { method: 'POST', headers: as('ghost'), body: { email: 'mine@example.com' } });
+  const back = await req('/protect', { method: 'POST', headers: as('keeper'), body: { email: 'mine@example.com' } });
+  check('SAVE MY PURCHASES takes an email back from an empty account', back.status === 200 && back.json?.protected === true);
+  await req('/save', { method: 'POST', headers: as('keeper'), body: { data: JSON.stringify({ money: 1 }), at: 1000 } });
+  const held = await req('/protect', { method: 'POST', headers: as('player'), body: { email: 'mine@example.com' } });
+  check("but not from one that's been played", held.status === 409 && held.json?.taken === true, `${held.status}`);
 }
 
 stop();
