@@ -217,7 +217,7 @@ export class IslandBank {
       this.paint();
     };
     this.keyboard.onCancel = () => this.paint();
-    this.keyboard.open('email', why === 'protect' ? 'Your email: your purchases are saved to it' : 'The email your account is saved to', why === 'protect' ? bank.lastEmail : '');
+    this.keyboard.open('email', why === 'protect' ? 'Your email: your purchases are saved to it' : 'The email you paid with, or saved your coins to', why === 'protect' ? bank.lastEmail : '');
   }
 
   /* ── frame ──────────────────────────────────────────────────────── */
@@ -378,7 +378,7 @@ export class IslandBank {
         text('LOG IN', 44, 190, 52, '#3fd6c6', 'left', 700);
         if (r.stage === 'idle' || r.stage === 'failed' || r.stage === 'sending') {
           text('Played before on another headset? Get your account back:', 44, 270, 36, INK.hot);
-          const steps = ['1.  Type the email your purchases are saved to.', '2.  Open the link we email you, on your phone.', '3.  Your phone shows a six-digit code: type it here.'];
+          const steps = ['1.  Type the email you paid with (or saved your coins to).', '2.  Open the link we email you, on your phone.', '3.  Your phone shows a six-digit code: type it here.'];
           steps.forEach((s, i) => text(s, 70, 340 + i * 56, 34, INK.dim));
           btn('login-email', r.stage === 'sending' ? 'SENDING…' : 'TYPE MY EMAIL', 44, 540, 600, 100, '#3fd6c6', r.stage !== 'sending', 40);
           btn('back', 'BACK', 680, 540, 360, 100, 'rgba(255,255,255,0.25)', true, 38);
