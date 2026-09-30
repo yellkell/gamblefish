@@ -5,7 +5,7 @@
  *    line goes in, swinging from side to side as it swims;
  *  - BREACH: as each run begins it launches itself clear of the sea, nose first, twists and
  *    crashes back on its side: a white wall of spray going up and coming down, the boom of it;
- *  - THE GRIP: a ring of light round the rod's foregrip, just above your hand, pulsing amber
+ *  - THE GRIP: a ring of light round the rod's rear grip, just below your hand, pulsing amber
  *    while the run wants your other hand there, and filling bead by bead in green while you
  *    hold it;
  *  - ALONGSIDE: beaten, it rolls up at the surface under the pier, all 4 m of it, fins
@@ -33,8 +33,9 @@ import { swim, type FishUniforms, type Props } from './props.ts';
 import { SHARK_ID } from './shark.ts';
 
 const BEADS = 16;
-/** where the other hand takes hold: the foregrip, just above the reel seat (rod frame) */
-export const GRIP_Y = 0.52;
+/** where the other hand takes hold: the rear grip, a hand's width below the reel seat (rod frame),
+ *  down toward the butt as you'd brace a big fish, and clear of the controller in your rod hand */
+export const GRIP_Y = 0.14;
 
 const _v = new Vector3();
 const _w = new Vector3();

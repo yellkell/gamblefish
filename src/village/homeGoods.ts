@@ -35,7 +35,7 @@ import { bed, bookshelf, rug, seaChest, tableChairs } from './wares/builder.ts';
 import { chaise, chevalMirror, drapes, piano, screen } from './wares/boutique.ts';
 import { fern, hibiscus, kentia, monstera, orchid } from './wares/florist.ts';
 import { chandelier, pearlBust, ringCloche, tiara, vanity } from './wares/jeweller.ts';
-import { divingHelmet, globe, painting, shipInBottle } from './wares/pawn.ts';
+import { campMap, divingHelmet, globe, painting, shipInBottle } from './wares/pawn.ts';
 import { mahiMount, sailfishMount, snapperMount, tarponMount } from './wares/taxidermist.ts';
 
 export { HOME, HOME_SHOPS, VILLA, VILLA_SHOPS } from './interiors.ts';
@@ -108,6 +108,8 @@ export const GOODS: HomeItem[] = [
   { id: 'globe', shop: 'J', name: 'Mariner’s globe', blurb: 'the island isn’t on it', price: 180, at: [0.85, 0, 0.95, 0.4], solid: [0.26, 0.26, 1.1], build: globe },
   { id: 'painting', shop: 'J', name: 'Painting of the bay', blurb: 'sunset from the pier, signed illegibly', price: 210, at: [1.81, 1.55, -1.25, -Math.PI / 2], build: painting },
   { id: 'helmet', shop: 'J', name: 'Brass diving helmet', blurb: 'on the salvage crate it came up in', price: 350, at: [1.5, 0, -1.62, -0.5], solid: [0.24, 0.24, 0.85], build: divingHelmet },
+  // on the back wall over the helmet, right of the bookshelf: and it gives the field guide a page of the camps
+  { id: 'campmap', shop: 'J', name: 'Map of the dancers’ camps', blurb: 'every fire marked · adds a page to your book', price: 300, at: [1.2, 1.6, -1.9, 0], build: campMap },
 
   // ── the jeweller: sparkle for Coral's villa ──
   // (Villa Mar's spots: the sofa and the mirror on the back wall, the chaise beside them, the

@@ -155,7 +155,10 @@ and the vendors.
   - The Taxidermist: tarpon, mahi-mahi, red snapper and a leaping sailfish, each on a
     carved plaque with an engraved brass plate.
   - The Pawn Shop: a ship in a bottle on a rum barrel, a mariner's globe, a painting of
-    the bay, and a brass diving helmet on its salvage crate.
+    the bay, a brass diving helmet on its salvage crate, and an old map of the dancers' camps in a
+    driftwood frame ($300). The map also adds a spread to the field guide after the chart of the
+    bay: the whole island with every camp's fire marked (lit once you've found it), and a list of
+    the camps. Point at one you've found to go there; the rest you walk to.
 - **How the goods are made:** each shop's things are modelled in `src/village/wares/`
   with a small kit (`src/village/craft.ts`): leaves, petals and leaflets as curved,
   folded blades grown from real stems; tapered tubes; turned and rounded pieces; wood
@@ -311,7 +314,7 @@ and the vendors.
   seats the eye domes on the head so none stand off it.
 - **The great white** (`src/fishing/shark.ts`, `src/fishing/sharkShow.ts`): the last catch.
   Once every other page of the field guide is filled, it takes baits in 6 m of water or more.
-  - Every few seconds it breaches and runs. A ring lights on the rod's foregrip: grab it with
+  - Every few seconds it breaches and runs. A ring lights on the rod's rear grip, below your rod hand: grab it with
     your other hand and hold on until the run breaks. One-handed it strips line, and reeling
     against a run snaps it.
   - Three held runs beat it. It rolls up alongside you under a GREAT WHITE! banner, and you let
@@ -377,7 +380,7 @@ and the vendors.
   in 12/8 (bell, shaker, two bass drums and a djembe with a fill every fourth bar), each camp at
   its own tempo. `npm run check:camps` proves every
   one is hidden from the boardwalk, the pier and the beach, is level and standable, and can be
-  reached on foot.
+  reached on foot. None is on the chart of the bay; the pawn shop's map of the camps shows the lot.
   - **Pleased to see you:** walk into a camp and its dancers throw their hands in the air, and gift
     you everything in their chest (no pop-up: the chest's readout keeps the count, "2 of 12 camps
     found"). A hidden camp's gift is given once.
@@ -403,9 +406,9 @@ and the vendors.
     it's yours) and nothing else: where the rocks are is yours to find out. **We Buy Gems**
     shows every kind in your pouch with a SELL for each, and SELL ALL; one of each kind you've
     ever found lies on a velvet pad under it.
-  - **The rocks** (`src/mining/sites.ts`, `src/mining/rock.ts`): thirty-two big boulders out in the
-    wilds, eight on each kind of ground (a good few in the forest behind the village and out on the
-    east side), none on the chart, veined with glowing lines in the colour of
+  - **The rocks** (`src/mining/sites.ts`, `src/mining/rock.ts`): forty big boulders out in the
+    wilds, at least eight on each kind of ground (a good few in the forest behind the village and out on the
+    east side, and a handful on the walks between the dancers' camps), none on the chart, veined with glowing lines in the colour of
     what's inside, breathing softly day and night. The bake clears the plants and Tidewater's own rocks round each. Own the
     pick and walk up to one and it's in your hand, the rod over your shoulder, as the axe is among
     the trees. Swing its point into the rock: steel rings on stone, chips and sparks fly, a jolt in
@@ -452,10 +455,10 @@ and the vendors.
 
   Finish the last and (once you're off the tower and have no fish on) a big golden statue of the
   sailfish off the logo rises out of the sand where you come down onto the beach, west of the pier
-  foot, to a fanfare, a QUITE THE JOURNEY! banner and a word wherever you are. The fish is the game's
+  foot, to a fanfare, a 100%! banner and a word wherever you are. The fish is the game's
   own sailfish, 5.5 m bill to tail, bent into a leap, its markings kept as shading in the gold, its sail's
   rays standing out, leaping from a golden splash; little stars glint over it, and after dark it keeps a
-  warm glow of its own. On the plinth's face an engraved bronze plaque: *Quite the journey! Thanks for
+  warm glow of its own. On the plinth's face an engraved bronze plaque: *100% Complete! Thanks for
   Playing! Created by yellkell. Music by IBWildcat1998, poopoodoodoo689, JakeThePro & Crystalzach.*
   Once up it's saved (`journey.unveiled`), stands there every visit, and is a gold star on the field
   guide's chart (point at it to stand before the plaque). About five draws, built only once it's

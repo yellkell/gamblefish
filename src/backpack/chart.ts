@@ -25,6 +25,10 @@ export interface ChartSource {
 
 /** the part of the island charted (world metres) */
 export const CHART = { x0: -200, x1: 220, z0: -215, z1: 165 };
+export type Bounds = typeof CHART;
+
+/** the whole island, out to the furthest of the dancers' camps (the camp map's page: camps/sites.ts) */
+export const ISLAND: Bounds = { x0: -500, x1: 570, z0: -610, z1: 230 };
 
 /**
  * A place you can go from the chart: a building (by its name in the layout), or a spot `at`
@@ -67,16 +71,20 @@ export function placeAt(p: Place, buildings: BuildingFrame[]): [number, number] 
 
 const INK = '#2e2214';
 
-/** The chart's picture (no key, no "you are here": the page adds those), and where its markers went. */
-export function drawChart(src: ChartSource, w: number, h: number): { canvas: HTMLCanvasElement; markers: { n: number; x: number; y: number }[]; toPx: (x: number, z: number) => [number, number] } {
+/**
+ * The chart's picture (no key, no "you are here": the page adds those), and where its markers went.
+ * `bounds` is the part of the island it covers (the bay, or the whole island for the camp map, which
+ * leaves the village's numbered markers off: they'd be a smudge at that scale).
+ */
+export function drawChart(src: ChartSource, w: number, h: number, bounds: Bounds = CHART, numbered = true): { canvas: HTMLCanvasElement; markers: { n: number; x: number; y: number }[]; toPx: (x: number, z: number) => [number, number] } {
   const c = document.createElement('canvas');
   c.width = w;
   c.height = h;
   const g = c.getContext('2d')!;
-  const sx = w / (CHART.x1 - CHART.x0);
-  const sz = h / (CHART.z1 - CHART.z0);
-  const toPx = (x: number, z: number): [number, number] => [(x - CHART.x0) * sx, (z - CHART.z0) * sz];
-  const at = (px: number, py: number): number => src.heightAt(CHART.x0 + px / sx, CHART.z0 + py / sz);
+  const sx = w / (bounds.x1 - bounds.x0);
+  const sz = h / (bounds.z1 - bounds.z0);
+  const toPx = (x: number, z: number): [number, number] => [(x - bounds.x0) * sx, (z - bounds.z0) * sz];
+  const at = (px: number, py: number): number => src.heightAt(bounds.x0 + px / sx, bounds.z0 + py / sz);
 
   // heights on the pixel grid (one extra row and column for the slopes and the contours)
   const H = new Float32Array((w + 1) * (h + 1));
@@ -172,6 +180,7 @@ export function drawChart(src: ChartSource, w: number, h: number): { canvas: HTM
   // numbered markers, nudged apart where places crowd together (with a leader back to the building)
   const markers: { n: number; x: number; y: number; bx: number; by: number }[] = [];
   KEY.forEach((place, i) => {
+    if (!numbered) return;
     const at = placeAt(place, src.buildings);
     if (!at) return;
     const [bx, by] = toPx(at[0], at[1]);

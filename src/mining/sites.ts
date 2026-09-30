@@ -3,10 +3,11 @@
  * round each, the runtime builds them there, tools/mining-check.mjs proves each is dry, standable
  * and reachable on foot).
  *
- * Thirty-two big rocks out in the wilds, eight on each kind of ground, well away from the village:
- * a couple of each close enough for an afternoon, the rest a proper walk (and a good few in the
- * big forest behind the village, off to the left as you look up from the pier, and out on the far
- * right, the island's east side). None is on the
+ * Forty big rocks out in the wilds, at least eight on each kind of ground, well away from the
+ * village: a couple of each close enough for an afternoon, the rest a proper walk (and a good few
+ * in the big forest behind the village, off to the left as you look up from the pier, and out on
+ * the far right, the island's east side), and a handful more on the way from one dancers' camp to
+ * the next, so there's something to break on the walk between them. None is on the
  * chart: you find them by going to look (the glowing veins give them away, even at night). Each
  * breaks once, for good (mining/MiningSystem.ts).
  *
@@ -65,6 +66,15 @@ export const ROCK_SITES: RockSite[] = [
   { id: 'peak-crown', x: 25, z: -375, ground: 'peak', yaw: 2.0, size: 1.15 },
   { id: 'peak-east-shoulder', x: 268, z: -494, ground: 'peak', yaw: 3.7, size: 1.1 },
   { id: 'peak-east-spur', x: 256, z: -350, ground: 'peak', yaw: 0.3, size: 1.05 },
+  // on the way between the dancers' camps (camps/sites.ts), roughly halfway along each walk
+  { id: 'between-lantern-fernlight', x: -294, z: -145, ground: 'forest', yaw: 2.4, size: 1 },
+  { id: 'between-ember-tidecrest', x: 393, z: -231, ground: 'forest', yaw: 0.6, size: 1.05 },
+  { id: 'between-driftwood-firefly', x: 308, z: 88, ground: 'forest', yaw: 4.1, size: 1 },
+  { id: 'between-canopy-skyfire', x: -402, z: -357, ground: 'high', yaw: 5.2, size: 1.05 },
+  { id: 'between-starfall-sunrise', x: 417, z: -477, ground: 'high', yaw: 1.5, size: 1.1 },
+  { id: 'between-fernlight-skyfire', x: -313, z: -377, ground: 'peak', yaw: 3.2, size: 1.05 },
+  { id: 'between-skyfire-starfall', x: 52, z: -480, ground: 'peak', yaw: 0.9, size: 1.1 },
+  { id: 'between-lantern-moonlit', x: -186, z: -11, ground: 'shore', yaw: 2.8, size: 1 },
 ];
 
 /** a rock's footprint radius at size 1 (m), and its height */

@@ -23,8 +23,8 @@
  *  REEL IN          With nothing biting, reel (trigger or crank) to skim the bobber back. Let go
  *                   and it sits where it is and fish can find it again.
  *  THE GREAT WHITE  The last catch (fishing/shark.ts): once the field guide is full it takes a
- *                   bait in deep water. It breaches as each run begins; grab the rod's foregrip
- *                   with your OTHER hand too and hold on (fishing/sharkShow.ts shows where) until
+ *                   bait in deep water. It breaches as each run begins; grab the rod's rear grip,
+ *                   below your rod hand, with your OTHER hand too and hold on (fishing/sharkShow.ts shows where) until
  *                   the run breaks. Three held runs beat it; it rolls up alongside, and you let
  *                   it go for the bounty.
  *
@@ -62,7 +62,7 @@ import { CLAMP_Y, RodGauge } from './rodGauge.ts';
 import { swim, type FishUniforms, type Props } from './props.ts';
 import { LINE_PER_CRANK, Rod } from './rod.ts';
 import { LINE } from './rodLook.ts';
-import { SHARK_ID, SharkFight, sharkUnlocked, RUNS } from './shark.ts';
+import { SHARK_ID, SharkFight, sharkUnlocked } from './shark.ts';
 import { GRIP_Y, SharkShow } from './sharkShow.ts';
 import {
   biteDelay,
@@ -243,8 +243,10 @@ export class FishingSystem extends createSystem({}) {
 
   private shark!: SharkShow;
   private party!: Celebration;
-  /** the other hand on the foregrip, against a shark's run */
+  /** the other hand on the rear grip, against a shark's run */
   private holding = false;
+  /** the first run's word's been said (this visit): after it, no more pop-ups in the fight */
+  private sharkTold = false;
   private sharkLanding = false;
   private holdBuzzT = 0;
 
@@ -769,7 +771,7 @@ export class FishingSystem extends createSystem({}) {
   /* ── the great white ─────────────────────────────────────────────────── */
 
   /**
-   * Your other hand on the rod's foregrip (just above your rod hand), gripping: that's what holds
+   * Your other hand on the rod's rear grip (just below your rod hand), gripping: that's what holds
    * a shark's run. It only counts while the run wants it, and it takes the hand off the crank.
    */
   private updateHold(): void {
@@ -784,7 +786,7 @@ export class FishingSystem extends createSystem({}) {
     const grip = _v.set(0, GRIP_Y, 0).applyMatrix4(this.rod.mesh.matrix);
     const d = grip.distanceTo(hand);
     const was = this.holding;
-    this.holding = this.squeeze(off) > 0.5 && d < (was ? 0.2 : 0.14) && d < this.rod.crankCentre(_w).distanceTo(hand) + 0.05;
+    this.holding = this.squeeze(off) > 0.5 && d < (was ? 0.2 : 0.16) && d < this.rod.crankCentre(_w).distanceTo(hand) + 0.05;
     if (this.holding) {
       this.cranking = false;
       this.handCrankRate = 0;
@@ -796,21 +798,18 @@ export class FishingSystem extends createSystem({}) {
   private sharkBeats(f: SharkFight, dt: number): void {
     const off = this.other(this.hand);
     for (const e of f.events.splice(0)) {
+      // one word, on the first run only: after that the ring, the gauge and the buzz say it
       if (e === 'warn') {
-        this.toast.show('HE’S RUNNING! Grab the rod with your other hand and HOLD ON', 2.4, INK.danger);
+        if (f.broken === 0 && !this.sharkTold) this.toast.show('HE’S RUNNING! Hold the rod BELOW your hand with your other hand', 2.8, INK.danger);
+        this.sharkTold = true;
         this.buzz(off, 0.7, 120);
       } else if (e === 'breach') {
         this.shark.breach();
         this.buzz(this.hand, 1, 300);
         this.buzz(off, 1, 300);
       } else if (e === 'broken') {
-        const left = RUNS - f.broken;
-        this.toast.show(`Run broken! ${left} more ${left === 1 ? 'run' : 'runs'} and he’s yours. Reel!`, 2.6, INK.good);
         catchSting(false);
-      } else if (e === 'lost') {
-        this.toast.show('It’s stripping line. Both hands on the rod when it runs!', 2.6, INK.amber);
       } else if (e === 'beaten') {
-        this.toast.show('He’s beaten! Reel him in!', 2.6, INK.good);
         catchSting(true);
       }
     }

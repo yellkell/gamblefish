@@ -28,7 +28,7 @@ import { fileURLToPath } from 'node:url';
 import { decodeTerrain } from '../src/world/data.ts';
 import { Heightfield } from '../src/world/heightfield.ts';
 import { Surfaces } from '../src/world/surfaces.ts';
-import { ALL_CAMPS, BEACH_CAMP, CAMPS, CAMP_PLOT, CHEST_R, chestSpot } from '../src/camps/sites.ts';
+import { ALL_CAMPS, BEACH_CAMP, CAMPS, CAMP_PLOT, CHEST_R, campStand, chestSpot } from '../src/camps/sites.ts';
 import { BEACH_FISH, CHEST_GRID, CHEST_MAX_LEN, TIER_VALUE, stockFor } from '../src/camps/stock.ts';
 import { bounds, cellsOf, GRID_SIZES } from '../src/backpack/logic.ts';
 import { fishValue } from '../src/fishing/tidewater.ts';
@@ -124,6 +124,9 @@ for (const c of ALL_CAMPS) {
   // in front of the chest, outside the ring of dancers, where you'd stand to open it
   const stand = [c.x + Math.cos(c.chestAt) * (CHEST_R + 1.2), c.z + Math.sin(c.chestAt) * (CHEST_R + 1.2)];
   check(`${c.name}: you can stand at the chest`, S.standable(S.areaNear(stand[0], stand[1], hf.heightAt(stand[0], stand[1])), stand[0], stand[1]));
+  // where the camp map takes you (the field guide's camp page): on the plot, across the fire from the chest
+  const [mx, mz] = campStand(c);
+  check(`${c.name}: the camp map sets you down on the plot`, Math.hypot(mx - c.x, mz - c.z) < CAMP_PLOT - 0.5 && S.standable(S.areaNear(mx, mz, 2.3), mx, mz));
 }
 
 /* ── 3. reachable ──────────────────────────────────────────────────────── */
