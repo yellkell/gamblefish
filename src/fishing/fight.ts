@@ -9,6 +9,9 @@
  *                   for a jack or a tarpon. Reeling doesn't stop it; the line stays tight.
  *  - NOT YET        It only comes to the rod once it's tired (LAND_AT). Reel a fresh fish right
  *                   in and it bolts again, shorter the more worn out it is.
+ *  - EASE OFF       Let go of the reel and it swims for it: it takes line against the drag,
+ *                   faster the stronger and fresher it is, and keeps going while you wait. Give
+ *                   it too long and it takes all your line.
  */
 
 import { CatchMinigame as CatchMinigameJs } from '../../vendor/tidewater/src/game/CatchMinigame.js';
@@ -37,6 +40,8 @@ export class FishFight extends Base {
   run: number;
   /** how many times it's bolted from the rod */
   bolts = 0;
+  /** 0 .. 1: how hard it's swimming off while you're not reeling */
+  flee = 0;
   private readonly rand: () => number;
 
   constructor(o: Opts) {
@@ -52,6 +57,16 @@ export class FishFight extends Base {
     return 2 + 5 * this.vigor;
   }
 
+  /** it got away by taking all the line off the reel (not by throwing the hook) */
+  get spooled(): boolean {
+    return this.state === 'escaped' && this.distance > (this as unknown as { maxDistance: number }).maxDistance;
+  }
+
+  /** the speed it swims off at when you ease off the reel (m/s): a fresh jack far faster than a tired silverside */
+  get fleeSpeed(): number {
+    return (0.6 + 2.4 * this.vigor) * (0.35 + 0.65 * this.stamina);
+  }
+
   update(dt: number, reeling: boolean): FightState {
     const st = super.update(dt, reeling);
     if (st === 'caught' && this.stamina > LAND_AT) {
@@ -61,7 +76,15 @@ export class FishFight extends Base {
       this.run = (1.5 + 8 * this.vigor) * this.stamina * (0.8 + 0.4 * this.rand());
       this.bolts++;
     }
-    if (this.state !== 'fighting' || this.run <= 0) return this.state;
+    if (this.state !== 'fighting') return this.state;
+    // ease off and it swims for it (a moment to turn, then away); reel and it's checked at once
+    this.flee += ((reeling || this.run > 0 ? 0 : 1) - this.flee) * (1 - Math.exp(-dt * (reeling ? 8 : 2.5)));
+    if (this.flee > 0.01) {
+      this.distance += this.fleeSpeed * this.flee * dt;
+      // it's pulling against the drag: the line stays tight enough that the hook holds
+      this.tension = Math.max(this.tension, (0.2 + 0.12 * this.vigor) * this.flee);
+    }
+    if (this.run <= 0) return this.state;
     // on the run: it takes line against the drag, which holds the line tight in the green (it
     // tires there), whether you're reeling or not
     const take = Math.min(this.run, this.runSpeed * dt);
