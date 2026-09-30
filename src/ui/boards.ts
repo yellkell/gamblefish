@@ -7,7 +7,7 @@
  *             baize, bark cloth... with its border work (a painted rope, gold leaf, stitching)
  *   lettering its faces and inks: sign-writer's hand lettering, gold leaf, chalk, burnt pine
  *   buttons   what you point at: a painted tag, a manila price ticket on its string, a brass
- *             plate, a tarot card, a chalked box
+ *             plate, a blueprint callout, a chalked box
  *   frame     what it's set in, built round it: oak, gilt, brass, painted wood, bamboo
  *
  * `mount` turns a panel into the board: opaque, no longer drawn over everything, and framed.
@@ -628,73 +628,80 @@ const chalk: Look = {
 /** THE FISH MARKET: the stall's chalkboard, in a blue-painted frame */
 const market: Look = { ...chalk, frame: { kind: 'paint', colour: '#2f6fa8', w: 0.05, d: 0.04 }, glow: 0.2 };
 
-/** a star, `n` points */
-function starAt(c: Ctx, x: number, y: number, r: number, fill: string, n = 5): void {
-  c.fillStyle = fill;
+/** a cog, `n` teeth, with a hole through it (drawn in outline) */
+function cogAt(c: Ctx, x: number, y: number, r: number, n: number): void {
   c.beginPath();
-  for (let i = 0; i < n * 2; i++) {
-    const a = (i / (n * 2)) * Math.PI * 2 - Math.PI / 2;
-    const k = i % 2 ? r * 0.42 : r;
+  for (let i = 0; i < n * 4; i++) {
+    const a = (i / (n * 4)) * Math.PI * 2;
+    const k = i % 4 < 2 ? r : r * 0.8;
     c.lineTo(x + Math.cos(a) * k, y + Math.sin(a) * k);
   }
   c.closePath();
-  c.fill();
+  c.moveTo(x + r * 0.3, y);
+  c.arc(x, y, r * 0.3, 0, Math.PI * 2);
+  c.stroke();
 }
 
-/** THE FORTUNE TELLER: midnight cloth, stars and a moon, cards to turn */
-const mystic: Look = {
+/** THE ISLAND ENGINEER: a blueprint, ruled and drawn in white, the buttons boxed like callouts */
+const blueprint: Look = {
   face(c, w, h, seed) {
-    const g = c.createRadialGradient(w / 2, h / 2, 40, w / 2, h / 2, Math.max(w, h) * 0.7);
-    g.addColorStop(0, '#3a2260');
-    g.addColorStop(1, '#170c28');
+    const g = c.createLinearGradient(0, 0, w, h);
+    g.addColorStop(0, '#1f5694');
+    g.addColorStop(1, '#16407a');
     c.fillStyle = g;
     c.fillRect(0, 0, w, h);
-    grain(c, w, h, seed, 3000, 'rgba(255, 230, 255, 0.04)', 'rgba(0, 0, 0, 0.1)');
-    const r = rngOf(seed + 5);
-    for (let i = 0; i < 70; i++) starAt(c, r() * w, r() * h, 1.5 + r() * r() * 5, `rgba(255, 230, 160, ${(0.25 + r() * 0.5).toFixed(2)})`, r() < 0.3 ? 4 : 5);
-    // a crescent moon in the top corner
-    c.fillStyle = 'rgba(255, 226, 150, 0.85)';
-    c.beginPath();
-    c.arc(w - 70, 62, 30, 0, Math.PI * 2);
-    c.fill();
-    c.globalCompositeOperation = 'destination-out';
-    c.beginPath();
-    c.arc(w - 58, 54, 27, 0, Math.PI * 2);
-    c.fill();
-    c.globalCompositeOperation = 'source-over';
-    c.fillStyle = '#231440';
-    c.beginPath();
-    c.arc(w - 58, 54, 27, 0, Math.PI * 2);
-    c.fill();
-    c.strokeStyle = 'rgba(232, 196, 106, 0.8)';
+    grain(c, w, h, seed, 3000, 'rgba(255, 255, 255, 0.035)', 'rgba(0, 0, 20, 0.08)');
+    // the drafting grid: fine every 20 px, heavier every 100
+    for (let x = 0; x <= w; x += 20) {
+      c.fillStyle = x % 100 ? 'rgba(210, 230, 255, 0.07)' : 'rgba(210, 230, 255, 0.14)';
+      c.fillRect(x, 0, 1, h);
+    }
+    for (let y = 0; y <= h; y += 20) {
+      c.fillStyle = y % 100 ? 'rgba(210, 230, 255, 0.07)' : 'rgba(210, 230, 255, 0.14)';
+      c.fillRect(0, y, w, 1);
+    }
+    // a pair of cogs drawn in the bottom corner, meshed
+    c.strokeStyle = 'rgba(235, 244, 255, 0.45)';
+    c.lineWidth = 2;
+    cogAt(c, w - 62, h - 54, 22, 10);
+    cogAt(c, w - 96, h - 38, 14, 7);
+    // the sheet's border: a heavy rule and a fine one inside it
+    c.strokeStyle = 'rgba(235, 244, 255, 0.85)';
     c.lineWidth = 3;
     c.strokeRect(14, 14, w - 28, h - 28);
-    lamp(c, w, h, 0.3);
+    c.lineWidth = 1;
+    c.strokeRect(22, 22, w - 44, h - 44);
+    lamp(c, w, h, 0.28);
   },
-  titleFont: (px) => `italic ${serif(700, px)}`,
-  hand: true,
-  textFont: serifText,
-  title: '#f2d27a',
-  ink: '#efe0ff',
-  dim: 'rgba(226, 210, 246, 0.68)',
-  accent: '#ffd76a',
-  good: '#b8f0c8',
-  bad: '#ff9ab0',
-  shadow: 'rgba(0, 0, 0, 0.6)',
+  titleFont: (px) => sans(700, px),
+  hand: false,
+  textFont: sans,
+  title: '#ffffff',
+  ink: '#eef4ff',
+  dim: 'rgba(214, 228, 250, 0.7)',
+  accent: '#ffd84a',
+  good: '#a8f0b8',
+  bad: '#ffa4a0',
+  shadow: 'rgba(0, 10, 40, 0.5)',
   button(c, x, y, w, h, label, st, px, L) {
-    // a tarot card, laid on its side
+    // a callout box, crop marks at its corners; under the pointer, hatched in
     const live = st === 'go' || st === 'hover';
-    plate(c, x, y, w, h, 8, st === 'hover' ? '#5a3a8a' : live ? '#2c1a4a' : 'rgba(255, 255, 255, 0.05)', live ? '#e8c46a' : 'rgba(232, 196, 106, 0.3)', 3);
+    plate(c, x, y, w, h, 4, st === 'hover' ? 'rgba(255, 255, 255, 0.2)' : live ? 'rgba(255, 255, 255, 0.07)' : 'rgba(255, 255, 255, 0.03)', live ? '#ffffff' : 'rgba(235, 244, 255, 0.3)', live ? 2.5 : 1.5);
     if (live) {
-      c.strokeStyle = 'rgba(232, 196, 106, 0.55)';
-      c.lineWidth = 1;
-      c.strokeRect(x + 6, y + 6, w - 12, h - 12);
-      starAt(c, x + 18, y + h / 2, 6, '#e8c46a');
-      starAt(c, x + w - 18, y + h / 2, 6, '#e8c46a');
+      c.strokeStyle = 'rgba(255, 216, 74, 0.9)';
+      c.lineWidth = 2;
+      c.beginPath();
+      for (const [cx, cy, dx, dy] of [[x, y, -1, -1], [x + w, y, 1, -1], [x, y + h, -1, 1], [x + w, y + h, 1, 1]]) {
+        c.moveTo(cx + dx * 4, cy);
+        c.lineTo(cx + dx * 14, cy);
+        c.moveTo(cx, cy + dy * 4);
+        c.lineTo(cx, cy + dy * 14);
+      }
+      c.stroke();
     }
-    word(c, label, x + 16, y, w - 32, h, `italic ${serif(700, px)}`, st === 'done' ? L.good : live ? '#f2d27a' : 'rgba(226, 210, 246, 0.45)');
+    word(c, label, x + 12, y, w - 24, h, sans(700, px), st === 'done' ? L.good : live ? '#ffffff' : 'rgba(214, 228, 250, 0.45)');
   },
-  frame: { kind: 'wood', wood: 'ebony', w: 0.06, d: 0.05, corners: '#e0b84e' },
+  frame: { kind: 'metal', colour: '#8a929a', w: 0.05, d: 0.04, corners: '#c8ccd0' },
 };
 
 /** Gold tooling round a leather board: two rules and a flourish in each corner. */
@@ -958,7 +965,7 @@ const tapa: Look = {
   glow: 0.2,
 };
 
-export const LOOKS = { timber, pine, garden, pawn, lodge, velvet, linen, tackle, chalk, market, mystic, bank, lure, baize, sampler, tapa };
+export const LOOKS = { timber, pine, garden, pawn, lodge, velvet, linen, tackle, chalk, market, blueprint, bank, lure, baize, sampler, tapa };
 export type LookId = keyof typeof LOOKS;
 
 /** Each building's look (by its name in the layout: village/roles.ts). */
@@ -971,7 +978,7 @@ const BY_BUILDING: Record<string, LookId> = {
   E: 'linen',
   S3: 'tackle',
   S2: 'chalk',
-  N: 'mystic',
+  N: 'blueprint',
   stall: 'market',
   H: 'bank',
   C: 'lure',

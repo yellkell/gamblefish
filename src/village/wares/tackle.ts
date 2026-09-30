@@ -1,11 +1,10 @@
 /**
  * THE GEAR SHOPS' goods (village/gearShop.ts): rods, reels, line and hooks at the TACKLE SHOP,
- * bait at the BAIT SHOP, luck charms at the FORTUNE TELLER. Each level of each track is its own
+ * bait at the BAIT SHOP, gadgets at the ISLAND ENGINEER. Each level of each track is its own
  * thing, for its picture on the board and its place on the counter.
  */
 
-import { CanvasTexture, CylinderGeometry, Group, Mesh, MeshBasicMaterial, MeshStandardMaterial, SphereGeometry, SRGBColorSpace, TorusGeometry, Vector3, type Object3D } from 'three';
-import { casinoEnv } from '../../casino/look.ts';
+import { Group, Mesh, MeshBasicMaterial, SphereGeometry, TorusGeometry, Vector3, type MeshStandardMaterial, type Object3D } from 'three';
 import { Batch, blade, M, OUTLINE, rounded, stalk, turned, type Kit } from '../craft.ts';
 import { conventionalReel } from '../../fishing/conventionalReel.ts';
 import { isConventional, LINE, REEL_KNOB, REEL_LEVER, REELS, RODS } from '../../fishing/rodLook.ts';
@@ -286,104 +285,126 @@ export function bait(k: Kit, level: number): Object3D {
   }
 }
 
-/* ── charms ─────────────────────────────────────────────────────────── */
+/* ── the engineer's gadgets ─────────────────────────────────────────── */
 
-/** a gold doubloon's face: a crowned head in relief, lettering round the rim */
-let doubloon: MeshStandardMaterial | null = null;
-function doubloonMaterial(k: Kit): MeshStandardMaterial {
-  if (doubloon) return doubloon;
-  const c = document.createElement('canvas');
-  c.width = c.height = 256;
-  const g = c.getContext('2d')!;
-  g.fillStyle = '#ffffff';
-  g.fillRect(0, 0, 256, 256);
-  g.strokeStyle = '#8a8a8a';
-  g.lineWidth = 6;
-  g.beginPath();
-  g.arc(128, 128, 110, 0, Math.PI * 2);
-  g.stroke();
-  g.fillStyle = '#a0a0a0';
-  g.font = 'bold 22px Georgia, serif';
-  g.textAlign = 'center';
-  const text = 'REX · MARIS · MDCCXV · ';
-  for (let i = 0; i < text.length; i++) {
-    const a = -Math.PI / 2 + (i / text.length) * Math.PI * 2;
-    g.save();
-    g.translate(128 + Math.cos(a) * 92, 128 + Math.sin(a) * 92);
-    g.rotate(a + Math.PI / 2);
-    g.fillText(text[i], 0, 8);
-    g.restore();
-  }
-  // the head in profile, and a trident behind
-  g.fillStyle = '#b8b8b8';
-  g.beginPath();
-  g.ellipse(132, 136, 38, 48, 0.2, 0, Math.PI * 2);
-  g.fill();
-  g.fillStyle = '#909090';
-  g.fillRect(84, 60, 6, 130);
-  for (const x of [74, 87, 100]) g.fillRect(x, 58, 5, 26);
-  const map = new CanvasTexture(c);
-  map.colorSpace = SRGBColorSpace;
-  // the relief is in the map's greys, over polished gold
-  return (doubloon = new MeshStandardMaterial({ map, color: '#ffc848', roughness: 0.25, metalness: 1, envMap: casinoEnv(k.renderer), envMapIntensity: 1.5 }));
+/** things lit from within: the lure light's tube, the sea-caller's lamp */
+const lit = (colour: number): MeshBasicMaterial => new MeshBasicMaterial({ color: colour, toneMapped: false });
+
+/** a swivel: two rings and the barrel between them, along x from x0 (toward −x) */
+function swivel(b: Batch, metal: MeshStandardMaterial, x0: number, y: number, s = 1): void {
+  b.at(metal, new TorusGeometry(0.004 * s, 0.0012 * s, 5, 12), x0 - 0.004 * s, y, 0);
+  b.at(metal, turned([[0.0022 * s, 0], [0.003 * s, 0.003 * s], [0.0022 * s, 0.008 * s]], 10), x0 - 0.008 * s, y, 0, 0, 0, Math.PI / 2);
+  b.at(metal, new TorusGeometry(0.004 * s, 0.0012 * s, 5, 12), x0 - 0.02 * s, y, 0, Math.PI / 2, 0, 0);
 }
 
-export function charm(k: Kit, level: number): Group {
+/**
+ * THE ISLAND ENGINEER's gadgets (village/gearShop.ts), built to bring the big ones in: the trophy
+ * fish bite more often. Each lies or stands on the counter, its foot at the origin.
+ *
+ *   1  a brass line rattle: a capsule on the line with two steel balls in a clear window that
+ *      click as it works
+ *   2  a deep-drop lure light: a battery tube that glows green down where the sun doesn't reach
+ *   3  a clockwork flasher: a wound brass drum that spins a spread of mirror spoons
+ *   4  a sonic sea-caller: a yellow case of valves and a dial, and on its coiled cable an
+ *      underwater speaker that plays a baitfish shoal at the deep
+ */
+export function gadget(k: Kit, level: number): Group {
   const b = new Batch();
-  const gold = M.gold(k.renderer);
-  const cord = M.satin(k.renderer, '#5a3a22');
-  const hang = (y: number): void => {
-    // the cord or chain it hangs from, in a loop above it
-    const pts: Vector3[] = [];
-    for (let i = 0; i <= 24; i++) {
-      const a = Math.PI / 2 + (i / 24) * Math.PI * 2;
-      pts.push(new Vector3(Math.cos(a) * 0.026, y + 0.028 + Math.sin(a) * 0.03, 0));
-    }
-    b.add(level === 1 ? cord : gold, stalk(pts, level === 1 ? 0.0022 : 0.0014, level === 1 ? 0.0022 : 0.0014, 5, 48));
-  };
+  const brass = M.brass(k.renderer);
+  const steel = M.metal(k.renderer, '#c8ccd4', 0.2);
+  const rubber = M.satin(k.renderer, '#1c1c20');
+  const g = new Group();
   switch (level) {
     case 1: {
-      // a shark's tooth: a flat serrated triangle, ivory, bound to the cord
-      const tooth = turned([[0, 0], [0.018, 0.004], [0.012, 0.03], [0, 0.05]], 3).scale(1, 1, 0.35);
-      b.at(M.glaze(k.renderer, '#f4f0e0'), tooth, 0, -0.05, 0, Math.PI, 0, 0);
-      b.at(cord, turned([[0.009, -0.004], [0.01, 0], [0.009, 0.004]], 10), 0, -0.004, 0);
-      hang(0);
+      // lying along x: a brass cap each end, the window between, the balls in it
+      const R = 0.009;
+      const y = R;
+      const cap = turned([[0, 0], [0.005, 0.001], [R, 0.008], [R, 0.024], [0, 0.024]], 16);
+      b.at(brass, cap, -0.036, y, 0, 0, 0, -Math.PI / 2);
+      b.at(brass, cap, 0.036, y, 0, 0, 0, Math.PI / 2);
+      b.at(M.glass(k.renderer, '#e8f4ff', 0.35), turned([[R * 0.95, 0], [R * 0.95, 0.024]], 16), -0.012, y, 0, 0, 0, -Math.PI / 2);
+      for (const x of [-0.004, 0.006]) b.at(steel, new SphereGeometry(0.004, 10, 8), x, 0.0045, 0);
+      swivel(b, steel, -0.036, y);
+      // a snap on the other end, to clip it to the line
+      b.add(steel, stalk([new Vector3(0.036, y, 0), new Vector3(0.05, y + 0.004, 0), new Vector3(0.062, y, 0), new Vector3(0.05, y - 0.004, 0), new Vector3(0.042, y, 0)], 0.0009, 0.0009, 4, 16));
       break;
     }
     case 2: {
-      // a black pearl in a gold cup on a fine chain
-      b.at(M.gloss(k.renderer, '#1a1a24'), new SphereGeometry(0.022, 20, 14), 0, -0.03, 0);
-      b.at(gold, turned([[0, 0], [0.012, 0.002], [0.014, 0.008], [0.004, 0.012], [0, 0.012]], 12), 0, -0.012, 0);
-      b.at(gold, new TorusGeometry(0.004, 0.0012, 5, 10), 0, 0.002, 0);
-      hang(0.004);
+      // lying along x: a rubber cap, the green tube, an alloy collar with its swivel
+      const R = 0.014;
+      const y = R;
+      b.at(rubber, turned([[0, 0], [R * 0.8, 0.002], [R + 0.001, 0.008], [R + 0.001, 0.02], [0, 0.02]], 18), 0.06, y, 0, 0, 0, Math.PI / 2);
+      b.at(M.glass(k.renderer, '#9affc0', 0.4), turned([[R, 0], [R, 0.1]], 18), -0.04, y, 0, 0, 0, -Math.PI / 2);
+      b.at(lit(0x5aff9a), turned([[0, 0], [R * 0.6, 0.004], [R * 0.6, 0.092], [0, 0.096]], 12), -0.038, y, 0, 0, 0, -Math.PI / 2);
+      b.at(M.metal(k.renderer, '#8a9098', 0.3), turned([[0, 0], [R + 0.001, 0], [R + 0.001, 0.016], [0.006, 0.022], [0, 0.022]], 18), -0.04, y, 0, 0, 0, Math.PI / 2);
+      swivel(b, steel, -0.062, y, 1.3);
       break;
     }
     case 3: {
-      // a mermaid's comb: a gold spine, a scallop shell on it, pearls, fine teeth
-      b.at(gold, rounded(0.14, 0.022, 0.006, 0.004), 0, 0, 0);
-      for (let i = 0; i < 17; i++) b.at(gold, rounded(0.003, 0.045, 0.003, 0.001, 1), -0.064 + i * 0.008, -0.032, 0);
-      const shell = M.petal(k.renderer);
-      for (let i = 0; i < 7; i++) {
-        const a = -0.9 + (i / 6) * 1.8;
-        b.at(shell, blade({ len: 0.035, width: 0.014, outline: OUTLINE.strap, cup: 0.4, segs: 3, across: 1, base: '#e8c060', tip: '#fff0c0' }), 0, 0.008, 0.004, 0, 0, a);
+      // a little stand, the wound drum on it (its axis along x), the key on the left, the spoons
+      // on their shaft to the right
+      const wood = M.wood(k.renderer, 'teak', 0.4);
+      b.at(wood, rounded(0.1, 0.014, 0.06, 0.004), 0, 0.007, 0);
+      b.at(brass, turned([[0.004, 0], [0.004, 0.05]], 8), -0.02, 0.014, 0);
+      const y = 0.08;
+      b.at(brass, turned([[0, 0], [0.024, 0], [0.028, 0.004], [0.028, 0.036], [0.024, 0.04], [0, 0.04]], 24), -0.04, y, 0, 0, 0, -Math.PI / 2);
+      // rivets round the drum's seam
+      for (let i = 0; i < 10; i++) {
+        const a = (i / 10) * Math.PI * 2;
+        b.at(M.copper(k.renderer), new SphereGeometry(0.0022, 6, 4), -0.02, y + Math.cos(a) * 0.028, Math.sin(a) * 0.028);
       }
-      for (const x of [-0.05, 0.05]) b.at(M.gloss(k.renderer, '#fbf4ee'), new SphereGeometry(0.006, 12, 8), x, 0.004, 0.005);
-      // worn in the hair, or hung from a fine chain by its shell
-      hang(0.04);
+      // the winding key: a stem and a bow
+      b.at(steel, turned([[0.003, 0], [0.003, 0.014]], 8), -0.04, y, 0, 0, 0, Math.PI / 2);
+      b.at(steel, rounded(0.004, 0.036, 0.01, 0.003), -0.058, y, 0);
+      for (const s of [-1, 1]) b.at(steel, new TorusGeometry(0.008, 0.0025, 6, 14), -0.058, y + s * 0.018, 0, 0, Math.PI / 2, 0);
+      // the shaft, and three mirror spoons round it, each a flat oval out on a wire
+      b.at(steel, turned([[0.002, 0], [0.002, 0.1]], 6), 0, y, 0, 0, 0, -Math.PI / 2);
+      const mirror = M.metal(k.renderer, '#f0f4f8', 0.05);
+      for (let i = 0; i < 3; i++) {
+        const a = (i / 3) * Math.PI * 2 + 0.4;
+        const x = 0.03 + i * 0.028;
+        const cy = Math.cos(a) * 0.026;
+        const cz = Math.sin(a) * 0.026;
+        b.add(steel, stalk([new Vector3(x, y, 0), new Vector3(x, y + cy * 0.6, cz * 0.6)], 0.0008, 0.0008, 4, 2));
+        b.at(mirror, new SphereGeometry(0.018, 16, 10).scale(1, 0.55, 0.14), x, y + cy, cz, a, 0, 0);
+      }
+      b.at(M.gloss(k.renderer, '#d83a2a'), new SphereGeometry(0.006, 10, 8), 0.1, y, 0);
       break;
     }
     default: {
-      // the sea king's doubloon: a thick gold coin with a milled edge, on a gold chain
-      const coinMat = doubloonMaterial(k);
-      b.at(coinMat, new CylinderGeometry(0.03, 0.03, 0.005, 36).rotateX(Math.PI / 2), 0, -0.03, 0);
-      for (let i = 0; i < 36; i++) {
-        const a = (i / 36) * Math.PI * 2;
-        b.at(gold, rounded(0.0015, 0.004, 0.006, 0.0005, 1), Math.cos(a) * 0.0302, -0.03 + Math.sin(a) * 0.0302, 0, 0, 0, a);
+      // the case: yellow, latched, a handle on top; on its face the dial, two switches, the lamp
+      const W = 0.16;
+      const H = 0.1;
+      const D = 0.09;
+      const x0 = -0.08;
+      b.at(M.gloss(k.renderer, '#e8b820'), rounded(W, H, D, 0.012, 2), x0, H / 2, 0);
+      b.at(M.satin(k.renderer, '#2a2a2e'), rounded(W + 0.004, 0.008, D + 0.004, 0.003), x0, H * 0.72, 0);
+      for (const s of [-1, 1]) b.at(steel, rounded(0.018, 0.024, 0.006, 0.002), x0 + s * 0.05, H * 0.72, D / 2 + 0.003);
+      b.add(rubber, stalk([new Vector3(x0 - 0.04, H, 0), new Vector3(x0 - 0.036, H + 0.028, 0), new Vector3(x0 + 0.036, H + 0.028, 0), new Vector3(x0 + 0.04, H, 0)], 0.006, 0.006, 8, 16));
+      const face = D / 2 + 0.002;
+      b.at(M.satin(k.renderer, '#f4f0e0'), turned([[0, 0], [0.02, 0], [0.02, 0.003], [0, 0.003]], 20), x0 - 0.035, H * 0.38, face, Math.PI / 2, 0, 0);
+      b.at(brass, new TorusGeometry(0.021, 0.0025, 6, 24), x0 - 0.035, H * 0.38, face + 0.003);
+      b.at(M.gloss(k.renderer, '#c02020'), rounded(0.0016, 0.016, 0.001, 0.0005), x0 - 0.031, H * 0.38 + 0.006, face + 0.004, 0, 0, -0.5);
+      for (const x of [0.01, 0.03]) {
+        b.at(steel, turned([[0.004, 0], [0.004, 0.004]], 10), x0 + x, H * 0.3, face, Math.PI / 2, 0, 0);
+        b.at(steel, turned([[0.0015, 0], [0.0015, 0.014], [0.0025, 0.016], [0, 0.018]], 8), x0 + x, H * 0.3, face + 0.003, Math.PI / 2 - 0.5, 0, 0);
       }
-      b.at(M.metal(k.renderer, '#e8b030', 0.3), new CylinderGeometry(0.018, 0.018, 0.0062, 24).rotateX(Math.PI / 2), 0, -0.03, 0);
-      b.at(gold, new TorusGeometry(0.004, 0.0012, 5, 10), 0, 0.002, 0);
-      hang(0.004);
+      b.at(lit(0xff4a3a), new SphereGeometry(0.005, 10, 8), x0 + 0.03, H * 0.55, face);
+      // the cable, coiled, from the case's side to the speaker
+      const coil: Vector3[] = [];
+      for (let i = 0; i <= 60; i++) {
+        const t = i / 60;
+        const a = t * Math.PI * 2 * 5;
+        coil.push(new Vector3(0.004 + t * 0.07, 0.03 + Math.sin(a) * 0.012 - t * 0.012, Math.cos(a) * 0.012));
+      }
+      b.add(rubber, stalk(coil, 0.0022, 0.0022, 5, 180));
+      // the speaker: a dark bell, mouth down, a ring of grille round its rim and a lifting eye on top
+      const sx = 0.11;
+      b.at(M.satin(k.renderer, '#2e3238'), turned([[0.042, 0], [0.044, 0.004], [0.04, 0.02], [0.022, 0.04], [0.012, 0.046], [0, 0.047]], 28), sx, 0, 0);
+      for (let i = 0; i < 3; i++) b.at(steel, new TorusGeometry(0.043 - i * 0.004, 0.0014, 5, 28).rotateX(Math.PI / 2), sx, 0.004 + i * 0.005, 0);
+      b.at(steel, new TorusGeometry(0.007, 0.0018, 6, 14), sx, 0.054, 0);
     }
   }
-  return b.group();
+  g.add(b.group());
+  return g;
 }

@@ -139,7 +139,7 @@ export interface GearStats {
   /** the bait shop's bait (fishing/gear.ts): its tier, and how much sooner the bites come */
   baitTier: number;
   biteMul: number;
-  /** the fortune teller's charm: how much more often a trophy fish bites */
+  /** the island engineer's gadget: how much more often a trophy fish bites */
   luck: number;
   /** the tackle shop's hooks: how much longer the window to strike stays open */
   strikeMul: number;

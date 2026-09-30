@@ -199,8 +199,10 @@ and the vendors.
     (`src/village/wares/goop.ts`). His twenty gel blobs in ff2's boxer's stance are polygonised once
     at load from the same smooth-min, in his lime-to-bottle-green gel with the nucleus glowing
     through and his two bead eyes. A save from before goop bait keeps the bait it had.
-  - The **Fortune Teller** sells luck charms, up to the sea king's doubloon. They
-    make trophy fish bite more often.
+  - The **Island Engineer** sells gadgets built to bring the big ones in: a brass line rattle, a
+    deep-drop lure light, a clockwork flasher and a sonic sea-caller. They make trophy fish bite
+    more often. The shop is a workshop: a workbench with a vice, a sonar screen and a work lamp,
+    pegboards of tools, and a blueprint of the sea-caller pinned up.
   - Each board says what a level does for you in plain numbers against what you have (cast 13 m
     further, bites 28% sooner, trophy fish 2.4× as often), and which trophy fish need it.
   - Every shop board shows a picture of each thing it sells: the item's own 3D model,
@@ -223,7 +225,7 @@ and the vendors.
   swordfish (night only) and blue marlin. They bite only when you have the gear each one
   needs and the bobber is over deep enough water (8–13 m, out past the drop-off off the
   pier head, so the longer rods matter). The marlin needs everything at the top and a
-  charm. Each has its own body, built from a Tidewater anatomy with a bill, a sail or a
+  gadget. Each has its own body, built from a Tidewater anatomy with a bill, a sail or a
   comb added. `npm run check:fish` checks that none bites without its gear.
 - **Signs** (`src/village/signs.ts`): every business has a painted timber board, 5 cm thick,
   lit by the scene. Each is lettered by hand in a
@@ -231,9 +233,9 @@ and the vendors.
   seen some weather: paint chipped back to grey timber at the edges and seams, flecks gone, rain
   streaks, grime along the foot. A picture of the trade sits beside the name and a line says what's
   inside: planks painted in the trade's colour with a pinstripe (a rod, a baited hook, a fish, a saw
-  and hammer, the pawnbroker's three balls, a mounted fish, a potted hibiscus); gold leaf on oiled
-  dark hardwood for the jeweller, the boutique and the bank; hand-painted stars for the fortune
-  teller; glass-tube neon on stained timber for the casinos. Your shack, Coral's villa and the
+  and hammer, the pawnbroker's three balls, a mounted fish, a potted hibiscus, the engineer's cog
+  and spanner); gold leaf on oiled dark hardwood for the jeweller, the boutique and the bank;
+  glass-tube neon on stained timber for the casinos. Your shack, Coral's villa and the
   boatyard have none.
 - **The pier's sign** (`src/village/pierSign.ts`): no words. A snapper cut from a thick plank, its
   edges eased, painted coral and gold by hand (scales, fin rays, the gill, a bright eye) and worn
@@ -452,7 +454,7 @@ and the vendors.
   - **the dancers:** all twelve hidden camps found;
   - **the gems:** every kind of stone the rocks hold;
   - **the shops:** everything they sell that stays yours: all 28 pieces for your shack and Coral's
-    villa, every level of rod, reel, line, hooks, bait and charm, the axe and the pickaxe;
+    villa, every level of rod, reel, line, hooks, bait and gadget, the axe and the pickaxe;
   - **the helter skelter:** one full descent, all three tiers to the bottom (the ride's win counts it,
     `journey.rides` in the save; rides from before it was counted don't, so ride it once more).
 
@@ -473,8 +475,8 @@ and the vendors.
   florist's sage-green boards with flowers painted round; the pawn shop prices things on manila
   tickets on string; the taxidermist uses engraved brass plaques; the jeweller black velvet and
   gold leaf in a gilt frame; the boutique cream linen and teal ribbons; the tackle shop navy boards
-  with a painted rope and life-ring buttons; the bait shop and the fish market a chalkboard; the fortune
-  teller starry cloth and tarot cards; the bank green leather tooled in gold with brass plates; the
+  with a painted rope and life-ring buttons; the bait shop and the fish market a chalkboard; the island
+  engineer a blueprint, ruled in white with callout-box buttons; the bank green leather tooled in gold with brass plates; the
   Lucky Lure black lacquer with art-deco gold leaf and pink enamel; the Card Shark green baize with
   ivory plaques on a mahogany stand; the dancers' chest bark
   cloth printed with tapa bands in a bamboo frame, with carved tags. Indoors they're drawn like

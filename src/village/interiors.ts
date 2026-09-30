@@ -84,8 +84,10 @@ const SEEN_WITHIN = 24;
 /** where the case wall hangs on The Lucky Lure's right-hand wall (room frame z, m) */
 export const CASE_WALL_Z = 1.0;
 
-/** the Fortune Teller's round table (village/gearShop.ts), in her room's frame: [x, z] */
-export const FORTUNE_TABLE = [1.4, 0.6] as const;
+/** the Island Engineer's workbench against the right-hand wall (village/gearShop.ts), in the room's frame: [x, z] */
+export const WORKBENCH = [2.4, 0.4] as const;
+/** its half-width (x), half-depth (z) and height (m) */
+export const WORKBENCH_SIZE = [0.4, 0.75, 0.9] as const;
 
 /**
  * Furniture you can't stand in (tables, counters), per building, in the room's floor frame:
@@ -99,7 +101,7 @@ export const FURNITURE: Record<string, [number, number, number, number, number][
   B: [[0, -1.8, 2.05, 0.33, 1.9]], // three slot machines along the back wall
   G: [[0, -0.74, 1.06, 0.52, 0.95]], // the blackjack table (half-round, dealer's edge at z −1.25)
   H: [[0, -0.55, 1.74, 0.33, 1.07]], // the teller's counter (village/bank.ts)
-  N: [[FORTUNE_TABLE[0], FORTUNE_TABLE[1], 0.5, 0.5, 0.78]], // the Fortune Teller's round table (village/gearShop.ts)
+  N: [[WORKBENCH[0], WORKBENCH[1], ...WORKBENCH_SIZE]], // the Island Engineer's workbench (village/gearShop.ts)
   L: [[0, -2.12, 1.05, 0.42, 0.9]], // Coral's sofa against the back wall (village/villa.ts)
 };
 

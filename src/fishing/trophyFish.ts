@@ -1,14 +1,14 @@
 /**
  * TROPHY FISH: five extravagant species that only bite for proper tackle. Each needs levels on
  * the gear tracks (fishing/gear.ts: the tackle shop's rod, reel and line, the bait shop's bait,
- * the fortune teller's charm) and water deep enough under the bobber. Without them, they're
- * not there at all. A luck charm makes them bite more often.
+ * the island engineer's gadget) and water deep enough under the bobber. Without them, they're
+ * not there at all. A gadget makes them bite more often.
  *
  *   roosterfish   a comb of long dorsal spines    live pilchards on 30 lb braid
  *   opah          round, rose-red, scarlet fins     live squid, cast past 8 m of water
  *   sailfish      a cobalt sail and a bill          big-game rod, 60 lb, live squid, 10 m
  *   swordfish     a broad sword, only at night      glow rig, 100 lb, lever drag, 12 m
- *   blue marlin   the king                          everything at the top, and a charm
+ *   blue marlin   the king                          everything at the top, and a gadget
  *
  * Like the timed fish (fishing/timedFish.ts): a row in Tidewater's table, and a body made
  * Tidewater's way from one of its anatomies (world/fish/FishSpecies.js), reshaped — here with a
@@ -158,7 +158,7 @@ export const TROPHY: Record<string, TrophyFish> = {
     row: { name: 'Blue marlin', sci: 'Makaira nigricans', lw: [0.0021, 3.1], habitat: { bay: 0.6, deep: 1 }, kg: [45, 130], price: 42, fight: 1, stamina: 24, rarity: 0.12 },
     needs: { rod: 3, reel: 3, line: 4, bait: 4, charm: 1 },
     minDepth: 13,
-    when: 'the king: the best of everything, and a little luck',
+    when: 'the king: the best of everything, and a gadget from the engineer',
     body: {
       base: 'tuna',
       deep: 1.0,
@@ -203,7 +203,7 @@ export function missing(id: string, gear: Record<string, number>): string | null
 
 /**
  * How much more (or less) likely this fish is to bite here, now, on this rig: 1 for any fish
- * that isn't a trophy; for a trophy 0 without its gear, its depth or its hours, else the charm's
+ * that isn't a trophy; for a trophy 0 without its gear, its depth or its hours, else the gadget's
  * luck. No rig, no trophies.
  */
 export function trophyOdds(id: string, hour: number, rig: Rig | undefined, luck = 1): number {

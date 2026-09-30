@@ -8,7 +8,9 @@
  *   bait    the BAIT SHOP: what's on the hook. Better bait brings the bites quicker, and the
  *           trophy fish won't look at frozen shrimp. The cheapest step up is goop bait: a
  *           Goopliath no bigger than your thumb (village/wares/goop.ts), off FIRE FIGHT 2.
- *   charm   the FORTUNE TELLER: luck. A charm makes the trophy fish bite more often.
+ *   charm   the ISLAND ENGINEER: gadgets that bring the big ones in (a rattle, a lure light,
+ *           a flasher, a sea-caller). A gadget makes the trophy fish bite more often. (The track
+ *           is still `charm` in the save, and its stat still `luck`.)
  *
  * Everything reads through Tidewater's gearStats(state.upgrades), so buying a level is
  * state.buy(key) and the stats follow; a save from before these tracks just starts them at 0.
@@ -49,13 +51,13 @@ const NEW: Tracks = {
     ],
   },
   charm: {
-    name: 'Luck charm',
+    name: 'Gadget',
     levels: [
-      { cost: 0, label: 'No charm', luck: 1 },
-      { cost: 300, label: 'Shark-tooth necklace', luck: 1.6 },
-      { cost: 900, label: 'Lucky black pearl', luck: 2.4 },
-      { cost: 2500, label: "Mermaid's comb", luck: 3.5 },
-      { cost: 6000, label: "Sea king's doubloon", luck: 5 },
+      { cost: 0, label: 'No gadget', luck: 1 },
+      { cost: 300, label: 'Brass line rattle', luck: 1.6 },
+      { cost: 900, label: 'Deep-drop lure light', luck: 2.4 },
+      { cost: 2500, label: 'Clockwork flasher', luck: 3.5 },
+      { cost: 6000, label: 'Sonic sea-caller', luck: 5 },
     ],
   },
 };

@@ -53,7 +53,7 @@ export const KEY: Place[] = [
   { building: 'G', text: 'Blackjack: the Card Shark' },
   { building: 'H', text: 'Island bank' },
   { building: 'boathouse', text: 'Boatyard' },
-  { building: 'N', text: 'Fortune teller' },
+  { building: 'N', text: 'Island engineer' },
   { building: 'K', text: 'Taxidermist' },
   { building: 'A', text: 'Jeweller' },
   { building: 'L', text: "Villa Mar: Coral's" },

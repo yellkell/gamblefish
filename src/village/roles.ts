@@ -49,7 +49,7 @@ export const ROLES: Record<string, BuildingRole> = {
   F: { role: 'shop', title: 'CARPENTER', sub: 'beds · tables · shelves', colour: '#6a7a3a', does: 'furniture for your shack (village/homeGoods.ts)' },
   J: { role: 'shop', title: 'PAWN SHOP', sub: 'curios & antiques', colour: '#5a5a6a', does: 'nautical curios for your shack (village/homeGoods.ts)' },
   K: { role: 'shop', title: 'TAXIDERMIST', sub: 'your catch, mounted', colour: '#6b4a32', does: 'trophy mounts' },
-  N: { role: 'shop', title: 'FORTUNE TELLER', sub: 'luck charms · palms read', colour: '#5a3a8a', does: 'luck charms: the rare ones bite more (fishing/gear.ts)' },
+  N: { role: 'shop', title: 'ISLAND ENGINEER', sub: 'gadgets · repairs', colour: '#2c3a44', does: 'gadgets that bring the rare ones in (fishing/gear.ts)' },
 
   // ── your place, and theirs ──
   S1: { role: 'home', title: 'HOME', sub: 'sweet shack', colour: '#8c7a62', does: 'your house', sign: false },
