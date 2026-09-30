@@ -9,10 +9,10 @@
  *                markings kept as a shading in the gold. Little stars glint over it by day and
  *                night, and after dark it keeps a warm glow of its own.
  *  THE PLINTH    pale coral stone on two steps, a gold band round it, and on its face an engraved
- *                bronze plaque: QUITE THE JOURNEY! THANKS FOR PLAYING! and the credits.
+ *                bronze plaque: 100% COMPLETE! THANKS FOR PLAYING! and the credits.
  *  THE UNVEILING the moment the last leg's done (not while you're up the helter skelter or have a
  *                fish on), it rises out of the sand where you come down onto the beach
- *                (statue/site.ts), to a fanfare and a word wherever you are; then it's on the
+ *                (statue/site.ts), to a fanfare, a modest 100%! banner over it and a word wherever you are; then it's on the
  *                field guide's chart. Once up it's saved (GameState.journey.unveiled) and stands
  *                there every visit.
  *  THE CLOCK     the game clock runs while you're in the headset (not through the intro, nor while
@@ -144,7 +144,8 @@ export class Statue {
       this.group.position.y = this.base - SUNK * (1 - k);
       if (this.rise >= 1) {
         this.rise = -1;
-        this.party.win({ at: this.bill.clone(), tier: 3, banner: 'QUITE THE JOURNEY!', scale: 7, coins: false });
+        // a good win's burst, not the casino's jackpot: a plain banner, no rays, nothing in your face
+        this.party.win({ at: this.bill.clone(), tier: 2, banner: '100%!', scale: 3.5, coins: false });
       }
     }
     // gold shines in the sun; after dark its studio light goes and a warm glow of its own comes up
@@ -210,7 +211,7 @@ export class Statue {
     this.rise = 0;
     this.group.position.y = this.base - SUNK;
     winFanfare(30);
-    this.toast.show('Quite the journey! Something golden is rising on the beach by the pier…', 8, INK.amber);
+    this.toast.show('100%! Something golden is rising on the beach by the pier…', 6, INK.amber);
   }
 
   private hide(): void {
@@ -513,7 +514,7 @@ function plaqueTexture(): CanvasTexture {
     g.fillStyle = '#2a1706';
     g.fillText(text, W / 2, y, W - 140);
   };
-  engrave('QUITE THE JOURNEY!', 170, 104, '', 700, 6);
+  engrave('100% COMPLETE!', 170, 104, '', 700, 6);
   engrave('Thanks for Playing!', 300, 76, 'italic', 400);
   // a flourish: a rule with a diamond in the middle
   g.strokeStyle = '#2a1706';

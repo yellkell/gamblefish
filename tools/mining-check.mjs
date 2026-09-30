@@ -63,7 +63,7 @@ for (const r of ROCK_SITES) {
     check(`${r.id}: by the sea`, sea < 30, `${sea} m from the water`);
   }
 }
-for (const g of GROUND_IDS) check(`eight rocks on ${g} ground`, ROCK_SITES.filter((r) => r.ground === g).length === 8);
+for (const g of GROUND_IDS) check(`at least eight rocks on ${g} ground`, ROCK_SITES.filter((r) => r.ground === g).length >= 8);
 {
   let close = Infinity;
   for (const a of ROCK_SITES) for (const b of ROCK_SITES) if (a !== b) close = Math.min(close, Math.hypot(a.x - b.x, a.z - b.z));

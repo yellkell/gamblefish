@@ -155,7 +155,7 @@ export class CatchCard {
     c.fillText(value, 484, y + 106);
 
     // the last line: where it went, and what it means for the book; two lines if one won't hold both
-    const left = shark ? 'released: the bounty is yours' : 'into your backpack…';
+    const left = shark ? 'carry it to the fish market' : 'into your backpack…';
     const leftColour = shark ? INK.amber : info.kept ? INK.dim : INK.danger;
     let right = '';
     let rightColour: string = INK.amber;

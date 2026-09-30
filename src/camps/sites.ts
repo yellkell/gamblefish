@@ -4,7 +4,8 @@
  * gone off into the wilds of the island in twelve little groups, each round its own fire with a
  * chest. Find all twelve and a thirteenth sets up on the main beach (BEACH_CAMP).
  *
- * None of them is on the chart and none can be seen from the start: every one is tucked behind a
+ * None of them is on the bay's chart (the pawn shop's map of the camps shows them all, for a price)
+ * and none can be seen from the start: every one is tucked behind a
  * ridge or down a hollow the pier, the boardwalk and the beach can't see into (the check casts
  * sight lines from there to the tops of the flames). You find them by going to look, or by the
  * drums, which carry a little further than the firelight.
@@ -74,6 +75,13 @@ export const ALL_CAMPS: CampSite[] = [...CAMPS, BEACH_CAMP];
 /** how far below the plot's mean each camp's hollow is dug (the beach party's sand is just levelled) */
 export function campSink(c: CampSite): number {
   return c.beach ? 0 : CAMP_SINK;
+}
+
+/** where the camp map (the field guide's camp page) takes you: across the fire from the chest, outside
+ *  the ring of dancers, still on the plot */
+export function campStand(c: CampSite): [number, number] {
+  const a = c.chestAt + Math.PI;
+  return [c.x + Math.cos(a) * (CHEST_R + 1.2), c.z + Math.sin(a) * (CHEST_R + 1.2)];
 }
 
 /** where a camp's chest stands (x, z) */

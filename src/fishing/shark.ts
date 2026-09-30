@@ -8,12 +8,14 @@
  * The fight is its own (SharkFight). It's no fish you reel in against the drag:
  *  - between runs it cruises, and you work it closer on the reel, keeping the tension green;
  *  - every few seconds it makes a RUN: first it breaks the surface (fishing/FishingSystem.ts
- *    breaches it), then it tears away. The prompt says so: grab the rod's foregrip with your
- *    OTHER hand as well and HOLD ON. Two hands hold it: the run stalls, the rod bows to the
+ *    breaches it), then it tears away. A ring lights on the rod's rear grip, below your rod hand
+ *    (the first run says so, once): grab it with your OTHER hand as well and HOLD ON. Two hands
+ *    hold it: the run stalls, the rod bows to the
  *    cork, and when you've held it long enough the run is broken and it tires;
  *  - one hand doesn't. It strips line off the reel, and reeling against a run snaps the line.
  *    Let it take all the line and it's gone;
- *  - break three runs and it's beaten. Reel it in alongside the pier.
+ *  - break three runs and it's beaten. Reel it in and it hangs off the rod like any catch; it's
+ *    too big for the backpack, so you carry it to the fish market to sell.
  *
  * Its body is its own (fishing/sharkGeometry.ts: a pointed snout, a jaw that opens, real
  * teeth), painted by pattern 21 in fishing/fishSkin.ts; the anatomy registered here only keeps
@@ -21,6 +23,11 @@
  */
 
 export const SHARK_ID = 'shark';
+
+/** how long it hangs off your rod tip, landed (m: smaller than life, or it'd stand over the tip),
+ *  and carried by the tail in your hand to the market */
+export const SHARK_HANG = 2;
+export const SHARK_CARRY = 1.4;
 
 /** how many runs you must hold through to beat it */
 export const RUNS = 3;

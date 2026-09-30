@@ -4,6 +4,7 @@ import {
   ConeGeometry,
   CylinderGeometry,
   DoubleSide,
+  FrontSide,
   Float32BufferAttribute,
   Group,
   InstancedMesh,
@@ -74,7 +75,9 @@ export function createStripeMaterial(opts: {
   withSkyLight(uniforms);
   return new ShaderMaterial({
     fog: true,
-    side: DoubleSide,
+    // the drum and the roof are closed and only ever seen from outside, and the drum fills half
+    // your view all the way down: drawn double-sided its far wall was shaded under the near one
+    side: FrontSide,
     uniforms,
     vertexShader: /* glsl */ `
       varying vec3 vWorld;

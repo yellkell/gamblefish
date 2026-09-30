@@ -43,6 +43,7 @@ import { CaseWall } from './casino/CaseWall.ts';
 import { PointerSystem } from './ui/pointer.ts';
 import { buildInteriors, interiorAt, openColliders, type Interior } from './village/interiors.ts';
 import { GOODS, HOME, HOME_SHOPS, HomeShopCounter, Shack, VILLA, VILLA_SHOPS } from './village/homeGoods.ts';
+import { campMapSource } from './village/wares/pawn.ts';
 import { GearShopCounter, RodRackBoard } from './village/gearShop.ts';
 import { CASE_WALL_Z, GEAR_COUNTERS, JEWELLER } from './village/interiors.ts';
 import { GemWindows } from './village/gemWindows.ts';
@@ -62,6 +63,10 @@ import { Statue } from './statue/statue.ts';
 import { onFontsReady } from './ui/fonts.ts';
 import { drawLogo, drawLogoFish, hasLogoFish, setLogoFish } from './ui/logo.ts';
 import { thumbnail } from './ui/thumbnail.ts';
+
+/** out at sea past the bay, where nothing grows: the plants are picked round here while you're high up
+ *  the helter skelter (none near, so every tree is its far card) */
+const OFFSHORE = { x: 0, z: 700 };
 
 /** ff2's fixed-foveation level: sharp centre, cheap rim. */
 const FOVEATION = 0.33;
@@ -201,8 +206,10 @@ World.create(container, {
     lastT = t;
     clouds.update(dt, camera);
     ocean.update(t, camera);
-    // up the helter skelter the plants and the grass stay picked round its tower, not round you
-    const hold = skelterView.onTower ? SKELTER : null;
+    // up the helter skelter the plants and the grass stay picked round its tower, not round you;
+    // and up in its first two tiers, 100 m and more over them, round nothing at all (out at sea):
+    // from up there the near plants were specks, a couple of hundred thousand triangles of them
+    const hold = skelterView.high ? OFFSHORE : skelterView.onTower ? SKELTER : null;
     vegetation.update(t, camera, hold);
     grass?.update(t, camera, hold);
     signs.update(1 / 72);
@@ -267,6 +274,8 @@ World.create(container, {
   backpackDeps.state = game;
   backpackDeps.props = fishingDeps.props;
   backpackDeps.chart = { heightAt: (x, z) => heightfield.heightAt(x, z), layout: json.layout, buildings: frames };
+  // (and the pawn shop's map of the camps draws the same island)
+  campMapSource.chart = backpackDeps.chart;
   backpackDeps.where = () => world.camera.getWorldPosition(new Vector3());
   // (and the helter skelter, once it's up, and the golden statue once it's unveiled)
   backpackDeps.walks = () => ({ ...(woodView.walks?.() ?? {}), skelter: skelterView.progress(), statue: game.journey.unveiled ? 1 : 0 });

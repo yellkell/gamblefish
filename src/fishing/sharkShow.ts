@@ -5,12 +5,11 @@
  *    line goes in, swinging from side to side as it swims;
  *  - BREACH: as each run begins it launches itself clear of the sea, nose first, twists and
  *    crashes back on its side: a white wall of spray going up and coming down, the boom of it;
- *  - THE GRIP: a ring of light round the rod's foregrip, just above your hand, pulsing amber
+ *  - THE GRIP: a ring of light round the rod's rear grip, just below your hand, pulsing amber
  *    while the run wants your other hand there, and filling bead by bead in green while you
  *    hold it;
- *  - ALONGSIDE: beaten, it rolls up at the surface under the pier, all 4 m of it, fins
- *    working, while the card and the party go up; then it's let go, and it sinks and sweeps off
- *    with a slap of its tail.
+ *  - BEATEN: it's hauled out and hangs off your rod like any catch (fishing/FishingSystem.ts's
+ *    landing), and this one's put away.
  */
 
 import {
@@ -27,21 +26,22 @@ import {
   Vector3,
   type Scene,
 } from 'three';
-import { MIX, shot, surfaceThrash, waterExitFish } from '../audio/samples.ts';
+import { MIX, shot, surfaceThrash } from '../audio/samples.ts';
 import type { WaterFx } from '../fx/water.ts';
 import { swim, type FishUniforms, type Props } from './props.ts';
 import { SHARK_ID } from './shark.ts';
 
 const BEADS = 16;
-/** where the other hand takes hold: the foregrip, just above the reel seat (rod frame) */
-export const GRIP_Y = 0.52;
+/** where the other hand takes hold: the rear grip, a hand's width below the reel seat (rod frame),
+ *  down toward the butt as you'd brace a big fish, and clear of the controller in your rod hand */
+export const GRIP_Y = 0.14;
 
 const _v = new Vector3();
 const _w = new Vector3();
 const _m = new Matrix4();
 const _o = new Object3D();
 
-type Mode = 'off' | 'cruise' | 'breach' | 'alongside' | 'release';
+type Mode = 'off' | 'cruise' | 'breach';
 
 export class SharkShow {
   readonly mesh: Mesh;
@@ -119,28 +119,6 @@ export class SharkShow {
     shot('big_splash', MIX.splash - 4, { rate: 0.8, at: this.at, ref: 10 });
   }
 
-  /** Beaten: it rolls up alongside, below where you stand. */
-  alongside(at: Vector3, towardYou: Vector3): void {
-    this.mode = 'alongside';
-    this.t = 0;
-    this.at.copy(at);
-    // side on to you, so you see all of it, rolled toward you
-    this.heading.set(-towardYou.z, 0, towardYou.x).normalize();
-    this.rollSide = 1;
-    waterExitFish(at, 400);
-    this.fx()?.splash(at, 1.4);
-  }
-
-  /** Let go: it sinks and sweeps away. */
-  release(): void {
-    if (this.mode !== 'alongside') return;
-    this.mode = 'release';
-    this.t = 0;
-    this.from.copy(this.mesh.position);
-    surfaceThrash(this.at, 0.9);
-    this.fx()?.splash(_v.copy(this.at).addScaledVector(this.heading, -this.len * 0.4), 1.1);
-  }
-
   stop(): void {
     this.mode = 'off';
     this.mesh.visible = false;
@@ -210,26 +188,6 @@ export class SharkShow {
         this.mode = 'cruise';
         this.at.copy(bob);
       }
-    } else if (this.mode === 'alongside') {
-      // spent, rolled half onto its side at the surface, its white belly toward you, fins working
-      const water = this.sea(this.at.x, this.at.z);
-      const rise = Math.min(1, this.t / 1.2);
-      m.position.copy(this.at);
-      m.position.y = water - L * 0.2 + rise * L * 0.23 + Math.sin(time * 0.9) * 0.03;
-      m.rotation.set(0.02, Math.atan2(this.heading.x, this.heading.z), this.rollSide * (0.55 + Math.sin(time * 0.7) * 0.08));
-      swim(this.u, 0.03, 0.5, dt);
-      // spent, but it still works its jaws at you
-      this.u.uJaw.value = 0.2 + 0.28 * Math.max(0, Math.sin(time * 1.3)) ** 3;
-      if (Math.random() < dt * 1.5) this.fx()?.ripple(_v.copy(m.position).addScaledVector(this.heading, -L * 0.45), 0.8, 0, 1.4);
-    } else if (this.mode === 'release') {
-      // down and away
-      const k = Math.min(1, this.t / 3.2);
-      m.position.copy(this.from).addScaledVector(this.heading, k * k * 9);
-      m.position.y = this.from.y - k * 2.6;
-      m.rotation.set(0.25 * k, Math.atan2(this.heading.x, this.heading.z), 0.25 * (1 - k));
-      swim(this.u, 0.09, 1.6, dt);
-      this.u.uJaw.value = 0.12;
-      if (k >= 1) this.stop();
     }
     return airborne;
   }

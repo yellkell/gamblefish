@@ -115,7 +115,7 @@ export const BODY: Record<string, keyof typeof PLANS> = {
 
 /** The piece a fish of `cm` makes, at rotation 0: cells [col, row], tail at col 0. */
 export function shapeFor(species: string, cm: number, kg: number): Cell[] {
-  // the great white is its full length, too long for any backpack (it goes back for its bounty)
+  // the great white is its full length, too long for any backpack (you carry it to the fish market)
   const len = Math.max(1, Math.min(species === 'shark' ? Infinity : MAX_LEN, Math.round(cm / CELL_CM)));
   // a small fish is a plain bar, one or two cells: its tail fin takes no room of its own
   if (len <= 2) return Array.from({ length: len }, (_, c) => [c, 0] as Cell);

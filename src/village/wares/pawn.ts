@@ -1,10 +1,13 @@
 /**
  * THE PAWN SHOP's curios (J), for your shack: a ship in a bottle on an old rum barrel, a
- * mariner's globe, a painting of the bay in a gilt frame, and (new) a brass diving helmet on
- * the salvage crate it came up in.
+ * mariner's globe, a painting of the bay in a gilt frame, a brass diving helmet on the salvage
+ * crate it came up in, and (new) an old map of the dancers' camps in a driftwood frame: buy it and
+ * the field guide gets a page for them too (backpack/fieldGuide.ts).
  */
 
 import { CylinderGeometry, SphereGeometry, TorusGeometry, Vector3, type Object3D } from 'three';
+import { centredText, CHART, drawChart, flame, ISLAND, type ChartSource } from '../../backpack/chart.ts';
+import { CAMPS } from '../../camps/sites.ts';
 import { Batch, blade, M, rng, rounded, stalk, turned, type Kit } from '../craft.ts';
 
 const UP = new Vector3(0, 1, 0);
@@ -386,5 +389,128 @@ export function divingHelmet(k: Kit): Object3D {
   }
   // a verdigris bloom here and there, where the sea had it
   b.at(M.satin(k.renderer, '#5a9a88'), new SphereGeometry(0.03, 8, 6).scale(1, 0.3, 1), 0.1, Y + 0.05, 0.13, 0.6, 0, -0.4);
+  return b.group();
+}
+
+/* ── the map of the dancers' camps (new) ─────────────────────────────── */
+
+/**
+ * The island, for the map's picture: the same chart the field guide draws (backpack/chart.ts),
+ * from the baked terrain. main.ts sets it before the shops and the shack are built.
+ */
+export const campMapSource: { chart: ChartSource | null } = { chart: null };
+
+/** the picture, in canvas px: the whole island (backpack/chart.ts ISLAND) and a margin of old paper */
+const MAP_PX: [number, number] = [900, 760];
+const MARGIN = 26;
+const TITLE = 56;
+
+/**
+ * The map: the island charted from the terrain, hills shaded and the sea by depth, the bay's
+ * chart outlined, a fire at every one of the dancers' camps numbered as in the book, and dotted
+ * trails between them; a title across the top, a compass rose, all of it aged to old paper.
+ */
+function campChart(g: CanvasRenderingContext2D, w: number, h: number): void {
+  const r = rng(73);
+  g.fillStyle = '#ead8aa';
+  g.fillRect(0, 0, w, h);
+  const cw = w - MARGIN * 2;
+  const ch = h - MARGIN * 2 - TITLE;
+  const X = MARGIN;
+  const Y = MARGIN + TITLE;
+  const px = (x: number, z: number): [number, number] => [X + ((x - ISLAND.x0) / (ISLAND.x1 - ISLAND.x0)) * cw, Y + ((z - ISLAND.z0) / (ISLAND.z1 - ISLAND.z0)) * ch];
+  const src = campMapSource.chart;
+  if (src) {
+    g.drawImage(drawChart(src, cw, ch, ISLAND, false).canvas, X, Y);
+    // the bay's chart, dashed in (that's the book's other chart)
+    const [b0x, b0y] = px(CHART.x0, CHART.z0);
+    const [b1x, b1y] = px(CHART.x1, CHART.z1);
+    g.setLineDash([7, 5]);
+    g.strokeStyle = 'rgba(46, 34, 20, 0.6)';
+    g.lineWidth = 2;
+    g.strokeRect(b0x, b0y, b1x - b0x, b1y - b0y);
+    g.setLineDash([]);
+  }
+  // dotted trails, the shortest that join them all (from the camps joined so far, always the
+  // nearest one not yet), then a fire at each, numbered as in the book's list
+  const spots = CAMPS.map((c) => px(c.x, c.z));
+  g.strokeStyle = 'rgba(150, 30, 20, 0.8)';
+  g.lineWidth = 2.5;
+  g.setLineDash([5, 6]);
+  const joined = [0];
+  while (joined.length < spots.length) {
+    let best: [number, number, number] = [0, 0, Infinity];
+    for (const i of joined)
+      spots.forEach((b, j) => {
+        const d = Math.hypot(b[0] - spots[i][0], b[1] - spots[i][1]);
+        if (!joined.includes(j) && d < best[2]) best = [i, j, d];
+      });
+    joined.push(best[1]);
+    g.beginPath();
+    g.moveTo(spots[best[0]][0], spots[best[0]][1]);
+    g.lineTo(spots[best[1]][0], spots[best[1]][1]);
+    g.stroke();
+  }
+  g.setLineDash([]);
+  g.font = "700 16px 'Rajdhani', 'Arial Black', sans-serif";
+  spots.forEach(([x, y], i) => {
+    flame(g, x, y, 1.1, true);
+    g.fillStyle = '#fff6e0';
+    centredText(g, String(i + 1), x, y + 3.3);
+  });
+  // aged: the paper's brown creeping in from the edges, a few stains, two fold lines
+  const vig = g.createRadialGradient(w / 2, h / 2, h * 0.3, w / 2, h / 2, w * 0.64);
+  vig.addColorStop(0, 'rgba(120, 80, 30, 0)');
+  vig.addColorStop(1, 'rgba(110, 70, 25, 0.5)');
+  g.fillStyle = vig;
+  g.fillRect(0, 0, w, h);
+  for (let i = 0; i < 6; i++) {
+    g.fillStyle = `rgba(130, 90, 40, ${0.04 + r() * 0.06})`;
+    g.beginPath();
+    g.ellipse(r() * w, r() * h, 20 + r() * 50, 14 + r() * 36, r() * 3, 0, Math.PI * 2);
+    g.fill();
+  }
+  g.fillStyle = 'rgba(255, 245, 220, 0.14)';
+  g.fillRect(w / 2 - 1, 0, 2, h);
+  g.fillRect(0, h / 2 - 1, w, 2);
+  g.fillStyle = 'rgba(80, 50, 20, 0.12)';
+  g.fillRect(w / 2 + 1, 0, 2, h);
+  g.fillRect(0, h / 2 + 1, w, 2);
+  // a neat ink border round the chart, the title over it, a compass rose in the sea
+  g.strokeStyle = '#3a2a16';
+  g.lineWidth = 3;
+  g.strokeRect(X, Y, cw, ch);
+  g.fillStyle = '#3a2a16';
+  g.font = 'bold 40px Georgia, serif';
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  g.fillText('THE DANCERS’ CAMPS', w / 2, MARGIN + TITLE / 2 - 2);
+  const [ox, oy] = [X + cw - 50, Y + ch - 56];
+  for (let i = 0; i < 4; i++) {
+    const a = (i * Math.PI) / 2;
+    g.beginPath();
+    g.moveTo(ox + Math.cos(a) * 30, oy + Math.sin(a) * 30);
+    g.lineTo(ox + Math.cos(a + Math.PI / 2) * 7, oy + Math.sin(a + Math.PI / 2) * 7);
+    g.lineTo(ox + Math.cos(a - Math.PI / 2) * 7, oy + Math.sin(a - Math.PI / 2) * 7);
+    g.fill();
+  }
+  g.font = 'bold 18px Georgia, serif';
+  g.fillText('N', ox, oy - 42);
+}
+
+export function campMap(k: Kit): Object3D {
+  const b = new Batch();
+  const drift = M.wood(k.renderer, 'drift', 0.3);
+  const W = 0.66;
+  const H = (W * MAP_PX[1]) / MAP_PX[0];
+  const d = 0.04;
+  // a driftwood frame, its bars running past each other at the corners, lashed with twine
+  b.at(drift, rounded(W + d * 3, d, 0.03, d * 0.4), 0, H / 2 + d / 2, 0.02, 0, 0, 0.02);
+  b.at(drift, rounded(W + d * 3, d, 0.03, d * 0.4), 0.01, -H / 2 - d / 2, 0.02, 0, 0, -0.015);
+  b.at(drift, rounded(d, H + d * 3, 0.03, d * 0.4), -W / 2 - d / 2, 0, 0.022, 0, 0, 0.015);
+  b.at(drift, rounded(d, H + d * 3, 0.03, d * 0.4), W / 2 + d / 2, 0.005, 0.022, 0, 0, -0.02);
+  const twine = M.wood(k.renderer, 'bamboo', 0.2);
+  for (const sx of [-1, 1]) for (const sy of [-1, 1]) b.at(twine, new CylinderGeometry(0.024, 0.024, 0.02, 10).rotateX(Math.PI / 2), sx * (W / 2 + d / 2), sy * (H / 2 + d / 2), 0.03);
+  b.at(M.painted(k.renderer, 'campmap', MAP_PX[0], MAP_PX[1], campChart, 0.85), rounded(W, H, 0.004, 0.001, 1), 0, 0, 0.012);
   return b.group();
 }

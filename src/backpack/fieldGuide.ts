@@ -20,6 +20,10 @@
  * you take out of a rock fills its entry in (its names, where it's found, how many you've had and
  * your biggest, and a true fact), and the stone itself lies on the page, turning in the light.
  *
+ * Buy the pawn shop's map of the dancers' camps and a spread follows the chart: the whole island,
+ * every camp's fire marked on it, and a list of them, found or not. Point at one you've found (on
+ * the map or in the list) and you're there; the rest you walk to, and the map says where.
+ *
  * Once the golden statue's up, the title page carries one more line, small, over the title: how
  * long the journey took on the game clock (statue/save.ts), for the speedrunners.
  */
@@ -37,7 +41,8 @@ import { roundRect } from '../ui/panel.ts';
 import { InteractivePanel, register } from '../ui/pointer.ts';
 import { silhouette, thumbnail } from '../ui/thumbnail.ts';
 import { SHARK_ID } from '../fishing/shark.ts';
-import { drawChart, KEY, CHART, type ChartSource, type Place } from './chart.ts';
+import { centredText, drawChart, flame, KEY, CHART, ISLAND, type ChartSource, type Place } from './chart.ts';
+import { BEACH_CAMP, CAMPS, campStand, type CampSite } from '../camps/sites.ts';
 import { WALKS } from '../woodworks/gates.ts';
 import { PLINTH_RADIUS, TOWER_RADIUS } from '../skelter/constants.ts';
 import { SKELTER } from '../skelter/site.ts';
@@ -117,13 +122,17 @@ const WHEN: Record<string, string> = { day: 'by day', dawnDusk: 'at dawn and dus
 /** the big rare ones get a page each (the great white the very last) */
 const BIG = ['tarpon', ...Object.keys(TROPHY)];
 
-type Page = { kind: 'title' } | { kind: 'chart' } | { kind: 'pair'; ids: string[] } | { kind: 'big'; id: string } | { kind: 'last' } | { kind: 'gems'; ids: string[]; first: boolean };
+type Page = { kind: 'title' } | { kind: 'chart' } | { kind: 'camps' } | { kind: 'campList' } | { kind: 'pair'; ids: string[] } | { kind: 'big'; id: string } | { kind: 'last' } | { kind: 'gems'; ids: string[]; first: boolean };
 
 /** the gem spread, after the fish: four to a page */
 const GEM_PAGES: Page[] = [
   { kind: 'gems', ids: GEM_IDS.slice(0, 4), first: true },
   { kind: 'gems', ids: GEM_IDS.slice(4, 8), first: false },
 ];
+/** the camp map's spread (once the pawn shop's map is yours: village/homeGoods.ts 'campmap'), after the chart */
+const CAMP_PAGES: Page[] = [{ kind: 'camps' }, { kind: 'campList' }];
+export const CAMP_MAP = 'campmap';
+
 /** a gem entry's height on its page, where the first starts, and its picture's size (px) */
 const GEM_ROW = 236;
 const GEM_TOP = 118;
@@ -150,6 +159,7 @@ export class FieldGuide {
   private dirty = true;
 
   private chart: ReturnType<typeof drawChart> | null = null;
+  private island: ReturnType<typeof drawChart> | null = null;
 
   constructor(
     private readonly state: GameState,
@@ -224,9 +234,10 @@ export class FieldGuide {
     return p;
   }
 
-  /** every page: the fish's, then (once the pickaxe is yours) the gems' spread */
+  /** every page: the fish's (the camp map's spread after the chart, once it's yours), then (once the pickaxe is yours) the gems' spread */
   private get pages(): Page[] {
-    return this.state.gems?.pick ? [...this.fishPages, ...GEM_PAGES] : this.fishPages;
+    const fish = this.state.home.includes(CAMP_MAP) ? [...this.fishPages.slice(0, 2), ...CAMP_PAGES, ...this.fishPages.slice(2)] : this.fishPages;
+    return this.state.gems?.pick ? [...fish, ...GEM_PAGES] : fish;
   }
 
   get open(): boolean {
@@ -300,6 +311,8 @@ export class FieldGuide {
     const buttons: { id: string; x: number; y: number; w: number; h: number }[] = [];
     if (page?.kind === 'title') this.title(c);
     else if (page?.kind === 'chart') buttons.push(...this.chartPage(c, p.hover));
+    else if (page?.kind === 'camps') buttons.push(...this.campMap(c, p.hover));
+    else if (page?.kind === 'campList') buttons.push(...this.campList(c, p.hover));
     else if (page?.kind === 'last') this.lastPage(c);
     else if (page?.kind === 'pair') page.ids.forEach((id, i) => this.entry(c, id, 36 + i * 520, i === 0 && page.ids.length > 1));
     else if (page?.kind === 'big') this.bigEntry(c, page.id);
@@ -333,7 +346,7 @@ export class FieldGuide {
     if (j?.unveiled && j.time !== null) {
       c.fillStyle = '#8a6414';
       c.font = font(600, 30);
-      c.fillText(`★  Journey complete in ${clock(j.time)}  ★`, W / 2, 130);
+      c.fillText(`★  100% in ${clock(j.time)}  ★`, W / 2, 130);
     }
     c.fillStyle = INK_BROWN;
     c.font = font(700, 96);
@@ -592,7 +605,7 @@ export class FieldGuide {
     c.fillStyle = INK_BROWN;
     const how = left
       ? 'Fill every other page of this book. Then fish the deep water, past the drop-off.'
-      : 'Deep water past the drop-off, 6 m or more. When it runs, get your other hand on the rod and hold on. Never reel against a run.';
+      : 'Deep water past the drop-off, 6 m or more. When it runs, grab the rod below your rod hand with your other hand and hold on. Never reel against a run.';
     wrap(c, how, 70, 620, W - 140, 36, 3);
     if (got) {
       c.fillText(this.record(id), 70, 750, W - 140);
@@ -821,12 +834,161 @@ export class FieldGuide {
       c.fill();
       c.fillStyle = '#fff6e0';
       c.font = font(700, i + 1 > 9 ? 15 : 18);
-      c.textAlign = 'center';
-      c.fillText(String(i + 1), x + 14, y - 2);
+      centredText(c, String(i + 1), x + 14, y - 8);
       c.textAlign = 'left';
       c.fillStyle = INK_BROWN;
       c.font = font(600, 21);
       c.fillText(place.text, x + 34, y, colW - 40);
+    });
+    return buttons;
+  }
+
+  /* ── the camp map ─────────────────────────────────────────────────── */
+
+  /** the camps on the map: the twelve, and the beach party once it's come of them */
+  private campsShown(): CampSite[] {
+    return CAMPS.every((c) => this.state.camps[c.id]?.found) ? [...CAMPS, BEACH_CAMP] : CAMPS;
+  }
+
+  private campFound(c: CampSite): boolean {
+    return !!c.beach || !!this.state.camps[c.id]?.found;
+  }
+
+  /** Where you land for a camp: across the fire from its chest (camps/sites.ts campStand), facing the fire. */
+  private campPlace(c: CampSite): Place {
+    return { text: c.name, at: [c.x, c.z], stand: campStand(c), face: [c.x, c.z] };
+  }
+
+  /** The whole island with every camp's fire on it (found ones lit, the rest dark), the bay outlined, and you. */
+  private campMap(c: CanvasRenderingContext2D, hover: string | null): { id: string; x: number; y: number; w: number; h: number }[] {
+    const W = PX[0];
+    const buttons: { id: string; x: number; y: number; w: number; h: number }[] = [];
+    c.textAlign = 'center';
+    c.fillStyle = INK_BROWN;
+    c.font = font(700, 46);
+    c.fillText('THE DANCERS’ CAMPS', W / 2, 58);
+    c.font = `italic ${font(600, 22)}`;
+    c.fillStyle = INK_FADED;
+    c.fillText(this.travel ? 'point at a camp you’ve found to go there; the rest, walk to' : 'from the pawn shop’s old map', W / 2, 88);
+    if (!this.chartSource) return buttons;
+    const X = 40;
+    const Y = 110;
+    const w = W - 80;
+    const h = Math.round((w * (ISLAND.z1 - ISLAND.z0)) / (ISLAND.x1 - ISLAND.x0));
+    this.island ??= drawChart(this.chartSource, w, h, ISLAND, false);
+    const ch = this.island;
+    c.drawImage(ch.canvas, X, Y);
+    const px = (x: number, z: number): [number, number] => {
+      const [a, b] = ch.toPx(x, z);
+      return [X + a, Y + b];
+    };
+    // the bay's chart, outlined: that's the page before
+    const [b0x, b0y] = px(CHART.x0, CHART.z0);
+    const [b1x, b1y] = px(CHART.x1, CHART.z1);
+    c.setLineDash([8, 6]);
+    c.strokeStyle = 'rgba(46, 34, 20, 0.6)';
+    c.lineWidth = 2;
+    c.strokeRect(b0x, b0y, b1x - b0x, b1y - b0y);
+    c.setLineDash([]);
+    c.font = `italic ${font(700, 18)}`;
+    c.textAlign = 'center';
+    c.fillStyle = 'rgba(46, 34, 20, 0.75)';
+    c.fillText('THE BAY', (b0x + b1x) / 2, b1y - 8);
+    // the fires, numbered as in the list opposite
+    this.campsShown().forEach((camp, i) => {
+      const [x, y] = px(camp.x, camp.z);
+      const found = this.campFound(camp);
+      const id = `camp:${camp.id}`;
+      const on = hover === id;
+      flame(c, x, y, on ? 1.35 : 1, found);
+      c.font = font(700, 16);
+      c.fillStyle = found ? '#fff6e0' : '#6a4a2a';
+      centredText(c, String(i + 1), x, y + 3);
+      if (on) {
+        c.strokeStyle = '#ffd24a';
+        c.lineWidth = 4;
+        c.beginPath();
+        c.arc(x, y, 24, 0, Math.PI * 2);
+        c.stroke();
+      }
+      if (found) {
+        this.places.set(id, this.campPlace(camp));
+        buttons.push({ id, x: x - 22, y: y - 26, w: 44, h: 48 });
+      }
+    });
+    // you are here
+    const me = this.where?.();
+    if (me && me.x > ISLAND.x0 && me.x < ISLAND.x1 && me.z > ISLAND.z0 && me.z < ISLAND.z1) {
+      const [a, b] = px(me.x, me.z);
+      c.fillStyle = '#d0201a';
+      c.strokeStyle = '#fff6e0';
+      c.lineWidth = 3;
+      c.beginPath();
+      c.arc(a, b, 9, 0, Math.PI * 2);
+      c.fill();
+      c.stroke();
+      c.font = font(700, 20);
+      c.textAlign = 'left';
+      c.lineWidth = 5;
+      c.strokeStyle = 'rgba(242, 230, 204, 0.9)';
+      c.strokeText('YOU', a + 13, b + 7);
+      c.fillStyle = '#d0201a';
+      c.fillText('YOU', a + 13, b + 7);
+    }
+    // the legend
+    const ly = Y + h + 56;
+    c.textAlign = 'left';
+    flame(c, 70, ly - 8, 1, true);
+    c.fillStyle = INK_BROWN;
+    c.font = font(600, 24);
+    c.fillText('found', 96, ly);
+    flame(c, 250, ly - 8, 1, false);
+    c.fillStyle = INK_BROWN;
+    c.fillText('still to find', 276, ly);
+    c.font = `italic ${font(500, 22)}`;
+    c.fillStyle = INK_FADED;
+    wrap(c, 'Follow the drums: they carry further than the firelight. There are gem rocks to break on the way from one camp to the next.', 60, ly + 56, W - 120, 32, 3);
+    return buttons;
+  }
+
+  /** The camps by name, found or not: point at a found one to go there. */
+  private campList(c: CanvasRenderingContext2D, hover: string | null): { id: string; x: number; y: number; w: number; h: number }[] {
+    const W = PX[0];
+    const buttons: { id: string; x: number; y: number; w: number; h: number }[] = [];
+    const found = CAMPS.filter((k) => this.state.camps[k.id]?.found).length;
+    c.textAlign = 'center';
+    c.fillStyle = INK_BROWN;
+    c.font = font(700, 46);
+    c.fillText('THE CAMPS', W / 2, 58);
+    c.font = `italic ${font(600, 26)}`;
+    c.fillStyle = INK_FADED;
+    c.fillText(`${found} of ${CAMPS.length} found`, W / 2, 96);
+    const rowH = 66;
+    this.campsShown().forEach((camp, i) => {
+      const y = 130 + i * rowH;
+      const got = this.campFound(camp);
+      const id = `row:${camp.id}`;
+      if (got) {
+        this.places.set(id, this.campPlace(camp));
+        buttons.push({ id, x: 50, y, w: W - 100, h: rowH - 6 });
+        if (hover === id) {
+          c.fillStyle = 'rgba(154, 42, 26, 0.14)';
+          roundRect(c, 50, y, W - 100, rowH - 6, 12);
+          c.fill();
+        }
+      }
+      flame(c, 90, y + 28, 1, got);
+      c.font = font(700, 16);
+      c.fillStyle = got ? '#fff6e0' : '#6a4a2a';
+      centredText(c, String(i + 1), 90, y + 31);
+      c.textAlign = 'left';
+      c.fillStyle = got ? INK_BROWN : INK_FADED;
+      c.font = font(700, 30);
+      c.fillText(camp.name, 128, y + 40, 460);
+      c.textAlign = 'right';
+      c.font = got ? font(700, 24) : `italic ${font(500, 22)}`;
+      c.fillStyle = got ? (hover === id ? '#9a2a1a' : '#3a6a2a') : INK_FADED;
+      c.fillText(got ? (this.travel ? 'found ✓  go ▸' : 'found ✓') : 'not yet found', W - 64, y + 40);
     });
     return buttons;
   }

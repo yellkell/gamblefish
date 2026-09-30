@@ -25,6 +25,10 @@ export interface ChartSource {
 
 /** the part of the island charted (world metres) */
 export const CHART = { x0: -200, x1: 220, z0: -215, z1: 165 };
+export type Bounds = typeof CHART;
+
+/** the whole island, out to the furthest of the dancers' camps (the camp map's page: camps/sites.ts) */
+export const ISLAND: Bounds = { x0: -500, x1: 570, z0: -610, z1: 230 };
 
 /**
  * A place you can go from the chart: a building (by its name in the layout), or a spot `at`
@@ -67,16 +71,47 @@ export function placeAt(p: Place, buildings: BuildingFrame[]): [number, number] 
 
 const INK = '#2e2214';
 
-/** The chart's picture (no key, no "you are here": the page adds those), and where its markers went. */
-export function drawChart(src: ChartSource, w: number, h: number): { canvas: HTMLCanvasElement; markers: { n: number; x: number; y: number }[]; toPx: (x: number, z: number) => [number, number] } {
+/**
+ * Write `text` with its ink centred on (x, y): measured, not by the font's baseline (a digit's
+ * "middle" baseline sits it low in a round marker).
+ */
+export function centredText(c: CanvasRenderingContext2D, text: string, x: number, y: number): void {
+  c.textAlign = 'center';
+  c.textBaseline = 'alphabetic';
+  const m = c.measureText(text);
+  // (centre-aligned, the ink runs actualBoundingBoxLeft left of x and actualBoundingBoxRight right)
+  c.fillText(text, x - (m.actualBoundingBoxRight - m.actualBoundingBoxLeft) / 2, y + (m.actualBoundingBoxAscent - m.actualBoundingBoxDescent) / 2);
+}
+
+/** A dancers' camp's fire on a map: a flame, lit orange (found, or on the bought map), dark ink if not. Its bulb's middle is (x, y + 3k). */
+export function flame(c: CanvasRenderingContext2D, x: number, y: number, k: number, lit: boolean): void {
+  c.beginPath();
+  c.moveTo(x, y - 20 * k);
+  c.quadraticCurveTo(x + 15 * k, y - 2 * k, x + 9 * k, y + 10 * k);
+  c.quadraticCurveTo(x, y + 16 * k, x - 9 * k, y + 10 * k);
+  c.quadraticCurveTo(x - 15 * k, y - 2 * k, x, y - 20 * k);
+  c.closePath();
+  c.fillStyle = lit ? '#d2461c' : 'rgba(242, 230, 204, 0.92)';
+  c.fill();
+  c.lineWidth = 2.5 * Math.max(1, k * 0.8);
+  c.strokeStyle = lit ? '#7a1e0c' : '#6a4a2a';
+  c.stroke();
+}
+
+/**
+ * The chart's picture (no key, no "you are here": the page adds those), and where its markers went.
+ * `bounds` is the part of the island it covers (the bay, or the whole island for the camp map, which
+ * leaves the village's numbered markers off: they'd be a smudge at that scale).
+ */
+export function drawChart(src: ChartSource, w: number, h: number, bounds: Bounds = CHART, numbered = true): { canvas: HTMLCanvasElement; markers: { n: number; x: number; y: number }[]; toPx: (x: number, z: number) => [number, number] } {
   const c = document.createElement('canvas');
   c.width = w;
   c.height = h;
   const g = c.getContext('2d')!;
-  const sx = w / (CHART.x1 - CHART.x0);
-  const sz = h / (CHART.z1 - CHART.z0);
-  const toPx = (x: number, z: number): [number, number] => [(x - CHART.x0) * sx, (z - CHART.z0) * sz];
-  const at = (px: number, py: number): number => src.heightAt(CHART.x0 + px / sx, CHART.z0 + py / sz);
+  const sx = w / (bounds.x1 - bounds.x0);
+  const sz = h / (bounds.z1 - bounds.z0);
+  const toPx = (x: number, z: number): [number, number] => [(x - bounds.x0) * sx, (z - bounds.z0) * sz];
+  const at = (px: number, py: number): number => src.heightAt(bounds.x0 + px / sx, bounds.z0 + py / sz);
 
   // heights on the pixel grid (one extra row and column for the slopes and the contours)
   const H = new Float32Array((w + 1) * (h + 1));
@@ -172,6 +207,7 @@ export function drawChart(src: ChartSource, w: number, h: number): { canvas: HTM
   // numbered markers, nudged apart where places crowd together (with a leader back to the building)
   const markers: { n: number; x: number; y: number; bx: number; by: number }[] = [];
   KEY.forEach((place, i) => {
+    if (!numbered) return;
     const at = placeAt(place, src.buildings);
     if (!at) return;
     const [bx, by] = toPx(at[0], at[1]);
@@ -209,9 +245,7 @@ export function drawChart(src: ChartSource, w: number, h: number): { canvas: HTM
     g.stroke();
     g.fillStyle = '#fff6e0';
     g.font = `700 ${m.n > 9 ? 15 : 18}px 'Rajdhani', 'Arial Black', sans-serif`;
-    g.textAlign = 'center';
-    g.textBaseline = 'middle';
-    g.fillText(String(m.n), m.x, m.y + 1);
+    centredText(g, String(m.n), m.x, m.y);
   }
 
   // a neat ink border

@@ -2,8 +2,8 @@
  * THE FIRE DANCERS' CAMPS: FIRE FIGHT 2's beach party, hidden in twelve little groups out in the
  * wilds of the island (camps/sites.ts), each dancing round its fire with a chest beside it.
  *
- *  FINDING ONE   None is on the chart and none can be seen from the start (tools/camps-check.mjs
- *                proves it). Go and look: over the ridges, down the hollows. The drums carry
+ *  FINDING ONE   None is on the bay's chart and none can be seen from the start (tools/camps-check.mjs
+ *                proves it); the pawn shop sells a map of them (the field guide gets a page). Go and look: over the ridges, down the hollows. The drums carry
  *                further than the firelight (camps/sound.ts). Walk into a camp and its dancers are
  *                pleased to see you: they throw their hands in the air, and gift you everything
  *                in their chest (no pop-up: the chest's readout keeps the count, "2 of 12 camps found").
