@@ -328,8 +328,13 @@ export class Surfaces {
    * out (the nearest, counting the line's way back up to the tip at `a`) and gives the line's two
    * bends there: `top`, where it comes down, and `under`, beneath the beams. False if the fish at
    * `b` isn't under a deck.
+   *
+   * `was` is where it came out last frame, if it did: the line's caught on that edge, and slides
+   * along it as the fish swims about under there, rather than leaping across the deck to another
+   * way out that's only a little shorter (or one a pile has just stopped being in the way of). It
+   * only goes round to another way out when that's a good deal shorter.
    */
-  lineUnder(a: Vec3, b: Vec3, top: Vec3, under: Vec3, lift = 0.02): boolean {
+  lineUnder(a: Vec3, b: Vec3, top: Vec3, under: Vec3, was: { x: number; z: number } | null = null, lift = 0.02): boolean {
     const first = this.deckAt(b.x, b.z);
     if (!first || !(first.top > b.y + 0.3)) return false;
     const deckOn = (x: number, z: number): Deck | null => {
@@ -341,10 +346,8 @@ export class Surfaces {
     const walls = this.walls.filter((w) => w.sill > b.y && Math.abs(w.bx - b.x) < reach + w.br && Math.abs(w.bz - b.z) < reach + w.br);
     // (under the beams of the deck it's under: the height of the line's way out)
     const underY = (d: Deck): number => Math.max(b.y, d.top - (DECK_DEPTH[d.tag] ?? DECK_DEPTH.other) - EDGE_CLEAR);
-    let best = Infinity;
-    let bestFree = false;
-    let edge: Deck = first;
-    const tryDir = (dx: number, dz: number): void => {
+    type Way = { x: number; z: number; cost: number; free: boolean; edge: Deck };
+    const tryDir = (dx: number, dz: number): Way | null => {
       let last: Deck = first;
       for (let d = 0.05; d <= 12; d += 0.05) {
         const hit = deckOn(b.x + dx * d, b.z + dz * d);
@@ -383,21 +386,33 @@ export class Surfaces {
         }
         const x = b.x + dx * out;
         const z = b.z + dz * out;
-        const cost = out + Math.hypot(a.x - x, a.z - z);
-        if ((free && !bestFree) || (free === bestFree && cost < best)) {
-          best = cost;
-          bestFree = free;
-          edge = last;
-          top.x = under.x = x;
-          top.z = under.z = z;
-        }
-        return;
+        return { x, z, cost: out + Math.hypot(a.x - x, a.z - z), free, edge: last };
       }
+      return null;
+    };
+    // (a clear way out beats a shorter one through the timber)
+    const better = (p: Way, q: Way | null): boolean => !q || (p.free && !q.free) || (p.free === q.free && p.cost < q.cost);
+    let best: Way | null = null;
+    const consider = (dx: number, dz: number): void => {
+      const w = tryDir(dx, dz);
+      if (w && better(w, best)) best = w;
     };
     const toA = Math.hypot(a.x - b.x, a.z - b.z);
-    if (toA > 1e-3) tryDir((a.x - b.x) / toA, (a.z - b.z) / toA);
-    for (let i = 0; i < 32; i++) tryDir(Math.cos((i / 32) * Math.PI * 2), Math.sin((i / 32) * Math.PI * 2));
-    if (best === Infinity) return false;
+    if (toA > 1e-3) consider((a.x - b.x) / toA, (a.z - b.z) / toA);
+    for (let i = 0; i < 32; i++) consider(Math.cos((i / 32) * Math.PI * 2), Math.sin((i / 32) * Math.PI * 2));
+    // the way it came out last frame, held unless another is LINE_HOLD shorter (a pile or a brace
+    // in the way of either counting LINE_HOLD longer)
+    const toWas = was ? Math.hypot(was.x - b.x, was.z - b.z) : 0;
+    if (was && toWas > 1e-3) {
+      const held = tryDir((was.x - b.x) / toWas, (was.z - b.z) / toWas);
+      const weigh = (w: Way): number => w.cost + (w.free ? 0 : LINE_HOLD);
+      if (held && (!best || weigh(held) < weigh(best) + LINE_HOLD)) best = held;
+    }
+    const way = best as Way | null;
+    if (!way) return false;
+    top.x = under.x = way.x;
+    top.z = under.z = way.z;
+    const edge = way.edge;
     // it comes down clear of it all to under the beams (lineRests lays it over the rail on its way)
     under.y = underY(edge);
     top.y = Math.max(under.y, this.topAt(top.x, top.z) + lift);
@@ -642,6 +657,9 @@ const LINE_WALLS = 512;
 export const LINE_PAD = 0.06;
 /** how far off a deck's edge a line hangs: past the plank ends, clear of LINE_PAD */
 const EDGE_CLEAR = LINE_PAD + 0.02;
+/** how much shorter (m) another way out from under a deck must be for a line to go round to it
+ *  from the one it's caught on (lineUnder) */
+const LINE_HOLD = 2;
 
 /** Proper crossing of two XZ segments (ff2's `segmentsCross`). */
 function segmentsCross(

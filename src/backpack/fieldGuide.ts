@@ -132,6 +132,9 @@ const GEM_PAGES: Page[] = [
 /** the camp map's spread (once the pawn shop's map is yours: village/homeGoods.ts 'campmap'), after the chart */
 const CAMP_PAGES: Page[] = [{ kind: 'camps' }, { kind: 'campList' }];
 export const CAMP_MAP = 'campmap';
+/** where you land at the end of the pier (the chart's pier head): the middle of the head, a step
+ *  in from its end rail, clear of the bench, the table and the deep walk's crate, looking out to sea */
+const PIER_END: [number, number] = [55.9, 38.2];
 
 /** a gem entry's height on its page, where the first starts, and its picture's size (px) */
 const GEM_ROW = 236;
@@ -660,6 +663,27 @@ export class FieldGuide {
     label('DROP-OFF · 6 m', 128, 100, 20);
     label('DEEP WATER', 20, 140, 24);
     label('THE PIER', L.pier.x + 26, (L.pier.zStart + L.pier.zEnd) / 2 + 12, 20);
+    // the pier head is a button too (point at it to go out to the end of the pier), and so is
+    // the pier's name
+    {
+      const P = L.pier;
+      const [hx0, hy0] = px(P.x - P.headWidth / 2, P.zEnd - P.headDepth);
+      const [hx1, hy1] = px(P.x + P.headWidth / 2, P.zEnd);
+      const on = hover === 'pier' || hover === 'pierName';
+      if (on) {
+        c.strokeStyle = '#ffd24a';
+        c.lineWidth = 4;
+        c.strokeRect(hx0 - 4, hy0 - 4, hx1 - hx0 + 8, hy1 - hy0 + 8);
+      }
+      const end = { text: 'The end of the pier', at: PIER_END, stand: PIER_END, face: [PIER_END[0], PIER_END[1] + 20] as [number, number] };
+      this.places.set('pier', end);
+      this.places.set('pierName', end);
+      const cx = (hx0 + hx1) / 2;
+      const cy = (hy0 + hy1) / 2;
+      buttons.push({ id: 'pier', x: cx - 24, y: cy - 20, w: 48, h: 40 });
+      const [lx, ly] = px(P.x + 26, (P.zStart + P.zEnd) / 2 + 12);
+      buttons.push({ id: 'pierName', x: lx - 50, y: ly - 22, w: 100, h: 30 });
+    }
     // the walks off the pier head, once they're built: nothing on the chart until then
     const built = this.walks?.() ?? {};
     for (const w of WALKS) {
