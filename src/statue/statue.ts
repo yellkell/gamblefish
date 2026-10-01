@@ -9,7 +9,8 @@
  *                markings kept as a shading in the gold. Little stars glint over it by day and
  *                night, and after dark it keeps a warm glow of its own.
  *  THE PLINTH    pale coral stone on two steps, a gold band round it, and on its face an engraved
- *                bronze plaque: 100% COMPLETE! THANKS FOR PLAYING! and the credits.
+ *                bronze plaque: 100% COMPLETE! THANKS FOR PLAYING! and the credits. On its back a
+ *                second: the island is Tidewater's, and whose that is.
  *  THE UNVEILING the moment the last leg's done (not while you're up the helter skelter or have a
  *                fish on), it rises out of the sand where you come down onto the beach
  *                (statue/site.ts), to a fanfare, a modest 100%! banner over it and a word wherever you are; then it's on the
@@ -105,6 +106,7 @@ export class Statue {
   private box: BoxCollider | null = null;
   private gold!: MeshStandardMaterial;
   private plaque!: MeshStandardMaterial;
+  private backPlaque!: MeshStandardMaterial;
   private sparkle: Points | null = null;
   /** where the bill is, in the statue's frame (the unveiling's burst goes off there) */
   private readonly bill = new Vector3();
@@ -153,7 +155,7 @@ export class Statue {
       const n = this.d.night.value;
       this.gold.envMapIntensity = 1.3 * (1 - 0.85 * n);
       this.gold.emissiveIntensity = 0.06 + 0.3 * n;
-      this.plaque.envMapIntensity = 1.1 * (1 - 0.85 * n);
+      this.plaque.envMapIntensity = this.backPlaque.envMapIntensity = 1.1 * (1 - 0.85 * n);
     }
   }
 
@@ -263,6 +265,11 @@ export class Statue {
     b.add(this.gold, goldPiece(rounded(pw + 0.1, ph + 0.1, 0.05, 0.02, 2), BRONZE), new Matrix4().makeTranslation(0, py, face + 0.012));
     this.plaque = new MeshStandardMaterial({ map: plaqueTexture(), roughness: 0.42, metalness: 0.75, envMap: casinoEnv(r), envMapIntensity: 1.1 });
     b.at(this.plaque, rounded(pw, ph, 0.012, 0.004, 1), 0, py, face + 0.04);
+    // and on the back, the same again, turned to face the sea: whose island this is
+    b.add(this.gold, goldPiece(rounded(pw + 0.1, ph + 0.1, 0.05, 0.02, 2), BRONZE), new Matrix4().makeTranslation(0, py, -face - 0.012));
+    this.backPlaque = this.plaque.clone();
+    this.backPlaque.map = islandPlaqueTexture();
+    b.at(this.backPlaque, rounded(pw, ph, 0.012, 0.004, 1), 0, py, -face - 0.04, 0, Math.PI);
 
     // the splash it leaps from: a crown of water on the plinth, a plume twisting up round its tail
     const top = TOP_Y;
@@ -468,8 +475,8 @@ function stoneMaterial(r: Kit['renderer']): MeshStandardMaterial {
   return m;
 }
 
-/** The plaque's face: engraved bronze, the letters cut in and filled dark, their edges catching the light. */
-function plaqueTexture(): CanvasTexture {
+/** Engraved bronze to letter: the plate, brushed and ruled, and a chisel (`engrave`, `flourish`) for it. */
+function bronze(): { c: HTMLCanvasElement; engrave: (text: string, y: number, size: number, style?: string, weight?: number, spacing?: number) => void; flourish: (y: number) => void; done: () => CanvasTexture } {
   const W = 1280;
   const H = 806;
   const c = document.createElement('canvas');
@@ -514,31 +521,59 @@ function plaqueTexture(): CanvasTexture {
     g.fillStyle = '#2a1706';
     g.fillText(text, W / 2, y, W - 140);
   };
+  // a flourish: a rule with a diamond in the middle
+  const flourish = (y: number): void => {
+    g.strokeStyle = '#2a1706';
+    g.lineWidth = 3;
+    g.beginPath();
+    g.moveTo(W / 2 - 300, y);
+    g.lineTo(W / 2 - 26, y);
+    g.moveTo(W / 2 + 26, y);
+    g.lineTo(W / 2 + 300, y);
+    g.stroke();
+    g.fillStyle = '#2a1706';
+    g.beginPath();
+    g.moveTo(W / 2, y - 16);
+    g.lineTo(W / 2 + 16, y);
+    g.lineTo(W / 2, y + 16);
+    g.lineTo(W / 2 - 16, y);
+    g.closePath();
+    g.fill();
+  };
+  const done = (): CanvasTexture => {
+    const t = new CanvasTexture(c);
+    t.colorSpace = SRGBColorSpace;
+    t.anisotropy = 8;
+    return t;
+  };
+  return { c, engrave, flourish, done };
+}
+
+/** The plaque's face: engraved bronze, the letters cut in and filled dark, their edges catching the light. */
+function plaqueTexture(): CanvasTexture {
+  const { engrave, flourish, done } = bronze();
   engrave('100% COMPLETE!', 170, 104, '', 700, 6);
   engrave('Thanks for Playing!', 300, 76, 'italic', 400);
-  // a flourish: a rule with a diamond in the middle
-  g.strokeStyle = '#2a1706';
-  g.lineWidth = 3;
-  g.beginPath();
-  g.moveTo(W / 2 - 300, 392);
-  g.lineTo(W / 2 - 26, 392);
-  g.moveTo(W / 2 + 26, 392);
-  g.lineTo(W / 2 + 300, 392);
-  g.stroke();
-  g.fillStyle = '#2a1706';
-  g.beginPath();
-  g.moveTo(W / 2, 376);
-  g.lineTo(W / 2 + 16, 392);
-  g.lineTo(W / 2, 408);
-  g.lineTo(W / 2 - 16, 392);
-  g.closePath();
-  g.fill();
+  flourish(392);
   engrave('Created by yellkell', 480, 66, '', 400, 1);
   engrave('Music by', 574, 46, 'italic', 400);
   engrave('IBWildcat1998, poopoodoodoo689,', 644, 58, '', 400);
   engrave('JakeThePro & Crystalzach', 714, 58, '', 400);
-  const t = new CanvasTexture(c);
-  t.colorSpace = SRGBColorSpace;
-  t.anisotropy = 8;
-  return t;
+  return done();
+}
+
+/**
+ * The back plaque: the island this game is set on, and its maker. Tidewater's world, its fish
+ * and its fishing came over whole (vendor/tidewater, MIT); this is where the game says so.
+ */
+function islandPlaqueTexture(): CanvasTexture {
+  const { engrave, flourish, done } = bronze();
+  engrave('THE ISLAND', 160, 96, '', 700, 6);
+  engrave('is Tidewater, by dgreenheck', 280, 70, 'italic', 400);
+  flourish(372);
+  engrave('its land and sea, its village and its fish,', 460, 48, '', 400);
+  engrave('and the fishing at the heart of this game', 528, 48, '', 400);
+  engrave('github.com/dgreenheck/tidewater', 622, 52, '', 400, 1);
+  engrave('MIT License  ·  © 2026 DRG Software Solutions LLC', 704, 38, 'italic', 400);
+  return done();
 }
