@@ -31,7 +31,7 @@ import { TROPHY } from '../fishing/trophyFish.ts';
 import { InteractivePanel, register } from '../ui/pointer.ts';
 import { thumbnail } from '../ui/thumbnail.ts';
 import { Lettering, lookFor, mount, type InkName } from '../ui/boards.ts';
-import { Batch, M, rng, rounded, stalk, turned, type Kit } from './craft.ts';
+import { Batch, M, rounded, stalk, turned, type Kit } from './craft.ts';
 import { shopCounter, WORKBENCH, WORKBENCH_SIZE, type Interior } from './interiors.ts';
 import { mergeStatic } from './merge.ts';
 import { ROLES } from './roles.ts';
@@ -92,22 +92,16 @@ function tackleDecor(k: Kit, room: Interior, top: number, cz: number): Group {
 
 function baitDecor(k: Kit, room: Interior, top: number, cz: number): Group {
   const g = new Group();
-  // the live-bait tank by the right wall: blue water in glass, a school of baitfish, a bubbler
+  // the live-bait tank by the right wall: blue water in glass. (A school of baitfish and a
+  // bubbler's bubbles swam in it, but inside the water's solid box: never seen, and the fish were
+  // seven draws of the heaviest shader in the room.)
   const tank = new Group();
   const b = new Batch();
   b.at(M.metal(k.renderer, '#5a5e66', 0.5), rounded(0.74, 0.62, 0.5, 0.02), 0, 0.31, 0);
   b.at(M.gloss(k.renderer, '#1e6a8a'), rounded(0.68, 0.34, 0.44, 0.01), 0, 0.8, 0);
   b.at(M.glass(k.renderer, '#cfefff', 0.18), rounded(0.72, 0.42, 0.48, 0.008), 0, 0.84, 0);
   b.at(M.metal(k.renderer, '#5a5e66', 0.5), rounded(0.74, 0.03, 0.5, 0.008), 0, 1.06, 0);
-  for (let i = 0; i < 10; i++) b.at(M.glass(k.renderer, '#ffffff', 0.5), new SphereGeometry(0.006 + (i % 3) * 0.003, 8, 6), 0.28, 0.66 + i * 0.03, 0.15 + Math.sin(i) * 0.01);
   tank.add(b.group());
-  const r = rng(12);
-  for (let i = 0; i < 7; i++) {
-    const { mesh, uniforms } = k.props.makeFish('silverside');
-    uniforms.uSwim.value = 0.05;
-    uniforms.uTime.value = r() * 5;
-    put(tank, mesh, -0.22 + r() * 0.44, 0.72 + r() * 0.16, -0.14 + r() * 0.28, (r() - 0.5) * 0.8 + Math.PI / 2, 0, 0, 0.1 + r() * 0.03);
-  }
   tank.position.set(room.w / 2 - 0.45, 0, 0.35);
   tank.rotation.y = -Math.PI / 2;
   g.add(tank);

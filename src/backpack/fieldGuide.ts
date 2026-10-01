@@ -164,6 +164,18 @@ export class FieldGuide {
   private chart: ReturnType<typeof drawChart> | null = null;
   private island: ReturnType<typeof drawChart> | null = null;
 
+  /** the bay's chart (the page's width, less its margins) */
+  private bayChart(src: ChartSource): ReturnType<typeof drawChart> {
+    const w = PX[0] - 80;
+    return (this.chart ??= drawChart(src, w, Math.round((w * (CHART.z1 - CHART.z0)) / (CHART.x1 - CHART.x0))));
+  }
+
+  /** the whole island, for the camp map */
+  private islandChart(src: ChartSource): ReturnType<typeof drawChart> {
+    const w = PX[0] - 80;
+    return (this.island ??= drawChart(src, w, Math.round((w * (ISLAND.z1 - ISLAND.z0)) / (ISLAND.x1 - ISLAND.x0)), ISLAND, false));
+  }
+
   constructor(
     private readonly state: GameState,
     props: Props,
@@ -217,6 +229,13 @@ export class FieldGuide {
     const board = new Mesh(new BoxGeometry(SIZE[0] * 2 + 0.03, 0.012, SIZE[1] + 0.03), new MeshLambertMaterial({ color: 0x5a2e1a }));
     board.position.y = -0.008;
     this.group.add(board);
+    // the charts' pictures, drawn now with everything else that's made while the island loads: a
+    // pixel at a time over half a million pixels, drawn the first time you turned to them, they
+    // were a stall as the page turned
+    if (chartSource) {
+      this.bayChart(chartSource);
+      this.islandChart(chartSource);
+    }
     this.left = this.page(-SIZE[0] / 2 - 0.002);
     this.right = this.page(SIZE[0] / 2 + 0.002);
     this.left.onClick = (id) => this.click(id);
@@ -232,7 +251,8 @@ export class FieldGuide {
     const p = new InteractivePanel(PX, SIZE);
     p.mesh.rotation.x = -Math.PI / 2;
     p.mesh.position.set(x, 0.001, 0);
-    p.paint = () => this.paint();
+    // a hover repaints just its own page (both, and both sent to the GPU, was twice the stutter)
+    p.paint = () => this.repaint(p);
     register(p);
     this.group.add(p.mesh);
     return p;
@@ -287,6 +307,12 @@ export class FieldGuide {
     this.spread = s;
     uiClick();
     this.paint();
+  }
+
+  /** One page again (the pointer's moved over it). */
+  private repaint(p: InteractivePanel): void {
+    const left = p === this.left;
+    this.paintPage(p, this.spread * 2 + (left ? 0 : 1), left ? 'left' : 'right');
   }
 
   private paint(): void {
@@ -637,10 +663,8 @@ export class FieldGuide {
     if (!this.chartSource) return buttons;
     const X = 40;
     const Y = 100;
-    const w = W - 80;
-    const h = Math.round((w * (CHART.z1 - CHART.z0)) / (CHART.x1 - CHART.x0));
-    this.chart ??= drawChart(this.chartSource, w, h);
-    const ch = this.chart;
+    const ch = this.bayChart(this.chartSource);
+    const h = ch.canvas.height;
     c.drawImage(ch.canvas, X, Y);
     const px = (x: number, z: number): [number, number] => {
       const [a, b] = ch.toPx(x, z);
@@ -898,10 +922,8 @@ export class FieldGuide {
     if (!this.chartSource) return buttons;
     const X = 40;
     const Y = 110;
-    const w = W - 80;
-    const h = Math.round((w * (ISLAND.z1 - ISLAND.z0)) / (ISLAND.x1 - ISLAND.x0));
-    this.island ??= drawChart(this.chartSource, w, h, ISLAND, false);
-    const ch = this.island;
+    const ch = this.islandChart(this.chartSource);
+    const h = ch.canvas.height;
     c.drawImage(ch.canvas, X, Y);
     const px = (x: number, z: number): [number, number] => {
       const [a, b] = ch.toPx(x, z);
@@ -938,7 +960,8 @@ export class FieldGuide {
       }
       if (found) {
         this.places.set(id, this.campPlace(camp));
-        buttons.push({ id, x: x - 22, y: y - 26, w: 44, h: 48 });
+        // (bigger than the flame, so a hand's tremor doesn't keep slipping off it)
+        buttons.push({ id, x: x - 32, y: y - 34, w: 64, h: 64 });
       }
     });
     // you are here
@@ -995,7 +1018,8 @@ export class FieldGuide {
       const id = `row:${camp.id}`;
       if (got) {
         this.places.set(id, this.campPlace(camp));
-        buttons.push({ id, x: 50, y, w: W - 100, h: rowH - 6 });
+        // (the whole row, no gap to the next: the pointer slipping into a gap was a repaint)
+        buttons.push({ id, x: 50, y: y - 3, w: W - 100, h: rowH });
         if (hover === id) {
           c.fillStyle = 'rgba(154, 42, 26, 0.14)';
           roundRect(c, 50, y, W - 100, rowH - 6, 12);
