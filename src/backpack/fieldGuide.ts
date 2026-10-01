@@ -244,7 +244,7 @@ export class FieldGuide {
     this.right.repaintOnFonts(() => (this.dirty = true));
     this.group.visible = false;
     // (the chart draws the walks as they're built)
-    state.onChange(() => (this.dirty = true), { logs: true });
+    state.onChange(() => (this.dirty = true), { logs: true, fish: true });
   }
 
   private page(x: number): InteractivePanel {

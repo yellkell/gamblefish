@@ -18,7 +18,7 @@ import type { Place } from './backpack/chart.ts';
 import { FishingSystem, fishingDeps, fishingView } from './fishing/FishingSystem.ts';
 import { loadProps } from './fishing/props.ts';
 import { createGameState } from './fishing/tidewater.ts';
-import { warmUpNow } from './fx/warm.ts';
+import { warmUp, warmUpNow } from './fx/warm.ts';
 import { WristWallet } from './ui/wallet.ts';
 import { WaterFx } from './fx/water.ts';
 import { locomotion, teleportView, TeleportSystem } from './locomotion/TeleportSystem.ts';
@@ -255,6 +255,10 @@ World.create(container, {
   const props = loadProps(propsBuf);
   // the silvery fish reflect the casinos' studio light (a soft, neutral room)
   props.setEnv(casinoEnv(world.renderer));
+  // the fish's skin: its shader built behind the boot intro, and kept (a fish of its own that's
+  // never let go): a landed fish's material is let go as it goes into your hand, and with none
+  // left the shader went too, built again then and there for the next (fx/warm.ts)
+  warmUp(props.makeFish('silverside').mesh);
   await built(0.35);
   // the mark's leaping fish: the sailfish, sail up, mid-thrash, photographed side on
   {
