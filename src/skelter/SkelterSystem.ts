@@ -25,7 +25,7 @@
  */
 
 import { createSystem } from '@iwsdk/core';
-import { AdditiveBlending, BoxGeometry, ConeGeometry, CylinderGeometry, DoubleSide, Group, InstancedMesh, Matrix4, Mesh, MeshBasicMaterial, MeshLambertMaterial, Object3D, RingGeometry, TorusGeometry, Vector3, type Material } from 'three';
+import { AdditiveBlending, ConeGeometry, CylinderGeometry, DoubleSide, Group, InstancedMesh, Matrix4, Mesh, MeshBasicMaterial, MeshLambertMaterial, RingGeometry, TorusGeometry, Vector3, type Material } from 'three';
 import { logThunk, plankLay, uiDeny, winFanfare } from '../audio/sfx.ts';
 import { musicView } from '../audio/music.ts';
 import { skelterAudio } from '../audio/skelter.ts';
@@ -39,7 +39,9 @@ import { INK, Panel, roundRect } from '../ui/panel.ts';
 import { InteractivePanel, register } from '../ui/pointer.ts';
 import type { BoxCollider } from '../world/data.ts';
 import type { SkyState } from '../world/sky.ts';
+import { rngOf } from '../village/signs.ts';
 import { BuildSign, type SignText } from '../woodworks/buildSign.ts';
+import { CRATE_LOGS, openCrate } from '../woodworks/crate.ts';
 import { clipAbove, setBuilding, BUILT } from './clip.ts';
 import { Coins } from './coins.ts';
 import { BARRIER_SIZE, GROUND_LANDING_Y, HEAD_RADIUS, LANDING_HOLD, PLINTH_RADIUS, PLINTH_TOP, ROOF_HEIGHT, SLIDE_PITCH, SLIDE_SPEED, TOTAL_DESCENT, TOTAL_TIERS, TOWER_RADIUS, TOWER_TOP } from './constants.ts';
@@ -57,6 +59,8 @@ const FULL_H = TOWER_TOP + ROOF_HEIGHT + 16;
 /** how fast the work climbs (m/s) as the logs go in, and a hammer's knock every so often */
 const RISE = 30;
 const KNOCK_S = 0.3;
+/** the build crate's size, against the walks' (it's read from across the plot) */
+const CRATE_SCALE = 1.4;
 /** the key in the save's woodworks.built */
 const KEY = 'skelter';
 /** seconds between refreshes of the fast-changing HUD readouts (each one repaints and re-uploads
@@ -110,7 +114,7 @@ export class SkelterSystem extends createSystem({}) {
   private collar!: Group;
   private stakes!: Group;
   private crate!: Group;
-  private crateFill!: Object3D;
+  private crateFill!: Group;
   private crateBox!: BoxCollider;
   private crateIn = false;
   private sign!: BuildSign;
@@ -211,26 +215,24 @@ export class SkelterSystem extends createSystem({}) {
     this.crate = new Group();
     this.crate.position.set(cx, ground(cx, cz), cz);
     this.crate.rotation.y = Math.atan2(tx, tz);
-    const slat = new MeshLambertMaterial({ color: 0x9a7a52 });
-    const dark = new MeshLambertMaterial({ color: 0x5a4432 });
-    const box = (m: MeshLambertMaterial, sx: number, sy: number, sz: number, x: number, y: number, z: number, ry = 0): Mesh => {
-      const o = new Mesh(new BoxGeometry(sx, sy, sz), m);
-      o.position.set(x, y, z);
-      o.rotation.y = ry;
-      this.crate.add(o);
-      return o;
-    };
-    box(dark, 1.16, 0.62, 1.16, 0, 0.31, 0);
-    for (const y of [0.1, 0.31, 0.52])
-      for (const [x, z, r] of [
-        [0, 0.585, 0],
-        [0, -0.585, 0],
-        [0.585, 0, 1],
-        [-0.585, 0, 1],
-      ])
-        box(slat, 1.18, 0.14, 0.03, x, y, z, (r * Math.PI) / 2);
-    this.crateFill = box(new MeshLambertMaterial({ color: 0x7a5636 }), 1.08, 0.1, 1.08, 0, 0.1, 0);
-    this.crateBox = { tag: 'buildCrate', walkable: false, solid: true, cx, cz, hx: 0.6, hz: 0.6, rotY: this.crate.rotation.y, top: this.crate.position.y + 0.62, bottom: this.crate.position.y - 1 };
+    // the same open crate as the walks' on the pier head, only bigger (it's read from across the plot)
+    const crate = openCrate();
+    crate.scale.setScalar(CRATE_SCALE);
+    this.crate.add(crate);
+    // the logs in it, stacked as they land, until the work's caught up with them
+    this.crateFill = new Group();
+    const lr = rngOf(71);
+    for (const [x, y, z] of CRATE_LOGS) {
+      const log = new Mesh(this.logGeo, this.logMat);
+      log.position.set(x + (lr() - 0.5) * 0.05, y, z);
+      log.rotation.set((lr() - 0.5) * 0.6, (lr() - 0.5) * 0.12, 0);
+      log.visible = false;
+      this.crateFill.add(log);
+    }
+    this.crateFill.scale.setScalar(CRATE_SCALE);
+    this.crate.add(this.crateFill);
+    const half = 0.4 * CRATE_SCALE;
+    this.crateBox = { tag: 'buildCrate', walkable: false, solid: true, cx, cz, hx: half, hz: half, rotY: this.crate.rotation.y, top: this.crate.position.y + 0.62 * CRATE_SCALE, bottom: this.crate.position.y - 1 };
     this.scene.add(this.crate);
     // the board: on its own two posts beside the crate once the crate's gone (it's the ride's sign then)
     this.signGroup = new Group();
@@ -388,7 +390,9 @@ export class SkelterSystem extends createSystem({}) {
       }
       return true;
     });
-    this.crateFill.visible = this.queued > 0 || this.flying.length > 0;
+    // the logs in the crate that the work hasn't caught up with yet (as on the walks' crates)
+    const left = Math.ceil(this.logsIn() - (this.shownH / FULL_H) * SKELTER.cost - 1e-6);
+    this.crateFill.children.forEach((log, i) => (log.visible = i < left));
     // the tower rises once the logs are in
     const target = this.target();
     const settled = this.queued === 0 && this.flying.length === 0;
