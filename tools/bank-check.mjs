@@ -216,23 +216,23 @@ console.log('\nlogging in with the email you paid with');
   check("but not from one that's been played", held.status === 409 && held.json?.taken === true, `${held.status}`);
 }
 
-console.log('\nlogging in with a receipt number');
+console.log('\nREDEEM: a receipt number');
 {
   const co = await req('/checkout', { method: 'POST', headers: as('receipt-buyer'), body: { pack: 'purse' } });
   const pay = await req('/dev-pay', { method: 'POST', headers: { 'content-type': 'application/json', accept: 'application/json' }, body: { s: co.json.id, email: 'buyer@example.com' } });
   const number = String(pay.json?.receiptNumber ?? '');
   check('a payment has a receipt number', /^\d{4}-\d{4}$/.test(number), number);
-  const restore = (email, receipt, who = 'restorer') => req('/restore', { method: 'POST', headers: { 'content-type': 'application/json', 'x-forwarded-for': who }, body: { email, receipt } });
-  const ok = await restore('Buyer@Example.com ', `#${number.replace('-', ' ')}`);
-  check('the email and the receipt number sign the headset in as the account that paid', ok.status === 200 && ok.json?.token === 'dev:receipt-buyer' && ok.json?.purchases === 9000, `${ok.status} ${JSON.stringify(ok.json)}`);
-  const wrong = await restore('buyer@example.com', '0000-0000');
+  const redeem = (receipt, who = 'redeemer') => req('/restore', { method: 'POST', headers: { 'content-type': 'application/json', 'x-forwarded-for': who }, body: { receipt } });
+  const ok = await redeem(`#${number.replace('-', ' ')}`);
+  check('the receipt number signs the headset in as the account that paid', ok.status === 200 && ok.json?.token === 'dev:receipt-buyer' && ok.json?.purchases === 9000, `${ok.status} ${JSON.stringify(ok.json)}`);
+  const again = await redeem(number, 'another-headset');
+  check('and does again, on another headset', again.status === 200 && again.json?.uid === 'receipt-buyer');
+  const wrong = await redeem('0000-0000');
   check('a wrong receipt number does not', wrong.status === 404, `${wrong.status}`);
-  const other = await restore('someone@example.com', number);
-  check("nor the right number with someone else's email", other.status === 404, `${other.status}`);
-  const bad = await restore('not an email', number);
-  check('nor something that is not an email', bad.status === 400);
+  const short = await redeem('12');
+  check('nor a scrap of one', short.status === 404, `${short.status}`);
   let first429 = 0;
-  for (let i = 1; i <= 12 && !first429; i++) if ((await restore('buyer@example.com', `${i}`, 'guesser')).status === 429) first429 = i;
+  for (let i = 1; i <= 12 && !first429; i++) if ((await redeem(`${1000 + i}-0000`, 'guesser')).status === 429) first429 = i;
   check('guessing receipt numbers is stopped', first429 > 0, `stopped at try ${first429}`);
 }
 
