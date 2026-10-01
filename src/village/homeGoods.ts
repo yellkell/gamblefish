@@ -107,7 +107,7 @@ export const GOODS: HomeItem[] = [
   { id: 'bottle', shop: 'J', name: 'Ship in a bottle', blurb: 'a three-master, on an old rum barrel', price: 140, at: [-1.55, 0, 0.95, 0.3], solid: [0.24, 0.24, 0.6], build: shipInBottle },
   { id: 'globe', shop: 'J', name: 'Mariner’s globe', blurb: 'the island isn’t on it', price: 180, at: [0.85, 0, 0.95, 0.4], solid: [0.26, 0.26, 1.1], build: globe },
   { id: 'painting', shop: 'J', name: 'Painting of the bay', blurb: 'sunset from the pier, signed illegibly', price: 210, at: [1.81, 1.55, -1.25, -Math.PI / 2], build: painting },
-  { id: 'helmet', shop: 'J', name: 'Brass diving helmet', blurb: 'on the salvage crate it came up in', price: 350, at: [1.5, 0, -1.62, -0.5], solid: [0.24, 0.24, 0.85], build: divingHelmet },
+  { id: 'helmet', shop: 'J', name: 'Brass diving helmet', blurb: 'salvaged · my buddy’s an expert: it’s real', price: 350, at: [1.5, 0, -1.62, -0.5], solid: [0.24, 0.24, 0.85], build: divingHelmet },
   // on the back wall over the helmet, right of the bookshelf: and it gives the field guide a page of the camps
   { id: 'campmap', shop: 'J', name: 'Map of the dancers’ camps', blurb: 'every fire marked · adds a page to your book', price: 300, at: [1.2, 1.6, -1.9, 0], build: campMap },
 
@@ -255,6 +255,8 @@ export class HomeShopCounter {
   private noteColour: InkName = 'dim';
   /** does this shop deliver to Coral's villa (not your shack)? */
   private villa = false;
+  /** the pawn shop: it haggles like the one on the telly */
+  private readonly pawn: boolean;
   /** a picture of each thing, for its row on the board */
   private readonly pics = new Map<string, HTMLCanvasElement>();
 
@@ -264,6 +266,7 @@ export class HomeShopCounter {
     kit: Kit,
   ) {
     const shop = room.name as HomeShop;
+    this.pawn = shop === 'J';
     this.goods = GOODS.filter((g) => g.shop === shop);
     const [cx, cz, hx, hz, top] = shopCounter(room.d);
 
@@ -311,7 +314,8 @@ export class HomeShopCounter {
     if (!item || this.state.home.includes(item.id)) return;
     if (this.state.money < item.price) {
       uiDeny();
-      this.note = `You need $${Math.ceil(item.price - this.state.money)} more for the ${item.name.toLowerCase()}.`;
+      const short = Math.ceil(item.price - this.state.money);
+      this.note = this.pawn ? `Best I can do is $${item.price}. Come back with $${short} more.` : `You need $${short} more for the ${item.name.toLowerCase()}.`;
       this.noteColour = 'bad';
       this.paint();
       return;
