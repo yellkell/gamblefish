@@ -53,10 +53,10 @@ export interface Checkout {
 
 /** What the board draws until the server answers. Keep in step with server/bank.mjs PACKS. */
 export const FALLBACK_PACKS: CoinPack[] = [
-  { id: 'pouch', coins: 500, minor: 199 },
-  { id: 'purse', coins: 1300, minor: 449 },
-  { id: 'chest', coins: 3000, minor: 899, best: true },
-  { id: 'vault', coins: 7000, minor: 1799 },
+  { id: 'pouch', coins: 3500, minor: 199 },
+  { id: 'purse', coins: 9000, minor: 449 },
+  { id: 'chest', coins: 21000, minor: 899, best: true },
+  { id: 'vault', coins: 50000, minor: 1799 },
 ];
 
 export type RecoveryStage = 'idle' | 'sending' | 'sent' | 'redeeming' | 'done' | 'failed';

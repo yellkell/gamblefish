@@ -91,10 +91,10 @@ const MAX_SAVE_BYTES = 200 * 1024;
  * answers. `minor` is the price in the currency's minor unit.
  */
 export const PACKS = [
-  { id: 'pouch', coins: 500, minor: 199 },
-  { id: 'purse', coins: 1300, minor: 449 },
-  { id: 'chest', coins: 3000, minor: 899, best: true },
-  { id: 'vault', coins: 7000, minor: 1799 },
+  { id: 'pouch', coins: 3500, minor: 199 },
+  { id: 'purse', coins: 9000, minor: 449 },
+  { id: 'chest', coins: 21000, minor: 899, best: true },
+  { id: 'vault', coins: 50000, minor: 1799 },
 ];
 
 const packName = (pack) => `Support Fish & Chips: ${pack.coins.toLocaleString('en-US')} coins as thanks`;
