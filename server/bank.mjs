@@ -15,6 +15,8 @@
  *   POST /claim       {} → {coins, credit, claimed, email}      (signed)
  *   GET  /whoami      {uid, protected, email (masked)}          (signed)
  *   POST /protect     {email} → attach it to this uid           (signed)
+ *   POST /restore     {email, receipt} → {token, uid, purchases}: LOG IN with the receipt number
+ *                     on a Stripe receipt for that email (no email sent, no phone)
  *   POST /handoff     {} → {code, purchases, token?} for a new headset to redeem (signed)
  *   POST /redeem      {code} → {token} that signs it in as you  (public, throttled)
  *   GET  /save        {data, at} — this account's game save     (signed)
@@ -133,6 +135,10 @@ class MemoryLedger {
   async noteEmail(uid, email) {
     this.account(uid).emails.add(email);
   }
+  /** The payments credited to an account: {id (the checkout session), ...what settle noted}. */
+  async receiptsOf(uid) {
+    return [...(this.accounts.get(uid)?.receipts ?? new Map())].map(([id, r]) => ({ id, ...r }));
+  }
   async byEmail(email) {
     const out = [];
     for (const [uid, a] of this.accounts) if (a.emails.has(email) || a.lastEmail === email) out.push({ uid, credit: a.credit, at: a.at });
@@ -183,6 +189,11 @@ class FirestoreLedger {
   /** An email the account's owner gave it (SAVE MY PURCHASES), beside the ones it paid with. */
   async noteEmail(uid, email) {
     await this.db.collection('bank').doc(uid).set({ emails: this.FieldValue.arrayUnion(email) }, { merge: true });
+  }
+  /** The payments credited to an account: {id (the checkout session), ...what settle noted}. */
+  async receiptsOf(uid) {
+    const snap = await this.db.collection('bank').doc(uid).collection('receipts').limit(50).get();
+    return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
   }
   /** Every account that paid with this email, newest purchase first. `emails` is every checkout's; older accounts only have `lastEmail`. */
   async byEmail(email) {
@@ -286,6 +297,8 @@ const HANDOFF_TTL_MS = 10 * 60 * 1000;
 const MAX_HANDOFFS_PER_UID = 3;
 /** Wrong LOG IN codes, counted so nobody can guess their way into an account. */
 const redeemGuard = new RedeemGuard();
+/** Wrong receipt numbers, counted the same way. */
+const restoreGuard = new RedeemGuard();
 /** Dev mode only: email → uid, in place of Firebase Auth. */
 const devEmails = new Map();
 
@@ -425,6 +438,45 @@ async function loginTarget(uid, email) {
   }
   console.log(`[bank] LOG IN with ${maskEmail(email)} → ${to.uid} (${to.credit ? 'paid' : 'saved'}; ${uid} had nothing)`);
   return { uid: to.uid, credit: to.credit, moved: true };
+}
+
+/** A receipt number as typed or printed ("#1234-5678", "1234 5678"): its letters and digits. */
+const receiptKey = (r) => String(r ?? '').replace(/[^0-9a-z]/gi, '').toLowerCase();
+
+/**
+ * The number on a payment's Stripe receipt ("Receipt #1234-5678"): Stripe gives it to the charge
+ * when it emails the receipt, so it's asked for, not kept. ('' when there's none: no receipt sent.)
+ * The development bank's payments carry their own.
+ */
+async function receiptNumberOf(r) {
+  if (r.receiptNumber) return String(r.receiptNumber);
+  if (!stripe || !String(r.id).startsWith('cs_')) return '';
+  try {
+    const session = await stripe.checkout.sessions.retrieve(r.id, { expand: ['payment_intent.latest_charge'] });
+    return String(session.payment_intent?.latest_charge?.receipt_number ?? '');
+  } catch (err) {
+    console.error(`[bank] could not read the receipt of ${r.id}: ${err?.message ?? err}`);
+    return '';
+  }
+}
+
+/**
+ * LOG IN by receipt: the account that paid with `email` in the payment whose receipt carries
+ * `receipt`. Proof enough that it's yours (you have the receipt Stripe emailed you), with no email
+ * of ours to send: Firebase's sign-in emails have a small daily allowance.
+ */
+async function restoreTarget(email, receipt) {
+  const want = receiptKey(receipt);
+  if (!want) return null;
+  for (const p of await ledger.byEmail(email)) {
+    if (!(p.credit > 0)) continue;
+    for (const r of await ledger.receiptsOf(p.uid)) {
+      // (a payment made with another email than this one doesn't prove this one)
+      if (r.email && r.email !== email) continue;
+      if (receiptKey(await receiptNumberOf(r)) === want) return { uid: p.uid, credit: p.credit };
+    }
+  }
+  return null;
 }
 
 function newHandoff(uid) {
@@ -623,6 +675,10 @@ async function handleWebhook(req, res) {
       if (UID_OK.test(uid) && Number.isInteger(coins) && coins > 0 && coins <= 100000) {
         const email = String(s.customer_details?.email ?? '').trim().toLowerCase();
         await settle(s.id, uid, coins, { pack: String(s.metadata?.pack ?? ''), amount: s.amount_total ?? 0, currency: s.currency ?? CURRENCY, event: event.id, email: EMAIL_OK.test(email) ? email : '' });
+        // and a receipt, whatever the account's email settings: its number is what LOG IN BY
+        // RECEIPT asks for (Stripe numbers a payment only once it has emailed a receipt for it)
+        if (EMAIL_OK.test(email) && typeof s.payment_intent === 'string')
+          await stripe.paymentIntents.update(s.payment_intent, { receipt_email: email }).catch((err) => console.error(`[bank] no receipt for ${s.id}: ${err?.message ?? err}`));
       } else console.error(`[bank] paid session ${s.id} carries no usable uid/coins — not credited`);
     }
   }
@@ -747,6 +803,33 @@ export function handleHttp(req, res) {
     return;
   }
 
+  if (req.method === 'POST' && path === '/restore') {
+    void (async () => {
+      const who = callerOf(req);
+      // (a receipt number is short: as with the codes, nobody guesses their way in)
+      const refused = restoreGuard.refuse(who);
+      if (refused) return json(res, 429, { error: refused });
+      const body = await readBody(req);
+      const email = String(body?.email ?? '').trim().toLowerCase();
+      if (!EMAIL_OK.test(email)) return json(res, 400, { error: 'that is not an email address' });
+      try {
+        const to = await restoreTarget(email, body?.receipt);
+        if (!to) {
+          restoreGuard.miss(who);
+          console.log(`[bank] restore with ${maskEmail(email)}: no payment with that receipt`);
+          return json(res, 404, { error: 'no payment with that email has that receipt number' });
+        }
+        const token = auth ? await auth.createCustomToken(to.uid) : `dev:${to.uid}`;
+        console.log(`[bank] restore with ${maskEmail(email)} → ${to.uid}`);
+        json(res, 200, { token, uid: to.uid, purchases: to.credit });
+      } catch (err) {
+        console.error(`[bank] restore failed: ${err?.message ?? err}`);
+        json(res, 502, { error: 'the account service is not answering' });
+      }
+    })();
+    return;
+  }
+
   if (path === '/save') {
     if (req.method === 'GET') return signed(req, res, async (uid) => json(res, 200, (await ledger.getSave(uid)) ?? { data: null, at: 0 }));
     if (req.method === 'POST')
@@ -787,8 +870,10 @@ export function handleHttp(req, res) {
         const id = String(body?.s ?? '');
         const s = sessions.get(id);
         if (!s) return json(res, 404, { error: 'no such checkout' });
-        const out = await settle(id, s.uid, s.coins, { pack: s.pack, amount: PACKS.find((p) => p.id === s.pack)?.minor ?? 0, currency: CURRENCY, event: 'dev', email: String(body?.email ?? '') });
-        if (String(req.headers.accept ?? '').includes('application/json') || String(req.headers['content-type'] ?? '').includes('json')) return json(res, 200, { paid: true, duplicate: !!out.duplicate, credit: out.credit });
+        // (the development bank's receipt number: a real one is Stripe's, on the receipt it emails)
+        const receiptNumber = `${1000 + (randomBytes(2).readUInt16BE(0) % 9000)}-${1000 + (randomBytes(2).readUInt16BE(0) % 9000)}`;
+        const out = await settle(id, s.uid, s.coins, { pack: s.pack, amount: PACKS.find((p) => p.id === s.pack)?.minor ?? 0, currency: CURRENCY, event: 'dev', email: String(body?.email ?? ''), receiptNumber });
+        if (String(req.headers.accept ?? '').includes('application/json') || String(req.headers['content-type'] ?? '').includes('json')) return json(res, 200, { paid: true, duplicate: !!out.duplicate, credit: out.credit, receiptNumber });
         html(res, 200, devPayPage(req, s, id, true));
       })();
       return;

@@ -35,7 +35,7 @@ import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeom
 import { uiDeny, winFanfare } from '../audio/sfx.ts';
 import { look } from '../casino/look.ts';
 import type { GameState } from '../fishing/tidewater.ts';
-import { bank, cancelCheckout, cancelRecovery, loadPacks, openCheckout, priceLabel, protect, redeemCode, startCheckout, startRecovery, whoami, type CoinPack } from '../net/bank.ts';
+import { bank, cancelCheckout, cancelRecovery, loadPacks, openCheckout, priceLabel, protect, redeemCode, restoreByReceipt, startCheckout, startRecovery, whoami, type CoinPack } from '../net/bank.ts';
 import { coinImage } from '../ui/coinIcon.ts';
 import { font } from '../ui/fonts.ts';
 import { Keyboard } from '../ui/keyboard.ts';
@@ -202,6 +202,7 @@ export class IslandBank {
       cancelRecovery();
       this.face = 'login';
     } else if (id === 'login-email') this.typeEmail('login');
+    else if (id === 'login-receipt') this.typeReceipt();
     else if (id === 'login-code') {
       this.keyboard.onDone = (code) => void redeemCode(code);
       this.keyboard.onCancel = () => this.paint();
@@ -218,6 +219,20 @@ export class IslandBank {
     };
     this.keyboard.onCancel = () => this.paint();
     this.keyboard.open('email', why === 'protect' ? 'Your email: your purchases are saved to it' : 'The email you paid with, or saved your coins to', why === 'protect' ? bank.lastEmail : '');
+  }
+
+  /** LOG IN by receipt: the email you paid with, then the number on its Stripe receipt. */
+  private typeReceipt(): void {
+    this.keyboard.onDone = (email) => {
+      this.keyboard.onDone = (receipt) => {
+        void restoreByReceipt(email, receipt);
+        this.paint();
+      };
+      this.keyboard.onCancel = () => this.paint();
+      this.keyboard.open('email', 'The receipt number on your Stripe receipt (like 1234-5678)', '');
+    };
+    this.keyboard.onCancel = () => this.paint();
+    this.keyboard.open('email', 'The email you paid with (it’s on your Stripe receipt)', '');
   }
 
   /* ── frame ──────────────────────────────────────────────────────── */
@@ -378,11 +393,13 @@ export class IslandBank {
         text('LOG IN', 44, 190, 52, '#3fd6c6', 'left', 700);
         if (r.stage === 'idle' || r.stage === 'failed' || r.stage === 'sending') {
           text('Played before on another headset? Get your account back:', 44, 270, 36, INK.hot);
-          const steps = ['1.  Type the email you paid with (or saved your coins to).', '2.  Open the link we email you, on your phone.', '3.  Your phone shows a six-digit code: type it here.'];
-          steps.forEach((s, i) => text(s, 70, 340 + i * 56, 34, INK.dim));
-          btn('login-email', r.stage === 'sending' ? 'SENDING…' : 'TYPE MY EMAIL', 44, 540, 600, 100, '#3fd6c6', r.stage !== 'sending', 40);
-          btn('back', 'BACK', 680, 540, 360, 100, 'rgba(255,255,255,0.25)', true, 38);
-          if (r.stage === 'failed') text(r.note, 44, 700, 32, INK.danger);
+          // by receipt first: it needs nothing but the receipt Stripe emailed you
+          text('With your receipt: type the email you paid with and the receipt number on it.', 70, 336, 32, INK.dim);
+          text('Or by email: we send a link; open it on your phone and type the code it shows.', 70, 386, 32, INK.dim);
+          btn('login-receipt', 'USE MY RECEIPT', 44, 450, 560, 100, '#ffb000', r.stage !== 'sending', 40);
+          btn('login-email', r.stage === 'sending' ? 'SENDING…' : 'EMAIL ME A LINK', 630, 450, 520, 100, '#3fd6c6', r.stage !== 'sending', 38);
+          btn('back', 'BACK', 1176, 450, 280, 100, 'rgba(255,255,255,0.25)', true, 38);
+          if (r.stage === 'failed') text(r.note, 44, 610, 32, INK.danger);
         } else if (r.stage === 'sent' || r.stage === 'redeeming') {
           text(`We emailed a sign-in link to ${r.email}.`, 44, 270, 38, INK.hot, 'left', 700);
           text('Open it on your phone: it shows a six-digit code. Then:', 44, 330, 34, INK.dim);

@@ -409,6 +409,47 @@ export async function redeemCode(code: string): Promise<void> {
   }
 }
 
+/**
+ * LOG IN by receipt: the email you paid with and the number on the Stripe receipt for it
+ * ("Receipt #1234-5678"). The bank checks it with Stripe and this headset becomes the account
+ * straight away: no email sent, no phone, no code.
+ */
+export async function restoreByReceipt(email: string, receipt: string): Promise<void> {
+  const addr = email.trim().toLowerCase();
+  if (!EMAIL_OK.test(addr)) {
+    bank.recovery = { stage: 'failed', email: addr, note: 'that is not an email address' };
+    bump();
+    return;
+  }
+  if (!/[0-9a-z]/i.test(receipt)) {
+    bank.recovery = { stage: 'failed', email: addr, note: 'type the receipt number from your Stripe receipt' };
+    bump();
+    return;
+  }
+  bank.recovery = { stage: 'redeeming', email: addr, note: '' };
+  bump();
+  try {
+    const reply = await call<{ token: string; uid: string }>('/restore', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email: addr, receipt }),
+    });
+    if (reply.token.startsWith('dev:')) throw new Error('the bank is in dev mode: no cloud account to log in to');
+    const c = await cloud();
+    if (!c) throw new Error('no connection');
+    const authMod = await import('firebase/auth');
+    await authMod.signInWithCustomToken(c.auth, reply.token);
+    // the next boot takes the account's save, whatever this headset had
+    markAdopt();
+    bank.recovery = { ...bank.recovery, stage: 'done', note: '' };
+    bump();
+    setTimeout(() => location.reload(), 1800);
+  } catch (err) {
+    bank.recovery = { stage: 'failed', email: addr, note: String((err as Error)?.message ?? err).slice(0, 90) };
+    bump();
+  }
+}
+
 export function cancelRecovery(): void {
   bank.recovery = { stage: 'idle', email: '', note: '' };
   bump();
