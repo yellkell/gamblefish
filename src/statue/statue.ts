@@ -563,12 +563,14 @@ function plaqueTexture(): CanvasTexture {
 }
 
 /**
- * The back plaque: where the island comes from (vendor/tidewater; its MIT notice is in public/licenses.txt).
+ * The back plaque: where the island comes from, and where to find it (vendor/tidewater; its MIT
+ * notice is in public/licenses.txt).
  */
 function islandPlaqueTexture(): CanvasTexture {
   const { engrave, flourish, done } = bronze();
-  engrave('THE ISLAND', 300, 96, '', 700, 6);
-  flourish(403);
-  engrave('is from Tidewater, by dgreenheck', 510, 70, 'italic', 400);
+  engrave('THE ISLAND', 250, 96, '', 700, 6);
+  flourish(353);
+  engrave('is from Tidewater, by dgreenheck', 460, 70, 'italic', 400);
+  engrave('github.com/dgreenheck/tidewater', 570, 52, '', 400, 1);
   return done();
 }
