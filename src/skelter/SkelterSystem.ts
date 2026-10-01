@@ -917,7 +917,7 @@ export class SkelterSystem extends createSystem({}) {
       const remaining = Math.max(0, game.holdRemaining);
       this.hudSet('big', Math.ceil(remaining).toFixed(0));
       this.hudSet('unit', ' ');
-      this.hudSet('status', game.tier === 1 ? 'GRAB THE RAIL - FACE DOWNHILL' : 'CATCH YOUR BREATH');
+      this.hudSet('status', game.tier === 1 ? 'FACE DOWNHILL' : 'CATCH YOUR BREATH');
       if (remaining <= this.beepAt && this.beepAt > 0) {
         // DOWN's voiced count: THREE... TWO... ONE... then the launch
         skelterAudio.play(this.beepAt === 3 ? 'three' : this.beepAt === 2 ? 'two' : 'one', 0.9);

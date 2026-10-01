@@ -206,9 +206,10 @@ export interface GameState {
   buy(key: string): unknown;
   /**
    * told of a change a frame or so later (deliver), with the others in turn; `logs`: of the log
-   * count changing too (logs), for the few boards that show it
+   * count changing too (logs), for the few boards that show it; `fish`: of a catch (addFish),
+   * for the few that show what you've caught
    */
-  onChange(fn: (s: GameState) => void, opts?: { logs?: boolean }): () => void;
+  onChange(fn: (s: GameState) => void, opts?: { logs?: boolean; fish?: boolean }): () => void;
   /** told of a change the moment it's made: only for what must hear at once, and is cheap */
   onChangeNow(fn: (s: GameState) => void): () => void;
   emit(): void;
@@ -348,12 +349,19 @@ export function createGameState(): GameState {
   // (logs coming in off a felled tree, or going out into a crate, were telling all of them, one
   // repaint round the island a log: just the log count's boards hear of those)
   const logs = new Set<(s: GameState) => void>();
+  // (and a catch told them all too: two dozen boards repainting, and going up to the GPU, as the
+  // fish came out of the water, though a catch changes nothing most of them show. Just the ones
+  // that show your catches hear of it)
+  const fish = new Set<(s: GameState) => void>();
+  let catching = false;
   s.onChange = (fn, opts) => {
     later.add(fn);
     if (opts?.logs) logs.add(fn);
+    if (opts?.fish) fish.add(fn);
     return () => {
       later.delete(fn);
       logs.delete(fn);
+      fish.delete(fn);
       owed.delete(fn);
     };
   };
@@ -363,7 +371,16 @@ export function createGameState(): GameState {
   };
   s.emit = () => {
     for (const fn of now) fn(s);
-    for (const fn of later) owed.add(fn);
+    for (const fn of catching ? fish : later) owed.add(fn);
+  };
+  const addFish = s.addFish.bind(s);
+  s.addFish = (species, kg, timeOfDay) => {
+    catching = true;
+    try {
+      return addFish(species, kg, timeOfDay);
+    } finally {
+      catching = false;
+    }
   };
   s.logs = () => {
     s.save();

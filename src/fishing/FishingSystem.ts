@@ -458,7 +458,7 @@ export class FishingSystem extends createSystem({}) {
     this.updateSound(dt);
     this.updateGauge();
     this.toast.update(dt, this.camera);
-    deps.wallet?.update(dt);
+    deps.wallet?.update(dt, this.camera);
     deps.fx?.update(dt);
 
     locomotion.enabled = this.state !== 'fighting' && this.state !== 'landing';

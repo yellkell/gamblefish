@@ -46,6 +46,7 @@ import {
   type Camera,
 } from 'three';
 import { bigWinHit, winShimmer } from '../audio/sfx.ts';
+import { warmUp } from '../fx/warm.ts';
 import { pulseHand } from '../input/haptics.ts';
 import { font } from '../ui/fonts.ts';
 import { roundRect } from '../ui/panel.ts';
@@ -83,8 +84,11 @@ export interface Tally {
   land(value: number): void;
 }
 
+/** a flat panel of text or light that stands upright and turns to face you (Celebration.face) */
+type Card = Mesh<PlaneGeometry, MeshBasicMaterial>;
+
 interface TallyState {
-  sprite: Sprite;
+  sprite: Card;
   canvas: HTMLCanvasElement;
   tex: CanvasTexture;
   at: Vector3;
@@ -99,7 +103,7 @@ interface TallyState {
 }
 
 interface Riser {
-  sprite: Sprite;
+  sprite: Card;
   from: Vector3;
   t: number;
   size: number;
@@ -114,8 +118,8 @@ export class Celebration {
   private readonly glints: InstancedMesh;
   private readonly flash: Sprite;
   private readonly ring: Mesh;
-  private readonly banner: Sprite;
-  private readonly rays: Sprite;
+  private readonly banner: Card;
+  private readonly rays: Card;
   private readonly coins: InstancedMesh;
   private readonly shine = { value: -1 };
   private coinList: Coin[] = [];
@@ -136,6 +140,7 @@ export class Celebration {
   private holdTier: Tier = 1;
   private holdK = 1;
   private nextPop = 0;
+  private readonly eye = new Vector3();
 
   constructor(
     parent: Object3D,
@@ -165,7 +170,7 @@ export class Celebration {
     );
     this.ring.visible = false;
 
-    const bannerMat = new SpriteMaterial({ transparent: true, depthWrite: false, depthTest: false, toneMapped: false });
+    const bannerMat = new MeshBasicMaterial({ transparent: true, depthWrite: false, depthTest: false, toneMapped: false });
     // a band of white light sweeping across the lettering (and only the lettering)
     bannerMat.onBeforeCompile = (sh) => {
       sh.uniforms.uShine = this.shine;
@@ -178,12 +183,12 @@ export class Celebration {
           #include <opaque_fragment>`,
         );
     };
-    this.banner = new Sprite(bannerMat);
+    this.banner = new Mesh(QUAD, bannerMat);
     this.banner.visible = false;
     this.banner.renderOrder = 26;
 
     // light rays turning slowly behind a big banner
-    this.rays = new Sprite(new SpriteMaterial({ map: raysTexture(), color: 0xffc640, transparent: true, blending: AdditiveBlending, depthWrite: false, depthTest: false, toneMapped: false }));
+    this.rays = new Mesh(QUAD, new MeshBasicMaterial({ map: raysTexture(), color: 0xffc640, transparent: true, blending: AdditiveBlending, depthWrite: false, depthTest: false, toneMapped: false }));
     this.rays.visible = false;
     this.rays.renderOrder = 24;
 
@@ -198,6 +203,12 @@ export class Celebration {
     this.coins.visible = false;
 
     this.group.add(this.glints, this.coins, this.flash, this.ring, this.rays, this.banner);
+    // the coins' and the glints' shaders, built behind the boot intro rather than on the first
+    // win (every party's are the same shader: one of each will do)
+    if (!warmed) {
+      warmed = true;
+      warmUp(new InstancedMesh(this.coins.geometry, this.coins.material, 1), new InstancedMesh(this.glints.geometry, this.glints.material, 1));
+    }
   }
 
   /**
@@ -295,7 +306,7 @@ export class Celebration {
     canvas.width = 576;
     canvas.height = 168;
     const map = tex(canvas);
-    const sprite = new Sprite(new SpriteMaterial({ map, transparent: true, depthWrite: false, depthTest: false, toneMapped: false }));
+    const sprite: Card = new Mesh(QUAD, new MeshBasicMaterial({ map, transparent: true, depthWrite: false, depthTest: false, toneMapped: false }));
     sprite.renderOrder = 27;
     sprite.position.copy(at);
     sprite.scale.set(0.001, 0.001, 1);
@@ -328,7 +339,7 @@ export class Celebration {
 
   /** "+$120" in gold, popping in at `at` and floating up. */
   rise(at: Vector3, amount: number, tier: Tier, k = 1): void {
-    const sprite = new Sprite(new SpriteMaterial({ map: amountTexture(amount), transparent: true, depthWrite: false, depthTest: false, toneMapped: false }));
+    const sprite: Card = new Mesh(QUAD, new MeshBasicMaterial({ map: amountTexture(amount), transparent: true, depthWrite: false, depthTest: false, toneMapped: false }));
     sprite.renderOrder = 25;
     this.group.add(sprite);
     this.risers.push({ sprite, from: at.clone(), t: 0, size: [0, 0.075, 0.095, 0.12][tier] * k, lift: 0.2 * k });
@@ -389,6 +400,9 @@ export class Celebration {
       this.glints.visible = this.coins.visible = false;
       return;
     }
+    // where you are, in the party's frame: the lettering and the rays turn to face it
+    this.eye.copy(camera.getWorldPosition(_v));
+    this.group.worldToLocal(this.eye);
     this.updateHold(dt);
     this.updateFlash(dt);
     this.updateCoins(dt);
@@ -396,6 +410,15 @@ export class Celebration {
     this.updateGlints(dt, camera);
     this.updateRisers(dt);
     this.updateBanner(dt);
+  }
+
+  /**
+   * Stand a panel upright, turned toward you (and `spin` round its middle). Not a sprite: a sprite
+   * turns with the headset, so the numbers and banners rolled and swung with every tilt of your
+   * head. These only turn as you walk round them.
+   */
+  private face(o: Object3D, spin = 0): void {
+    o.rotation.set(0, Math.atan2(this.eye.x - o.position.x, this.eye.z - o.position.z), spin);
   }
 
   private updateHold(dt: number): void {
@@ -527,6 +550,7 @@ export class Celebration {
       }
       s.position.set(st.at.x, y, st.at.z);
       s.scale.set(st.size * (576 / 168) * k, st.size * k, 1);
+      this.face(s);
       return true;
     });
   }
@@ -546,6 +570,7 @@ export class Celebration {
       const rise = 0.3 * r.lift + r.lift * (1 - Math.pow(1 - Math.min(1, t / LIFE), 2));
       r.sprite.position.set(r.from.x, r.from.y + rise, r.from.z);
       r.sprite.scale.set(r.size * 3.2 * pop, r.size * pop, 1);
+      this.face(r.sprite);
       r.sprite.material.opacity = t > LIFE - 0.6 ? (LIFE - t) / 0.6 : 1;
       return true;
     });
@@ -563,6 +588,7 @@ export class Celebration {
     const k = s < 0.25 ? easeOutBack(s / 0.25) : s < end ? 1 + 0.05 * Math.sin(s * 10) : Math.max(0, 1 - (s - end) / 0.3);
     this.banner.visible = k > 0.001;
     this.banner.scale.set(this.bannerW * k, (this.bannerW / 3) * k, 1);
+    this.face(this.banner);
     // the shine crosses the letters every 1.4 s
     this.shine.value = s < 0.2 ? -1 : -0.3 + (((s - 0.2) % 1.4) / 1.0) * 1.6;
     // the rays open out behind it and turn
@@ -570,7 +596,7 @@ export class Celebration {
     if (this.rays.visible) {
       const r = this.bannerW * 1.5 * Math.min(1, k * 1.1);
       this.rays.scale.set(r, r, 1);
-      this.rays.material.rotation = s * 0.35;
+      this.face(this.rays, s * 0.35);
       this.rays.material.opacity = 0.55 * Math.min(1, s / 0.4) * Math.min(1, k) * (0.85 + 0.15 * Math.sin(s * 3));
     }
     if (s > end + 0.3) {
@@ -586,6 +612,8 @@ function easeOutBack(x: number): number {
 }
 
 const _o = new Object3D();
+const QUAD = new PlaneGeometry(1, 1);
+let warmed = false;
 const _v = new Vector3();
 const _q = new Quaternion();
 const _q2 = new Quaternion();

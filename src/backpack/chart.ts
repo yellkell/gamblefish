@@ -120,36 +120,48 @@ export function drawChart(src: ChartSource, w: number, h: number, bounds: Bounds
 
   const img = g.createImageData(w, h);
   const d = img.data;
-  const paper = [242, 230, 204];
-  const mix = (a: number[], b: number[], t: number): number[] => a.map((v, i) => v + (b[i] - v) * Math.max(0, Math.min(1, t)));
-  const seaCol = (depth: number): number[] => {
-    if (depth < 3) return mix([176, 222, 212], [140, 204, 204], depth / 3);
-    if (depth < 6) return mix([140, 204, 204], [110, 176, 200], (depth - 3) / 3);
-    if (depth < 12) return mix([110, 176, 200], [80, 138, 184], (depth - 6) / 6);
-    return mix([80, 138, 184], [58, 104, 158], (depth - 12) / 18);
+  // (straight into the pixels, no arrays made per pixel: half a million of them, each with a few
+  // little arrays, was a long frame and then the garbage collector's pauses after it)
+  const col = [0, 0, 0];
+  const set = (r: number, gr: number, b: number): void => {
+    col[0] = r;
+    col[1] = gr;
+    col[2] = b;
   };
+  /** col = a → b by t (clamped) */
+  const mix = (a0: number, a1: number, a2: number, b0: number, b1: number, b2: number, t: number): void => {
+    const k = Math.max(0, Math.min(1, t));
+    set(a0 + (b0 - a0) * k, a1 + (b1 - a1) * k, a2 + (b2 - a2) * k);
+  };
+  /** col → (b0, b1, b2) by t */
+  const toward = (b0: number, b1: number, b2: number, t: number): void => mix(col[0], col[1], col[2], b0, b1, b2, t);
   for (let y = 0; y < h; y++)
     for (let x = 0; x < w; x++) {
       const e = hAt(x, y);
-      let col: number[];
-      if (e <= 0) col = seaCol(-e);
-      else {
+      if (e <= 0) {
+        const depth = -e;
+        if (depth < 3) mix(176, 222, 212, 140, 204, 204, depth / 3);
+        else if (depth < 6) mix(140, 204, 204, 110, 176, 200, (depth - 3) / 3);
+        else if (depth < 12) mix(110, 176, 200, 80, 138, 184, (depth - 6) / 6);
+        else mix(80, 138, 184, 58, 104, 158, (depth - 12) / 18);
+      } else {
         // land: sand at the shore, then scrub, then the hills; lit from the upper left
-        const base = e < 1.6 ? [230, 211, 160] : e < 40 ? mix([196, 196, 136], [170, 170, 112], (e - 1.6) / 38) : mix([170, 170, 112], [150, 136, 110], (e - 40) / 120);
+        if (e < 1.6) set(230, 211, 160);
+        else if (e < 40) mix(196, 196, 136, 170, 170, 112, (e - 1.6) / 38);
+        else mix(170, 170, 112, 150, 136, 110, (e - 40) / 120);
         const dx = hAt(x + 1, y) - e;
         const dy = hAt(x, y + 1) - e;
         const shade = Math.max(0.72, Math.min(1.18, 1 - (dx + dy) * 0.9 / Math.max(sx, 0.5)));
-        col = base.map((v) => v * shade);
+        set(col[0] * shade, col[1] * shade, col[2] * shade);
       }
       // the paper shows through a little everywhere
-      col = mix(col, paper, 0.22);
+      toward(242, 230, 204, 0.22);
       // contours: the coast in ink; the 6 m (drop-off) and 12 m lines in blue
       const r = hAt(x + 1, y);
       const b = hAt(x, y + 1);
-      const crosses = (lvl: number): boolean => (e - lvl) * (r - lvl) <= 0 || (e - lvl) * (b - lvl) <= 0;
-      if (crosses(0)) col = [60, 46, 30];
-      else if (crosses(-6) && Math.floor((x + y) / 5) % 2 === 0) col = [40, 70, 120];
-      else if (crosses(-12)) col = mix(col, [40, 70, 120], 0.7);
+      if ((e - 0) * (r - 0) <= 0 || (e - 0) * (b - 0) <= 0) set(60, 46, 30);
+      else if (((e + 6) * (r + 6) <= 0 || (e + 6) * (b + 6) <= 0) && Math.floor((x + y) / 5) % 2 === 0) set(40, 70, 120);
+      else if ((e + 12) * (r + 12) <= 0 || (e + 12) * (b + 12) <= 0) toward(40, 70, 120, 0.7);
       const i = (y * w + x) * 4;
       d[i] = col[0];
       d[i + 1] = col[1];

@@ -11,6 +11,8 @@
 
 import { Group, Mesh, MeshBasicMaterial, MeshStandardMaterial, SphereGeometry, BufferGeometry, Float32BufferAttribute, type Object3D } from 'three';
 import { MarchingCubes } from 'three/examples/jsm/objects/MarchingCubes.js';
+import { mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { warmUp } from '../../fx/warm.ts';
 import { casinoEnv } from '../../casino/look.ts';
 import type { Kit } from '../craft.ts';
 
@@ -52,7 +54,9 @@ let body: BufferGeometry | null = null;
 /** his body, native size (1.78 m, feet on y = 0), polygonised from the smooth-min of the blobs */
 function bodyGeometry(): BufferGeometry {
   if (body) return body;
-  const R = 44;
+  // (the polygoniser's grid: at 44 he was 5,500 see-through glossy triangles for a figure 7.5 cm
+  // tall, four of him in the bait shop's tub, and the shop dragged)
+  const R = 28;
   // the cube [-1, 1]³ the polygoniser works in, over his body: centre and half-size (m)
   const C = [0, 0.86, 0.06];
   const S = 0.98;
@@ -81,10 +85,15 @@ function bodyGeometry(): BufferGeometry {
     pos[i * 3 + 1] = mc.positionArray[i * 3 + 1] * S + C[1];
     pos[i * 3 + 2] = mc.positionArray[i * 3 + 2] * S + C[2];
   }
-  const g = new BufferGeometry();
-  g.setAttribute('position', new Float32BufferAttribute(pos, 3));
-  g.setAttribute('normal', new Float32BufferAttribute(mc.normalArray.slice(0, n * 3), 3));
+  const soup = new BufferGeometry();
+  soup.setAttribute('position', new Float32BufferAttribute(pos, 3));
+  soup.setAttribute('normal', new Float32BufferAttribute(mc.normalArray.slice(0, n * 3), 3));
   mc.geometry.dispose();
+  // the corners each triangle repeats, shared; and a (blank) uv, so a shop's display bakes every
+  // goopling in it into one draw (village/merge.ts takes indexed, uv'd geometry)
+  const g = mergeVertices(soup, 1e-4);
+  soup.dispose();
+  g.setAttribute('uv', new Float32BufferAttribute(new Float32Array(g.getAttribute('position').count * 2), 2));
   return (body = g);
 }
 
@@ -109,6 +118,8 @@ function gelMaterial(k: Kit): MeshStandardMaterial {
     );
   };
   gel.customProgramCacheKey = () => 'goop-gel';
+  // its shader, built behind the boot intro rather than as the bait shop comes into view (fx/warm.ts)
+  warmUp(new Mesh(bodyGeometry(), gel));
   return gel;
 }
 
@@ -130,9 +141,9 @@ export function goopling(k: Kit): Group {
   glint ??= new MeshBasicMaterial({ color: 0xf4fff2 });
   const eyes = new Group();
   for (const side of [-1, 1]) {
-    const e = new Mesh(new SphereGeometry(0.052, 12, 8), eye);
+    const e = new Mesh(new SphereGeometry(0.052, 8, 6), eye);
     e.position.set(side * 0.062, 1.64, 0.15);
-    const gl = new Mesh(new SphereGeometry(0.015, 6, 4), glint);
+    const gl = new Mesh(new SphereGeometry(0.015, 4, 3), glint);
     gl.position.set(side * 0.062 + 0.016, 1.66, 0.195);
     eyes.add(e, gl);
   }

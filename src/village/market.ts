@@ -155,7 +155,7 @@ export class FishMarket {
       accept: (p, fish) => this.weighAndSell(p, fish),
     };
     backpackView.targets.add(this.target);
-    state.onChange(() => this.paint());
+    state.onChange(() => this.paint(), { fish: true });
   }
 
   private paint(): void {

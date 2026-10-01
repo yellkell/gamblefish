@@ -220,6 +220,22 @@ function fitEye(S) {
   S.eye = { ...E, y, r };
 }
 
+/**
+ * Keep the lips at the snout. The mouth line starts at `mouth.tip`, its height at the very tip of
+ * the snout, and the tarpon's (Tidewater's upturned mouth) is set at 0.018 where its snout is only
+ * 0.004 high: the upper lip's tip stood far above the head, and the nose stuck up in a spike. The
+ * tip is kept within twice the snout's height above or below the middle, which is as far as any
+ * other fish's goes (the silverside's and the mahi's), so the tarpon's mouth still turns up.
+ */
+const fittedMouth = new Set();
+function fitMouth(S) {
+  if (fittedMouth.has(S) || !S.mouth) return;
+  fittedMouth.add(S);
+  const c = section(S, 0);
+  const tip = Math.max(-2 * c.B, Math.min(2 * c.T, S.mouth.tip));
+  if (tip !== S.mouth.tip) S.mouth = { ...S.mouth, tip };
+}
+
 for (const id of FISH_IDS) {
   const model = FISH[id].model;
   const S = SPECIES[model];
@@ -227,7 +243,10 @@ for (const id of FISH_IDS) {
   // the great white has a body of its own (src/fishing/sharkGeometry.ts): a pointed snout, jaws
   // that open, teeth; everything else is built by Tidewater's fish builder
   const shark = id === SHARK_ID ? sharkGeometry() : null;
-  if (!shark) fitEye(S);
+  if (!shark) {
+    fitEye(S);
+    fitMouth(S);
+  }
   const g = shark
     ? { attributes: { position: { count: shark.position.length / 3, array: shark.position }, aData: { array: shark.data }, normal: { array: shark.normal } }, index: { array: shark.index } }
     : fishGeometry(S, { lod: 1, pose: 'swim', eyes: true });

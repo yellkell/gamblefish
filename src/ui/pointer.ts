@@ -33,6 +33,9 @@ export interface Button {
 export class InteractivePanel extends Panel {
   buttons: Button[] = [];
   hover: string | null = null;
+  /** a hover on its way (it holds a few frames before the board repaints for it) */
+  hoverNext: string | null = null;
+  hoverFrames = 0;
   /** metres per canvas pixel, for hit-testing */
   readonly size: [number, number];
   readonly px: [number, number];
@@ -46,6 +49,13 @@ export class InteractivePanel extends Panel {
     this.size = m;
   }
 
+  /** The button `id`, if (x, y) is on it or within `m` canvas pixels of it. */
+  near(id: string | null, x: number, y: number, m: number): Button | null {
+    if (!id) return null;
+    for (const b of this.buttons) if (b.id === id && b.enabled !== false && x >= b.x - m && x <= b.x + b.w + m && y >= b.y - m && y <= b.y + b.h + m) return b;
+    return null;
+  }
+
   /** The button at canvas (x, y). */
   at(x: number, y: number): Button | null {
     for (const b of this.buttons) if (b.enabled !== false && x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) return b;
@@ -54,6 +64,10 @@ export class InteractivePanel extends Panel {
 }
 
 const panels = new Set<InteractivePanel>();
+/** frames a new hover holds before its board repaints */
+const HOVER_HOLD = 3;
+/** how far past a hovered button's edge (canvas pixels) it stays hovered */
+const HOVER_MARGIN = 14;
 
 export function register(p: InteractivePanel): void {
   panels.add(p);
@@ -154,7 +168,9 @@ export class PointerSystem extends createSystem({}) {
       pos.setXYZ(0, _o.x, _o.y, _o.z);
       pos.setXYZ(1, _best.x, _best.y, _best.z);
       pos.needsUpdate = true;
-      const b = best.p.at(best.x, best.y);
+      // the button you're on keeps you a little past its edge (a hand's tremor there flipped the
+      // hover, and every flip repaints the board)
+      const b = best.p.near(best.p.hover, best.x, best.y, HOVER_MARGIN) ?? best.p.at(best.x, best.y);
       if (b) {
         pointerView.claimed[hand] = true;
         hovered.set(best.p, b.id);
@@ -166,14 +182,24 @@ export class PointerSystem extends createSystem({}) {
         }
       } else if (!hovered.has(best.p)) hovered.set(best.p, null);
     }
-    // hover changes repaint (with the soft hover tick)
+    // hover changes repaint (with the soft hover tick), once they've held for a few frames: a
+    // hand's tremor on a button's edge would otherwise repaint the whole board, and send it to
+    // the GPU, frame after frame
     for (const p of panels) {
       const h = hovered.get(p) ?? null;
-      if (h !== p.hover) {
-        if (h) uiHover();
-        p.hover = h;
-        p.paint();
+      if (h === p.hover) {
+        p.hoverNext = h;
+        p.hoverFrames = 0;
+        continue;
       }
+      if (h !== p.hoverNext) {
+        p.hoverNext = h;
+        p.hoverFrames = 0;
+      }
+      if (++p.hoverFrames < HOVER_HOLD) continue;
+      if (h) uiHover();
+      p.hover = h;
+      p.paint();
     }
   }
 }

@@ -121,7 +121,7 @@ export class Statue {
     this.toast.panel.mesh.visible = false;
     parent.add(this.toast.panel.mesh);
     this.party = new Celebration(this.group, () => TOP_Y, () => deps.kit.renderer.xr.getSession());
-    deps.state.onChange(() => (this.poll = 0));
+    deps.state.onChange(() => (this.poll = 0), { fish: true });
   }
 
   /** is it up (or on its way up)? */

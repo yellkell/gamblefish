@@ -100,20 +100,34 @@ function tone(o: ToneOpts): void {
   osc.stop(t0 + dur + 0.03);
 }
 
-/** Bandpass-filtered noise burst — the basis of every whoosh. */
-function whooshNoise(dur: number, gain: number, fromHz: number, toHz: number, delay = 0): void {
-  const c = ready();
-  if (!c) return;
-  const t0 = c.currentTime + delay;
-  const frames = Math.floor(c.sampleRate * dur);
+/**
+ * A burst of noise `frames` long, its swell and fade shaped in. Each is made once (a few takes of
+ * each length, so repeats don't sound stamped out) and played again: filling a fresh one sample by
+ * sample on every clack, a chip stack's run of them was a hitch.
+ */
+const bursts = new Map<number, AudioBuffer[]>();
+const TAKES = 3;
+function noiseBurst(c: AudioContext, frames: number): AudioBuffer {
+  let takes = bursts.get(frames);
+  if (!takes) bursts.set(frames, (takes = []));
+  if (takes.length >= TAKES) return takes[Math.floor(Math.random() * TAKES)];
   const buf = c.createBuffer(1, frames, c.sampleRate);
   const data = buf.getChannelData(0);
   for (let i = 0; i < frames; i++) {
     const p = i / frames;
     data[i] = (Math.random() * 2 - 1) * (p < 0.12 ? p / 0.12 : 1) * (1 - p) ** 0.8;
   }
+  takes.push(buf);
+  return buf;
+}
+
+/** Bandpass-filtered noise burst — the basis of every whoosh. */
+function whooshNoise(dur: number, gain: number, fromHz: number, toHz: number, delay = 0): void {
+  const c = ready();
+  if (!c) return;
+  const t0 = c.currentTime + delay;
   const src = c.createBufferSource();
-  src.buffer = buf;
+  src.buffer = noiseBurst(c, Math.floor(c.sampleRate * dur));
   const bp = c.createBiquadFilter();
   bp.type = 'bandpass';
   bp.Q.value = 1.1;
