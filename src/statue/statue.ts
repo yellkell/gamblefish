@@ -10,7 +10,7 @@
  *                night, and after dark it keeps a warm glow of its own.
  *  THE PLINTH    pale coral stone on two steps, a gold band round it, and on its face an engraved
  *                bronze plaque: 100% COMPLETE! THANKS FOR PLAYING! and the credits. On its back a
- *                second: the island is Tidewater's, and whose that is.
+ *                second: where the island comes from.
  *  THE UNVEILING the moment the last leg's done (not while you're up the helter skelter or have a
  *                fish on), it rises out of the sand where you come down onto the beach
  *                (statue/site.ts), to a fanfare, a modest 100%! banner over it and a word wherever you are; then it's on the
@@ -563,17 +563,12 @@ function plaqueTexture(): CanvasTexture {
 }
 
 /**
- * The back plaque: the island this game is set on, and its maker. Tidewater's world, its fish
- * and its fishing came over whole (vendor/tidewater, MIT); this is where the game says so.
+ * The back plaque: where the island comes from (vendor/tidewater; its MIT notice is in public/licenses.txt).
  */
 function islandPlaqueTexture(): CanvasTexture {
   const { engrave, flourish, done } = bronze();
-  engrave('THE ISLAND', 160, 96, '', 700, 6);
-  engrave('is Tidewater, by dgreenheck', 280, 70, 'italic', 400);
-  flourish(372);
-  engrave('its land and sea, its village and its fish,', 460, 48, '', 400);
-  engrave('and the fishing at the heart of this game', 528, 48, '', 400);
-  engrave('github.com/dgreenheck/tidewater', 622, 52, '', 400, 1);
-  engrave('MIT License  ·  © 2026 DRG Software Solutions LLC', 704, 38, 'italic', 400);
+  engrave('THE ISLAND', 300, 96, '', 700, 6);
+  flourish(403);
+  engrave('is from Tidewater, by dgreenheck', 510, 70, 'italic', 400);
   return done();
 }
