@@ -8,7 +8,7 @@
  *   opah          round, rose-red, scarlet fins     live squid, cast past 8 m of water
  *   sailfish      a cobalt sail and a bill          big-game rod, 60 lb, live squid, 10 m
  *   swordfish     a broad sword, only at night      glow rig, 100 lb, lever drag, 12 m
- *   blue marlin   the king                          everything at the top, and a gadget
+ *   blue marlin   the king                          everything at the top (live bonito), and a gadget
  *
  * Like the timed fish (fishing/timedFish.ts): a row in Tidewater's table, and a body made
  * Tidewater's way from one of its anatomies (world/fish/FishSpecies.js), reshaped — here with a
@@ -137,7 +137,9 @@ export const TROPHY: Record<string, TrophyFish> = {
     row: { name: 'Swordfish', sci: 'Xiphias gladius', lw: [0.0021, 3.1], habitat: { bay: 0.8, deep: 1 }, kg: [30, 100], price: 36, fight: 0.95, stamina: 20, rarity: 0.2 },
     needs: { bait: 4, line: 4, reel: 3 },
     minDepth: 12,
-    hours: [20, 5],
+    // after dark: the sky's dark from about 18:45 to 05:45 (world/sky.ts), and it used to wait an
+    // hour into that and leave before the end of it
+    hours: [19, 5.5],
     when: 'only at night: glow rig, 100 lb braid, lever drag, 12 m down',
     body: {
       base: 'tuna',
@@ -156,7 +158,8 @@ export const TROPHY: Record<string, TrophyFish> = {
   },
   marlin: {
     row: { name: 'Blue marlin', sci: 'Makaira nigricans', lw: [0.0021, 3.1], habitat: { bay: 0.6, deep: 1 }, kg: [45, 130], price: 42, fight: 1, stamina: 24, rarity: 0.12 },
-    needs: { rod: 3, reel: 3, line: 4, bait: 4, charm: 1 },
+    // (live bonito, the top bait, was made for it: on the glow rig it took the swordfish's bites at night)
+    needs: { rod: 3, reel: 3, line: 4, bait: 5, charm: 1 },
     minDepth: 13,
     when: 'the king: the best of everything, and a gadget from the engineer',
     body: {

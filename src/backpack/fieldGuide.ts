@@ -491,7 +491,9 @@ export class FieldGuide {
       .slice(0, 2)
       .map(([k]) => WHERE[k])
       .join(', ');
-    const when = TIMED[id]?.when.replace(/^only bites /, '') ?? WHEN[f.time] ?? '';
+    // (a trophy with hours of its own, the swordfish, is Tidewater's 'any' time in the table: it
+    // said "any time" over "only at night")
+    const when = TIMED[id]?.when.replace(/^only bites /, '') ?? (TROPHY[id]?.hours ? WHEN.night : WHEN[f.time]) ?? '';
     return `${where}  ·  ${when}`;
   }
 
