@@ -6,13 +6,18 @@
  *
  *   'email'  letters, digits, @ . - _ + and a .com key
  *   'code'   a telephone keypad, six digits
+ *   'receipt' the same keypad, eight digits shown as a Stripe receipt number (1234-5678): the dash
+ *            comes by itself after the fourth
  */
 
 import { font } from './fonts.ts';
 import { INK, roundRect } from './panel.ts';
 import { InteractivePanel, register } from './pointer.ts';
 
-export type KeyboardMode = 'email' | 'code';
+export type KeyboardMode = 'email' | 'code' | 'receipt';
+
+/** how many digits a keypad mode takes */
+const DIGITS: Partial<Record<KeyboardMode, number>> = { code: 6, receipt: 8 };
 
 interface Key {
   id: string;
@@ -94,7 +99,7 @@ export class Keyboard {
   }
 
   private press(id: string): void {
-    const max = this.mode === 'code' ? 6 : 96;
+    const max = DIGITS[this.mode] ?? 96;
     if (id.startsWith('k:')) {
       if (this.text.length < max) this.text += id.slice(2);
     } else if (id === 'dotcom') {
@@ -106,10 +111,15 @@ export class Keyboard {
       return;
     } else if (id === 'done') {
       this.close();
-      this.onDone(this.text);
+      this.onDone(this.shown());
       return;
     }
     this.paint();
+  }
+
+  /** What's handed on at DONE: a receipt number with its dash (1234-5678), else what was typed. */
+  private shown(): string {
+    return this.mode === 'receipt' && this.text.length > 4 ? `${this.text.slice(0, 4)}-${this.text.slice(4)}` : this.text;
   }
 
   private paint(): void {
@@ -130,10 +140,11 @@ export class Keyboard {
     roundRect(c, 30, 66, PX[0] - 60, 66, 12);
     c.fillStyle = 'rgba(0, 0, 0, 0.5)';
     c.fill();
-    c.font = font(700, this.mode === 'code' ? 50 : 40);
+    const pad = this.mode !== 'email';
+    c.font = font(700, pad ? 50 : 40);
     c.fillStyle = INK.hot;
-    const shown = this.mode === 'code' ? this.text.padEnd(6, '·').replace(/(.{3})/, '$1 ') : this.text;
-    c.fillText(shown + (this.mode === 'code' ? '' : '|'), 48, 115, PX[0] - 100);
+    const shown = this.mode === 'code' ? this.text.padEnd(6, '·').replace(/(.{3})/, '$1 ') : this.mode === 'receipt' ? `${this.text.padEnd(8, '·').slice(0, 4)}-${this.text.padEnd(8, '·').slice(4)}` : this.text;
+    c.fillText(shown + (pad ? '' : '|'), 48, 115, PX[0] - 100);
     for (const k of this.keys) {
       const hot = this.panel.hover === k.id;
       roundRect(c, k.x, k.y, k.w, k.h, 12);

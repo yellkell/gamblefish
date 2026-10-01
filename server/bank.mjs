@@ -15,6 +15,8 @@
  *   POST /claim       {} → {coins, credit, claimed, email}      (signed)
  *   GET  /whoami      {uid, protected, email (masked)}          (signed)
  *   POST /protect     {email} → attach it to this uid           (signed)
+ *   POST /restore     {receipt} → {token, uid, purchases}: REDEEM, with the number on the
+ *                     Stripe receipt for a purchase (no email sent, no phone)
  *   POST /handoff     {} → {code, purchases, token?} for a new headset to redeem (signed)
  *   POST /redeem      {code} → {token} that signs it in as you  (public, throttled)
  *   GET  /save        {data, at} — this account's game save     (signed)
@@ -133,6 +135,18 @@ class MemoryLedger {
   async noteEmail(uid, email) {
     this.account(uid).emails.add(email);
   }
+  /** The payments credited to an account: {id (the checkout session), ...what settle noted}. */
+  async receiptsOf(uid) {
+    return [...(this.accounts.get(uid)?.receipts ?? new Map())].map(([id, r]) => ({ id, ...r }));
+  }
+  receiptNumbers = new Map(); // receipt number (its letters and digits) → { uid, session }
+  /** Whose purchase a receipt number is, once it's been looked up (or null). */
+  async receiptOwner(key) {
+    return this.receiptNumbers.get(key) ?? null;
+  }
+  async noteReceipt(key, uid, session) {
+    this.receiptNumbers.set(key, { uid, session });
+  }
   async byEmail(email) {
     const out = [];
     for (const [uid, a] of this.accounts) if (a.emails.has(email) || a.lastEmail === email) out.push({ uid, credit: a.credit, at: a.at });
@@ -183,6 +197,19 @@ class FirestoreLedger {
   /** An email the account's owner gave it (SAVE MY PURCHASES), beside the ones it paid with. */
   async noteEmail(uid, email) {
     await this.db.collection('bank').doc(uid).set({ emails: this.FieldValue.arrayUnion(email) }, { merge: true });
+  }
+  /** The payments credited to an account: {id (the checkout session), ...what settle noted}. */
+  async receiptsOf(uid) {
+    const snap = await this.db.collection('bank').doc(uid).collection('receipts').limit(50).get();
+    return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  }
+  /** Whose purchase a receipt number is, once it's been looked up (`receiptNumbers/{number}`), or null. */
+  async receiptOwner(key) {
+    const d = await this.db.collection('receiptNumbers').doc(key).get();
+    return d.exists ? d.data() : null;
+  }
+  async noteReceipt(key, uid, session) {
+    await this.db.collection('receiptNumbers').doc(key).set({ uid, session, at: Date.now() });
   }
   /** Every account that paid with this email, newest purchase first. `emails` is every checkout's; older accounts only have `lastEmail`. */
   async byEmail(email) {
@@ -286,6 +313,8 @@ const HANDOFF_TTL_MS = 10 * 60 * 1000;
 const MAX_HANDOFFS_PER_UID = 3;
 /** Wrong LOG IN codes, counted so nobody can guess their way into an account. */
 const redeemGuard = new RedeemGuard();
+/** Wrong receipt numbers, counted the same way. */
+const restoreGuard = new RedeemGuard();
 /** Dev mode only: email → uid, in place of Firebase Auth. */
 const devEmails = new Map();
 
@@ -425,6 +454,45 @@ async function loginTarget(uid, email) {
   }
   console.log(`[bank] LOG IN with ${maskEmail(email)} → ${to.uid} (${to.credit ? 'paid' : 'saved'}; ${uid} had nothing)`);
   return { uid: to.uid, credit: to.credit, moved: true };
+}
+
+/** A receipt number as typed or printed ("#1234-5678", "1234 5678"): its letters and digits. */
+const receiptKey = (r) => String(r ?? '').replace(/[^0-9a-z]/gi, '').toLowerCase();
+
+/**
+ * The Fish & Chips purchase whose Stripe receipt carries this number: {uid, session}, or null.
+ * Stripe numbers a payment when it emails its receipt, after the payment's been credited, so the
+ * number isn't in the ledger: the account's recent charges are gone through for it (the Stripe
+ * account is shared with ff2's bank: only this game's checkouts count, and only ones credited
+ * here). Found once, it's noted (receiptOwner), and the next REDEEM with it is a straight lookup.
+ */
+async function purchaseByReceipt(want) {
+  if (!stripe) return null;
+  let seen = 0;
+  for await (const ch of stripe.charges.list({ limit: 100 })) {
+    if (++seen > 3000) break;
+    if (receiptKey(ch.receipt_number) !== want) continue;
+    if (!ch.paid || ch.refunded || typeof ch.payment_intent !== 'string') return null;
+    const s = (await stripe.checkout.sessions.list({ payment_intent: ch.payment_intent, limit: 1 })).data[0];
+    if (!s || s.metadata?.app !== 'gamblefish') return null;
+    const uid = String(s.metadata?.uid ?? s.client_reference_id ?? '');
+    if (!UID_OK.test(uid)) return null;
+    const credited = (await ledger.receiptsOf(uid)).some((r) => r.id === s.id);
+    return credited ? { uid, session: s.id } : null;
+  }
+  return null;
+}
+
+/** REDEEM: the account a receipt number's purchase was made on. */
+async function restoreTarget(receipt) {
+  const want = receiptKey(receipt);
+  if (want.length < 6) return null;
+  let owner = await ledger.receiptOwner(want);
+  if (!owner) {
+    owner = await purchaseByReceipt(want);
+    if (owner) await ledger.noteReceipt(want, owner.uid, owner.session).catch((err) => console.error(`[bank] could not note a receipt: ${err?.message ?? err}`));
+  }
+  return owner ? { uid: owner.uid, credit: await ledger.creditOf(owner.uid) } : null;
 }
 
 function newHandoff(uid) {
@@ -623,6 +691,10 @@ async function handleWebhook(req, res) {
       if (UID_OK.test(uid) && Number.isInteger(coins) && coins > 0 && coins <= 100000) {
         const email = String(s.customer_details?.email ?? '').trim().toLowerCase();
         await settle(s.id, uid, coins, { pack: String(s.metadata?.pack ?? ''), amount: s.amount_total ?? 0, currency: s.currency ?? CURRENCY, event: event.id, email: EMAIL_OK.test(email) ? email : '' });
+        // and a receipt, whatever the account's email settings: its number is what LOG IN BY
+        // RECEIPT asks for (Stripe numbers a payment only once it has emailed a receipt for it)
+        if (EMAIL_OK.test(email) && typeof s.payment_intent === 'string')
+          await stripe.paymentIntents.update(s.payment_intent, { receipt_email: email }).catch((err) => console.error(`[bank] no receipt for ${s.id}: ${err?.message ?? err}`));
       } else console.error(`[bank] paid session ${s.id} carries no usable uid/coins — not credited`);
     }
   }
@@ -747,6 +819,31 @@ export function handleHttp(req, res) {
     return;
   }
 
+  if (req.method === 'POST' && path === '/restore') {
+    void (async () => {
+      const who = callerOf(req);
+      // (a receipt number is short: as with the codes, nobody guesses their way in)
+      const refused = restoreGuard.refuse(who);
+      if (refused) return json(res, 429, { error: refused });
+      const body = await readBody(req);
+      try {
+        const to = await restoreTarget(body?.receipt);
+        if (!to) {
+          restoreGuard.miss(who);
+          console.log('[bank] redeem: no purchase with that receipt number');
+          return json(res, 404, { error: 'no purchase has that receipt number: check it against your Stripe receipt' });
+        }
+        const token = auth ? await auth.createCustomToken(to.uid) : `dev:${to.uid}`;
+        console.log(`[bank] redeem → ${to.uid}`);
+        json(res, 200, { token, uid: to.uid, purchases: to.credit });
+      } catch (err) {
+        console.error(`[bank] redeem failed: ${err?.message ?? err}`);
+        json(res, 502, { error: 'the bank could not reach Stripe: try again in a minute' });
+      }
+    })();
+    return;
+  }
+
   if (path === '/save') {
     if (req.method === 'GET') return signed(req, res, async (uid) => json(res, 200, (await ledger.getSave(uid)) ?? { data: null, at: 0 }));
     if (req.method === 'POST')
@@ -787,8 +884,11 @@ export function handleHttp(req, res) {
         const id = String(body?.s ?? '');
         const s = sessions.get(id);
         if (!s) return json(res, 404, { error: 'no such checkout' });
-        const out = await settle(id, s.uid, s.coins, { pack: s.pack, amount: PACKS.find((p) => p.id === s.pack)?.minor ?? 0, currency: CURRENCY, event: 'dev', email: String(body?.email ?? '') });
-        if (String(req.headers.accept ?? '').includes('application/json') || String(req.headers['content-type'] ?? '').includes('json')) return json(res, 200, { paid: true, duplicate: !!out.duplicate, credit: out.credit });
+        // (the development bank's receipt number: a real one is Stripe's, on the receipt it emails)
+        const receiptNumber = `${1000 + (randomBytes(2).readUInt16BE(0) % 9000)}-${1000 + (randomBytes(2).readUInt16BE(0) % 9000)}`;
+        const out = await settle(id, s.uid, s.coins, { pack: s.pack, amount: PACKS.find((p) => p.id === s.pack)?.minor ?? 0, currency: CURRENCY, event: 'dev', email: String(body?.email ?? ''), receiptNumber });
+        if (!out.duplicate) await ledger.noteReceipt(receiptKey(receiptNumber), s.uid, id);
+        if (String(req.headers.accept ?? '').includes('application/json') || String(req.headers['content-type'] ?? '').includes('json')) return json(res, 200, { paid: true, duplicate: !!out.duplicate, credit: out.credit, receiptNumber });
         html(res, 200, devPayPage(req, s, id, true));
       })();
       return;

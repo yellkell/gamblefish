@@ -10,21 +10,19 @@
  * something back (you can fish up as many in a few minutes late on).
  *
  *   PACKS     SUPPORT THE GAME, four packs (coins big, price small, BEST VALUE flagged), the
- *             account strip (SAVE MY PURCHASES / LOG IN, or who it's saved to)
- *             and the terms in one line.
+ *             REDEEM for coins bought on another headset, and the terms in one line.
  *   CONFIRM   the 18+ and no-cash-value agreement, every purchase.
  *   CHECKOUT  a QR code: screenshot it, bring the screenshot up on your
  *             phone and tap the code there to pay (or OPEN ON THIS HEADSET).
  *             The coins land by themselves within seconds while this face
  *             is up; step 4 says to refresh the page once paid, since the
  *             boot claim is the one that always collects them.
- *   PAID      the coins that landed, and (the first time) one tap to save the
- *             purchase to the email you paid with. Coins that landed at boot (after
- *             the refresh) bring this face up on the next visit, so the offer to save
- *             them isn't missed.
- *   LOG IN    on a new headset: type your email, open the link on your phone,
- *             type the six-digit code it shows. The game restarts as your
- *             account, with your save and every coin you bought.
+ *   PAID      the coins that landed, and the word to keep the receipt Stripe emails:
+ *             its number redeems them. Coins that landed at boot (after the refresh)
+ *             bring this face up on the next visit.
+ *   REDEEM    on another headset: type the receipt number from a purchase's Stripe
+ *             receipt. The game restarts as the account it was bought on, with its
+ *             save and every coin bought there. (No email sent, no phone.)
  *
  * The how is net/bank.ts (and server/bank.mjs); this file only draws `bank`
  * and passes on what's pointed at.
@@ -35,7 +33,7 @@ import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeom
 import { uiDeny, winFanfare } from '../audio/sfx.ts';
 import { look } from '../casino/look.ts';
 import type { GameState } from '../fishing/tidewater.ts';
-import { bank, cancelCheckout, cancelRecovery, loadPacks, openCheckout, priceLabel, protect, redeemCode, startCheckout, startRecovery, whoami, type CoinPack } from '../net/bank.ts';
+import { bank, cancelCheckout, cancelRecovery, loadPacks, openCheckout, priceLabel, restoreByReceipt, startCheckout, whoami, type CoinPack } from '../net/bank.ts';
 import { coinImage } from '../ui/coinIcon.ts';
 import { font } from '../ui/fonts.ts';
 import { Keyboard } from '../ui/keyboard.ts';
@@ -196,28 +194,21 @@ export class IslandBank {
     } else if (id === 'open') {
       if (!openCheckout()) uiDeny();
     } else if (id === 'retry') void loadPacks();
-    else if (id === 'save-paid') void protect(bank.lastEmail);
-    else if (id === 'save-type') this.typeEmail('protect');
     else if (id === 'login') {
       cancelRecovery();
       this.face = 'login';
-    } else if (id === 'login-email') this.typeEmail('login');
-    else if (id === 'login-code') {
-      this.keyboard.onDone = (code) => void redeemCode(code);
-      this.keyboard.onCancel = () => this.paint();
-      this.keyboard.open('code', 'The six-digit code on your phone', '');
-    }
+    } else if (id === 'login-receipt') this.typeReceipt();
     this.paint();
   }
 
-  private typeEmail(why: 'protect' | 'login'): void {
-    this.keyboard.onDone = (text) => {
-      if (why === 'protect') void protect(text);
-      else void startRecovery(text);
+  /** REDEEM: the receipt number on the Stripe receipt for a purchase. */
+  private typeReceipt(): void {
+    this.keyboard.onDone = (receipt) => {
+      void restoreByReceipt(receipt);
       this.paint();
     };
     this.keyboard.onCancel = () => this.paint();
-    this.keyboard.open('email', why === 'protect' ? 'Your email: your purchases are saved to it' : 'The email you paid with, or saved your coins to', why === 'protect' ? bank.lastEmail : '');
+    this.keyboard.open('receipt', 'The receipt number on your Stripe receipt', '');
   }
 
   /* ── frame ──────────────────────────────────────────────────────── */
@@ -298,16 +289,9 @@ export class IslandBank {
             text('BEST VALUE', x + 168, y + 9, 24, '#1a1206', 'center', 700);
           }
         });
-        // the account
-        const a = bank.account;
-        if (a.protected) {
-          text(`✓ Your coins are saved to ${a.email}.`, 44, 700, 36, INK.good, 'left', 700);
-          text('Log in with it at this bank on any headset to get them back.', 44, 744, 30, INK.dim);
-        } else {
-          text('Keep your thank-you coins: save them to your email, then log in on any headset.', 44, 700, 30, INK.dim);
-          btn('save-type', 'SAVE MY PURCHASES', 44, 720, 520, 80, BRASS, true, 34);
-          btn('login', 'LOG IN (new headset)', 590, 720, 520, 80, '#3fd6c6', true, 34);
-        }
+        // REDEEM: a purchase's Stripe receipt is its key, on any headset
+        text('Bought coins on another headset? Redeem them with the number on your Stripe receipt.', 44, 700, 30, INK.dim);
+        btn('login', 'REDEEM', 44, 720, 520, 80, '#3fd6c6', true, 34);
         text('18+ only. Coins are a thank-you for play in Fish & Chips: no cash value, never withdrawn or exchanged. Payments by Stripe.', 44, 872, 22, INK.dim, 'left', 500, W - 88);
         break;
       }
@@ -359,40 +343,26 @@ export class IslandBank {
         text('THANK YOU FOR SUPPORTING THE GAME!', W / 2, 180, 52, BRASS, 'center', 700);
         text(`+${got.toLocaleString('en-US')}`, W / 2, 320, 130, '#ffd24a', 'center', 700);
         text('coins landed in your wallet, with thanks', W / 2, 390, 40, INK.hot, 'center');
-        const a = bank.account;
-        if (a.protected) {
-          text(`Saved to ${a.email}: log in with it on any headset.`, W / 2, 480, 34, INK.good, 'center', 700);
-          btn('done', 'DONE', W / 2 - 220, 560, 440, 110, BRASS, true, 44);
-        } else if (bank.protecting.stage === 'busy') text('saving…', W / 2, 520, 40, INK.dim, 'center');
-        else {
-          text('Save your coins to your email, so a new headset can get them back:', W / 2, 470, 32, INK.dim, 'center');
-          if (bank.lastEmail) btn('save-paid', `SAVE TO ${bank.lastEmail}`, W / 2 - 520, 520, 1040, 100, '#ffb000', true, 38);
-          btn('save-type', bank.lastEmail ? 'ANOTHER EMAIL' : 'SAVE TO MY EMAIL', W / 2 - 520, 640, 500, 90, BRASS, true, 32);
-          btn('done', 'NOT NOW', W / 2 + 20, 640, 500, 90, 'rgba(255,255,255,0.25)', true, 32);
-          if (bank.protecting.stage === 'failed') text(bank.protecting.note, W / 2, 780, 30, INK.danger, 'center');
-        }
+        // the receipt Stripe emails is how these coins come back on another headset (REDEEM)
+        text('Stripe is emailing you a receipt: keep it. Its receipt number redeems', W / 2, 470, 32, INK.dim, 'center');
+        text('these coins, and your game, on any headset (REDEEM, here at the bank).', W / 2, 514, 32, INK.dim, 'center');
+        btn('done', 'DONE', W / 2 - 220, 580, 440, 110, BRASS, true, 44);
         break;
       }
       case 'login': {
+        // REDEEM: a purchase's receipt number brings its account (coins and game) to this headset
         const r = bank.recovery;
-        text('LOG IN', 44, 190, 52, '#3fd6c6', 'left', 700);
-        if (r.stage === 'idle' || r.stage === 'failed' || r.stage === 'sending') {
-          text('Played before on another headset? Get your account back:', 44, 270, 36, INK.hot);
-          const steps = ['1.  Type the email you paid with (or saved your coins to).', '2.  Open the link we email you, on your phone.', '3.  Your phone shows a six-digit code: type it here.'];
-          steps.forEach((s, i) => text(s, 70, 340 + i * 56, 34, INK.dim));
-          btn('login-email', r.stage === 'sending' ? 'SENDING…' : 'TYPE MY EMAIL', 44, 540, 600, 100, '#3fd6c6', r.stage !== 'sending', 40);
-          btn('back', 'BACK', 680, 540, 360, 100, 'rgba(255,255,255,0.25)', true, 38);
-          if (r.stage === 'failed') text(r.note, 44, 700, 32, INK.danger);
-        } else if (r.stage === 'sent' || r.stage === 'redeeming') {
-          text(`We emailed a sign-in link to ${r.email}.`, 44, 270, 38, INK.hot, 'left', 700);
-          text('Open it on your phone: it shows a six-digit code. Then:', 44, 330, 34, INK.dim);
-          btn('login-code', r.stage === 'redeeming' ? 'CHECKING…' : 'TYPE THE CODE', 44, 390, 600, 110, '#ffb000', r.stage === 'sent', 42);
-          btn('login-email', 'SEND IT AGAIN', 680, 390, 440, 110, 'rgba(255,255,255,0.25)', true, 34);
-          btn('back', 'BACK', 1150, 390, 300, 110, 'rgba(255,255,255,0.18)', true, 34);
-          text('The code works once and lasts ten minutes. No email? Check spam.', 44, 580, 30, INK.dim);
-        } else if (r.stage === 'done') {
+        text('REDEEM', 44, 190, 52, '#3fd6c6', 'left', 700);
+        if (r.stage === 'done') {
           text('Welcome back.', W / 2, 400, 80, INK.good, 'center', 700);
           text('Restarting as your account…', W / 2, 480, 40, INK.hot, 'center');
+        } else {
+          text('Bought coins on another headset? Bring them, and that game, here:', 44, 270, 36, INK.hot);
+          text('type the receipt number from the Stripe receipt you were emailed (like 1234-5678).', 70, 336, 32, INK.dim);
+          const busy = r.stage === 'redeeming';
+          btn('login-receipt', busy ? 'CHECKING…' : 'TYPE THE RECEIPT NUMBER', 44, 420, 760, 100, '#ffb000', !busy, 40);
+          btn('back', 'BACK', 840, 420, 360, 100, 'rgba(255,255,255,0.25)', true, 38);
+          if (r.stage === 'failed') text(r.note, 44, 580, 32, INK.danger);
         }
         break;
       }
