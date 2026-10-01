@@ -52,7 +52,8 @@ export const KEY: Place[] = [
   { building: 'B', text: "Slots: Reel 'Em In" },
   { building: 'G', text: 'Blackjack: the Card Shark' },
   { building: 'H', text: 'Island bank' },
-  { building: 'boathouse', text: 'Boatyard' },
+  // (the pawn shop sells the dancers' camps' map; the boatyard had nothing to sell in the headset)
+  { building: 'J', text: 'Pawn shop' },
   { building: 'N', text: 'Island engineer' },
   { building: 'K', text: 'Taxidermist' },
   { building: 'A', text: 'Jeweller' },

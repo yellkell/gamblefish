@@ -1,8 +1,8 @@
 Fish & Chips: third-party notices
 =================================
 
-The island, its sea, village and fish, and the fishing rules are Tidewater
-(https://github.com/dgreenheck/tidewater), by dgreenheck, used under the MIT License:
+Parts of this game come from Tidewater (https://github.com/dgreenheck/tidewater), by dgreenheck,
+used under the MIT License:
 
 MIT License
 
