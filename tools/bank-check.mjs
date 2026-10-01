@@ -198,6 +198,16 @@ console.log('\nlogging in with the email you paid with');
   const plain = await hand('player');
   check('a handoff with no email is the plain one', plain.status === 200 && plain.json?.token === undefined);
 
+  // paid with one email (Stripe's receipt), saved the purchases under another, and LOG IN with
+  // that one: the email link makes the phone a new uid (as it does when Firebase keeps an account
+  // per sign-in method, or the email is one the ledger never saw)
+  const co2 = await req('/checkout', { method: 'POST', headers: as('receipt-headset'), body: { pack: 'chest' } });
+  await req('/dev-pay', { method: 'POST', headers: { 'content-type': 'application/json', accept: 'application/json' }, body: { s: co2.json.id, email: 'receipt@example.com' } });
+  const kept = await req('/protect', { method: 'POST', headers: as('receipt-headset'), body: { email: 'saved@example.com' } });
+  check('SAVE MY PURCHASES under another email than the receipt', kept.status === 200 && kept.json?.protected === true, `${kept.status}`);
+  const found = await hand('link-made-2', 'saved@example.com');
+  check('a LOG IN with the email you saved your purchases under finds them', found.status === 200 && found.json?.purchases === 3000 && found.json?.token === 'dev:receipt-headset', `${found.status} ${JSON.stringify(found.json)}`);
+
   await req('/protect', { method: 'POST', headers: as('ghost'), body: { email: 'mine@example.com' } });
   const back = await req('/protect', { method: 'POST', headers: as('keeper'), body: { email: 'mine@example.com' } });
   check('SAVE MY PURCHASES takes an email back from an empty account', back.status === 200 && back.json?.protected === true);

@@ -129,6 +129,10 @@ class MemoryLedger {
   async creditOf(uid) {
     return this.accounts.get(uid)?.credit ?? 0;
   }
+  /** An email the account's owner gave it (SAVE MY PURCHASES), beside the ones it paid with. */
+  async noteEmail(uid, email) {
+    this.account(uid).emails.add(email);
+  }
   async byEmail(email) {
     const out = [];
     for (const [uid, a] of this.accounts) if (a.emails.has(email) || a.lastEmail === email) out.push({ uid, credit: a.credit, at: a.at });
@@ -175,6 +179,10 @@ class FirestoreLedger {
   async creditOf(uid) {
     const a = await this.db.collection('bank').doc(uid).get();
     return a.exists ? (a.data().credit ?? 0) : 0;
+  }
+  /** An email the account's owner gave it (SAVE MY PURCHASES), beside the ones it paid with. */
+  async noteEmail(uid, email) {
+    await this.db.collection('bank').doc(uid).set({ emails: this.FieldValue.arrayUnion(email) }, { merge: true });
   }
   /** Every account that paid with this email, newest purchase first. `emails` is every checkout's; older accounts only have `lastEmail`. */
   async byEmail(email) {
@@ -320,6 +328,26 @@ async function ownerOf(email) {
   return devEmails.get(email) ?? '';
 }
 
+/**
+ * Every uid wearing an email in sign-in. Usually one, but Firebase can keep an account per way of
+ * signing in, so an email link can make a new one beside the account that SAVE MY PURCHASES put
+ * the email on: those are found by going through the accounts (only when the ledger had no answer).
+ */
+async function holdersOf(email) {
+  if (!auth) return devEmails.has(email) ? [devEmails.get(email)] : [];
+  const out = new Set();
+  const one = await ownerOf(email);
+  if (one) out.add(one);
+  let token;
+  for (let pages = 0; pages < 20; pages++) {
+    const page = await auth.listUsers(1000, token);
+    for (const u of page.users) if ((u.email ?? '').toLowerCase() === email) out.add(u.uid);
+    token = page.pageToken;
+    if (!token) break;
+  }
+  return [...out];
+}
+
 /** Nothing bought, nothing saved: an account an email link made and nothing ever used. */
 async function isEmpty(uid) {
   return (await ledger.creditOf(uid)) === 0 && !(await ledger.getSave(uid));
@@ -351,6 +379,8 @@ async function protect(uid, email, verified = false) {
       throw err;
     }
   } else devEmails.set(email, uid);
+  // and in the ledger, beside the emails it paid with: a LOG IN looks there first
+  await ledger.noteEmail(uid, email).catch((err) => console.error(`[bank] could not note ${maskEmail(email)} on ${uid}: ${err?.message ?? err}`));
   return { ok: true };
 }
 
@@ -361,24 +391,39 @@ async function protect(uid, email, verified = false) {
 async function loginTarget(uid, email) {
   const credit = await ledger.creditOf(uid);
   if (!email || credit > 0) return { uid, credit };
-  const payers = (await ledger.byEmail(email)).filter((p) => p.uid !== uid && p.credit > 0);
-  if (!payers.length) {
-    if (await ledger.getSave(uid)) return { uid, credit };
+  // the account that paid with this email, or had it given at SAVE MY PURCHASES (the ledger)...
+  const payers = await ledger.byEmail(email);
+  let to = payers.find((p) => p.uid !== uid && p.credit > 0) ?? null;
+  // ...or, failing that, one wearing it in sign-in that has coins, or else a game saved
+  const holders = to ? [] : (await holdersOf(email)).filter((h) => h !== uid);
+  for (const h of holders) {
+    const c = await ledger.creditOf(h);
+    if (c > 0) {
+      to = { uid: h, credit: c };
+      break;
+    }
+  }
+  if (!to && (await ledger.getSave(uid))) return { uid, credit };
+  if (!to)
+    for (const h of holders)
+      if (await ledger.getSave(h)) {
+        to = { uid: h, credit: 0 };
+        break;
+      }
+  if (!to) {
+    console.log(`[bank] LOG IN with ${maskEmail(email)} found nothing: ${payers.length} in the ledger with it, ${holders.length} other sign-ins wearing it`);
     // a brand-new uid the link just made: gone again, so the email stays free for SAVE MY PURCHASES
     await dropUser(uid).catch((err) => console.error(`[bank] could not drop ${uid}: ${err?.message ?? err}`));
     return { uid: '', credit: 0 };
   }
-  const to = payers[0];
-  // this uid bought nothing: the email moves to the account that paid with it (unless that one already has an email of its own)
-  if (!(await emailOf(to.uid))) {
-    try {
-      await dropUser(uid);
-      await protect(to.uid, email, true);
-    } catch (err) {
-      console.error(`[bank] could not move ${maskEmail(email)} from ${uid} to ${to.uid}: ${err?.message ?? err}`);
-    }
+  // this uid has nothing: it goes, and the email moves to the account (unless that one already has an email of its own)
+  try {
+    if (await isEmpty(uid)) await dropUser(uid);
+    if (!(await emailOf(to.uid))) await protect(to.uid, email, true);
+  } catch (err) {
+    console.error(`[bank] could not move ${maskEmail(email)} from ${uid} to ${to.uid}: ${err?.message ?? err}`);
   }
-  console.log(`[bank] LOG IN with ${maskEmail(email)} → ${to.uid} (paid with it; ${uid} had nothing)`);
+  console.log(`[bank] LOG IN with ${maskEmail(email)} → ${to.uid} (${to.credit ? 'paid' : 'saved'}; ${uid} had nothing)`);
   return { uid: to.uid, credit: to.credit, moved: true };
 }
 
@@ -668,7 +713,7 @@ export function handleHttp(req, res) {
   if (req.method === 'POST' && path === '/handoff')
     return signed(req, res, async (uid, email) => {
       const to = await loginTarget(uid, email);
-      if (!to.uid) return json(res, 404, { error: 'nothing is saved to that email, and no coins were bought with it. Try the email on your Stripe receipt', empty: true });
+      if (!to.uid) return json(res, 404, { error: 'no coins were bought with that email and no game is saved to it. Try the email on your Stripe receipt', empty: true });
       const code = newHandoff(to.uid);
       if (!code) return json(res, 429, { error: 'too many codes on the go: wait ten minutes' });
       const reply = { code, ttl: HANDOFF_TTL_MS, purchases: to.credit };
