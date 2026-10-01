@@ -32,8 +32,6 @@ import {
   BoxGeometry,
   Shape,
   SRGBColorSpace,
-  Sprite,
-  SpriteMaterial,
   TorusGeometry,
   Vector3,
   type Camera,
@@ -158,12 +156,12 @@ export class BlackjackTable {
     // totals floating over the hands
     for (let h = 0; h < 2; h++) {
       const l = new Label();
-      g.add(l.sprite);
+      g.add(l.mesh);
       this.labels.push(l);
     }
     this.dealerLabel = new Label();
-    this.dealerLabel.sprite.position.set(0, 1.08, -0.12);
-    g.add(this.dealerLabel.sprite);
+    this.dealerLabel.place(0, 1.08, -0.12);
+    g.add(this.dealerLabel.mesh);
 
     // the board behind the dealer
     this.board = new InteractivePanel([1000, 420], [1.2, 0.504]);
@@ -495,10 +493,10 @@ export class BlackjackTable {
       const text = res ? { blackjack: 'BLACKJACK', win: 'WIN', push: 'PUSH', lose: 'LOSE', bust: 'BUST' }[res.outcome] : t.total > 21 ? 'BUST' : !h.split && isNatural(cards) ? 'BLACKJACK' : `${t.soft && t.total < 21 ? 'soft ' : ''}${t.total}`;
       const colour = res ? (res.returned > h.bet ? INK.good : res.returned === h.bet ? INK.hot : INK.danger) : t.total > 21 ? INK.danger : r && r.active === k && this.phase === 'player' ? INK.amber : INK.hot;
       l.set(text, colour);
-      l.sprite.position.set(this.handX(k) + 0.02, 1.02, 0.34);
+      l.place(this.handX(k) + 0.02, 1.02, 0.34);
       // a winning hand's label throbs while it's paid
       const throb = res && res.returned > h.bet && this.phase === 'settled' ? 1.12 + 0.08 * Math.sin(this.settleT * 9) : 1;
-      l.sprite.scale.set(0.24 * throb, 0.06 * throb, 1);
+      l.mesh.scale.set(0.24 * throb, 0.06 * throb, 1);
     });
     if (!r) return this.dealerLabel.set('');
     const up = this.revealed ? shownCards(r.dealer) : shownCards(r.dealer).slice(0, 1);
@@ -554,9 +552,16 @@ export class BlackjackTable {
   }
 }
 
-/** A little floating readout (a hand's total, the dealer's). */
+/** where your eyes are at the table, in its frame: the readouts are tipped up toward them */
+const SEAT_EYE = new Vector3(0, 1.6, 1.0);
+
+/**
+ * A little floating readout (a hand's total, the dealer's). It stands still over the felt, tipped
+ * back toward where you stand, the way a card on a stand would: it used to be a sprite, which
+ * turns with the headset, so every tilt of your head swung the numbers round with it.
+ */
 class Label {
-  readonly sprite: Sprite;
+  readonly mesh: Mesh;
   private readonly canvas = document.createElement('canvas');
   private readonly tex: CanvasTexture;
   private text = '\u0000';
@@ -567,16 +572,22 @@ class Label {
     this.canvas.height = 96;
     this.tex = new CanvasTexture(this.canvas);
     this.tex.colorSpace = SRGBColorSpace;
-    this.sprite = new Sprite(new SpriteMaterial({ map: this.tex, transparent: true, depthWrite: false, toneMapped: false }));
-    this.sprite.scale.set(0.24, 0.06, 1);
-    this.sprite.renderOrder = 12;
+    this.mesh = new Mesh(LABEL_QUAD, new MeshBasicMaterial({ map: this.tex, transparent: true, depthWrite: false, toneMapped: false }));
+    this.mesh.scale.set(0.24, 0.06, 1);
+    this.mesh.renderOrder = 12;
+  }
+
+  /** Put it at (x, y, z) in the table's frame, facing your seat. */
+  place(x: number, y: number, z: number): void {
+    this.mesh.position.set(x, y, z);
+    this.mesh.rotation.set(-Math.atan2(SEAT_EYE.y - y, SEAT_EYE.z - z), 0, 0);
   }
 
   set(text: string, colour: string = INK.hot): void {
     if (text === this.text && colour === this.colour) return;
     this.text = text;
     this.colour = colour;
-    this.sprite.visible = !!text;
+    this.mesh.visible = !!text;
     const g = this.canvas.getContext('2d')!;
     g.clearRect(0, 0, 384, 96);
     if (!text) return;
@@ -595,6 +606,8 @@ class Label {
     this.tex.needsUpdate = true;
   }
 }
+
+const LABEL_QUAD = new PlaneGeometry(1, 1);
 
 /** The felt: green baize in the table's half-round, with the house rules printed round it. */
 function feltTexture(): CanvasTexture {

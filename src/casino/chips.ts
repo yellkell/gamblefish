@@ -4,7 +4,7 @@
  * white one, so a stack reads as money and not as a pile of pucks.
  */
 
-import { CanvasTexture, CylinderGeometry, InstancedMesh, MeshLambertMaterial } from 'three';
+import { CanvasTexture, Color, CylinderGeometry, InstancedMesh, MeshLambertMaterial } from 'three';
 
 export const CHIP_COLOUR: Record<number, number> = { 1: 0xf2efe6, 5: 0xc23b2e, 10: 0x2f5ac2, 25: 0x2f8a4a, 100: 0x1a1a1e, 500: 0x7a3aa8 };
 
@@ -26,6 +26,10 @@ export function chipMesh(max: number): InstancedMesh {
   const rim = chipMaterial(edgeMask());
   const face = chipMaterial(faceMask());
   const mesh = new InstancedMesh(new CylinderGeometry(0.024, 0.024, 0.006, 32), [rim, face, face], max);
+  // coloured from the start: colours arriving with the first chip down changed its shader, and it
+  // was built again then and there
+  const white = new Color(1, 1, 1);
+  for (let i = 0; i < max; i++) mesh.setColorAt(i, white);
   mesh.count = 0;
   mesh.frustumCulled = false;
   return mesh;

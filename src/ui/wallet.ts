@@ -12,7 +12,7 @@
  * without having to remember it.
  */
 
-import { BoxGeometry, Group, Mesh, MeshLambertMaterial, type Object3D } from 'three';
+import { BoxGeometry, Group, Mesh, MeshLambertMaterial, Vector3, type Camera, type Object3D } from 'three';
 import { playCash, preloadCash } from '../audio/cash.ts';
 import type { GameState } from '../fishing/tidewater.ts';
 import { coinImage } from './coinIcon.ts';
@@ -41,9 +41,24 @@ function wheel(v: number, place: number): { digit: number; roll: number } {
   return { digit, roll };
 }
 
+const _eye = new Vector3();
+const _look = new Vector3();
+const _at = new Vector3();
+
 class Watch {
   readonly group = new Group();
   private readonly panel = new Panel([W, H], [0.064, 0.0224]);
+  /** the money's moved since this face was painted */
+  stale = true;
+
+  /** Could the eye be looking at it? (Somewhere in front, within reach: a wrist you've lowered isn't.) */
+  seenBy(eye: Camera): boolean {
+    eye.getWorldPosition(_eye);
+    eye.getWorldDirection(_look);
+    this.panel.mesh.getWorldPosition(_at).sub(_eye);
+    const d = _at.length();
+    return d < 1.2 && _at.dot(_look) > d * 0.45;
+  }
 
   constructor() {
     // a slim gunmetal case under the face
@@ -149,7 +164,12 @@ export class WristWallet {
     preloadCash();
   }
 
-  update(dt: number): void {
+  /**
+   * Roll the counters. With `eye`, a watch is only painted while it could be seen: rolling, each
+   * repaints its canvas and sends it to the GPU every frame for a second or two after every chip,
+   * stake and payout, and mostly nobody's looking. One you look at catches up at once.
+   */
+  update(dt: number, eye?: Camera): void {
     const d = this.target - this.shown;
     if (Math.abs(d) > 1e-3) {
       // exponential chase with a floor on the speed, so small sums still roll, not jump
@@ -165,9 +185,13 @@ export class WristWallet {
       this.flash = Math.max(0, this.flash - dt * 1.5);
       this.dirty = true;
     }
-    if (!this.dirty) return;
+    if (this.dirty) for (const w of this.watches) w.stale = true;
     this.dirty = false;
-    for (const w of this.watches) w.paint(this.shown, this.flash);
+    for (const w of this.watches) {
+      if (!w.stale || (eye && !w.seenBy(eye))) continue;
+      w.stale = false;
+      w.paint(this.shown, this.flash);
+    }
   }
 
   /** Force a repaint (the house face finished loading). */

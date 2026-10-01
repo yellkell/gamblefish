@@ -47,6 +47,7 @@ import { gemChime, pickClink, rockBreak, uiDeny } from '../audio/sfx.ts';
 import { backpackView } from '../backpack/BackpackSystem.ts';
 import { Tray } from '../backpack/tray.ts';
 import { introActive } from '../experience/introGate.ts';
+import { warmUp } from '../fx/warm.ts';
 import { Toast } from '../fishing/hud.ts';
 import type { GameState } from '../fishing/tidewater.ts';
 import { pulseHand } from '../input/haptics.ts';
@@ -55,7 +56,7 @@ import { INK, Panel } from '../ui/panel.ts';
 import { InteractivePanel, pointerView, register } from '../ui/pointer.ts';
 import type { BoxCollider } from '../world/data.ts';
 import { dropTwinkles, gemMesh, tickGems, twinkles } from './gemMesh.ts';
-import { GEMS, pocket, ROCK_GRID, rockStock, type RockGem } from './gems.ts';
+import { GEM_IDS, GEMS, pocket, ROCK_GRID, rockStock, type RockGem } from './gems.ts';
 import { buildPickaxe, buildRock, PICK_TIP, ROCK_TIME, stoneColour, type RockModel } from './rock.ts';
 import { ROCK_H, ROCK_R, ROCK_SITES, type RockSite } from './sites.ts';
 
@@ -108,6 +109,16 @@ const _v = new Vector3();
 const _w = new Vector3();
 const _q = new Quaternion();
 const UP = new Vector3(0, 1, 0);
+const _white = new Color(1, 1, 1);
+
+/** the rubble's stone, one material for each colour of rock (a new one each break was a new shader to build) */
+const rubbleMats = new Map<number, MeshLambertMaterial>();
+function rubbleMaterial(colour: Color): MeshLambertMaterial {
+  const key = colour.getHex();
+  let m = rubbleMats.get(key);
+  if (!m) rubbleMats.set(key, (m = new MeshLambertMaterial({ color: colour, flatShading: true })));
+  return m;
+}
 
 interface Rock {
   site: RockSite;
@@ -207,6 +218,9 @@ export class MiningSystem extends createSystem({}) {
     this.toast.panel.mesh.visible = false;
     this.scene.add(this.toast.panel.mesh);
     this.chips = new InstancedMesh(new BoxGeometry(0.035, 0.022, 0.028), new MeshLambertMaterial({ color: 0xffffff }), 80);
+    // coloured from the start: the colours arriving with the first blow changed its shader, and
+    // it was built again then and there
+    for (let i = 0; i < 80; i++) this.chips.setColorAt(i, _white);
     this.chips.count = 0;
     this.chips.frustumCulled = false;
     this.scene.add(this.chips);
@@ -215,6 +229,12 @@ export class MiningSystem extends createSystem({}) {
     this.sparks.frustumCulled = false;
     this.scene.add(this.sparks);
     this.buildTray();
+    // what a rock breaking draws for the first time (the stones' shader above all, the heaviest on
+    // the island), built behind the boot intro instead of as it breaks (fx/warm.ts)
+    const chips = new InstancedMesh(this.chips.geometry, this.chips.material, 1);
+    chips.setColorAt(0, _white);
+    const rubble = new Mesh(new DodecahedronGeometry(0.1, 0), rubbleMaterial(stoneColour(ROCK_SITES[0].ground)));
+    warmUp(gemMesh(GEM_IDS[0], 0.05), twinkles(1, 0.01, '#ffffff'), chips, new InstancedMesh(this.sparks.geometry, this.sparks.material, 1), rubble);
     mineView.system = this;
     mineView.nearest = () => {
       const n = this.nearest(this.camera.getWorldPosition(_v));
@@ -390,10 +410,10 @@ export class MiningSystem extends createSystem({}) {
     r.state = 'breaking';
     r.t = 0;
     r.stock = rockStock(r.site.ground, Math.random);
-    // broken for good: the save remembers it, and what's in it
+    // broken for good: the save remembers it, and what's in it (no board shows what's left in a
+    // rock, so the boards round the island aren't told: each would repaint, just as it breaks)
     this.state.gems.mined[r.site.id] = r.stock;
     this.state.save();
-    this.state.emit();
     r.model.stone.visible = false;
     mineDeps.removeBox?.(r.box);
     const g = new Group();
@@ -499,8 +519,7 @@ export class MiningSystem extends createSystem({}) {
       g.translate(Math.cos(a) * d, s * 0.3 + 0.1, Math.sin(a) * d);
       parts.push(g);
     }
-    const colour = stoneColour(r.site.ground);
-    const mesh = new Mesh(mergeGeometries(parts, false)!, new MeshLambertMaterial({ color: colour, flatShading: true }));
+    const mesh = new Mesh(mergeGeometries(parts, false)!, rubbleMaterial(stoneColour(r.site.ground)));
     mesh.name = 'rubble';
     return mesh;
   }
@@ -673,8 +692,11 @@ export class MiningSystem extends createSystem({}) {
     r.stock = r.stock.filter((k) => k !== gem);
     s.gems.mined[r.site.id] = r.stock;
     pocket(s.gems, gem);
-    s.save();
-    s.emit();
+    // (taking them all, they're saved and told once, at the end)
+    if (!quiet) {
+      s.save();
+      s.emit();
+    }
     const rare = GEMS[gem.id].rarity < 0.5;
     const stone = this.stones.get(gem);
     if (stone) {
@@ -703,6 +725,8 @@ export class MiningSystem extends createSystem({}) {
     }
     const all = [...r.stock];
     all.forEach((g) => this.take(g, 'right', true));
+    this.state.save();
+    this.state.emit();
     gemChime(all.some((g) => GEMS[g.id].rarity < 0.5));
     this.gotGems(all.length);
   }

@@ -187,9 +187,19 @@ function getAtlas(): CanvasTexture {
   return atlas;
 }
 
+/**
+ * Each cell's plane, made once: a card dealt used to build two new ones (and a card swept away
+ * never let go of them), every card of every hand.
+ */
+const planes = new Map<string, PlaneGeometry>();
+
 /** A plane that shows atlas cell (col, row), lying flat, facing up (+y) or down. */
 function cellPlane(col: number, row: number, up: boolean): PlaneGeometry {
+  const key = `${col}:${row}:${up}`;
+  const had = planes.get(key);
+  if (had) return had;
   const geo = new PlaneGeometry(CARD_W, CARD_H);
+  planes.set(key, geo);
   const uv = geo.getAttribute('uv') as BufferAttribute;
   const u0 = col / COLS;
   const u1 = (col + 1) / COLS;

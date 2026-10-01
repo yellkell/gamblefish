@@ -78,6 +78,15 @@ export interface Interior {
   seenFrom(x: number, z: number): boolean;
 }
 
+/**
+ * The room's floor, walls and ceiling are drawn before anything else that's solid. three sorts
+ * solid things by material before distance, and the island's (the terrain, the village, the
+ * trees and the grass) were made first, so they were drawn first: everything outside a room was
+ * drawn in full, behind its walls, and then painted over. From the Island Engineer, whose back
+ * wall is up against the forest, that was most of the frame. Drawn first, the walls hide it.
+ */
+const SHELL_FIRST = -1;
+
 /** how far off you can still make out a room through its doorway (m) */
 const SEEN_WITHIN = 24;
 
@@ -362,6 +371,7 @@ export function buildInteriors(frames: BuildingFrame[]): Interior[] {
       new MeshBasicMaterial({ map: surface((g, w0, h0) => ((g.fillStyle = '#4a3a2a'), g.fillRect(0, 0, w0, h0)), floorLit, 128) }),
     );
     ceil.position.y = h;
+    floor.renderOrder = ceil.renderOrder = SHELL_FIRST;
     group.add(floor, ceil);
     /**
      * A wall, or (`cut`) a piece of the front wall: its texture is then cut from the whole wall's,
@@ -380,6 +390,7 @@ export function buildInteriors(frames: BuildingFrame[]): Interior[] {
       const m = new Mesh(g, wallMat);
       m.position.set(x, y, z);
       m.rotation.y = ry;
+      m.renderOrder = SHELL_FIRST;
       group.add(m);
     };
     panel(w, h, 0, h / 2, -d / 2, 0); // back, facing in (+z)

@@ -994,6 +994,30 @@ export function lookFor(building: string): Look {
 
 export type InkName = 'title' | 'ink' | 'dim' | 'accent' | 'good' | 'bad';
 
+/**
+ * A look's face, painted once and kept. A face is hundreds of strokes (planks and their grain, a
+ * rope's every twist, a blueprint's grid), and a board repaints whole: on every hover change and
+ * every time the wallet moves. Painting it fresh each time, two dozen boards round the island at
+ * once, was a stutter after every chip and every sale. It never changes (it's drawn from its seed
+ * alone), so it's painted the first time and copied in after that.
+ */
+const faces = new Map<Look, Map<string, HTMLCanvasElement>>();
+
+function faceOf(look: Look, w: number, h: number, seed: number): HTMLCanvasElement {
+  let byLook = faces.get(look);
+  if (!byLook) faces.set(look, (byLook = new Map()));
+  const key = `${w}x${h}:${seed}`;
+  let c = byLook.get(key);
+  if (!c) {
+    c = document.createElement('canvas');
+    c.width = w;
+    c.height = h;
+    look.face(c.getContext('2d')!, w, h, seed);
+    byLook.set(key, c);
+  }
+  return c;
+}
+
 /** Paints a board in its look: the face, titles, lines of text, buttons. */
 export class Lettering {
   private buttons: Button[] = [];
@@ -1015,7 +1039,7 @@ export class Lettering {
   begin(face = true): Ctx {
     this.panel.clear();
     this.buttons = [];
-    if (face) this.look.face(this.c, this.w, this.h, this.seed);
+    if (face) this.c.drawImage(faceOf(this.look, this.w, this.h, this.seed), 0, 0);
     this.c.textBaseline = 'alphabetic';
     return this.c;
   }

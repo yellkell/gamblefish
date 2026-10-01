@@ -18,6 +18,7 @@ import type { Place } from './backpack/chart.ts';
 import { FishingSystem, fishingDeps, fishingView } from './fishing/FishingSystem.ts';
 import { loadProps } from './fishing/props.ts';
 import { createGameState } from './fishing/tidewater.ts';
+import { warmUpNow } from './fx/warm.ts';
 import { WristWallet } from './ui/wallet.ts';
 import { WaterFx } from './fx/water.ts';
 import { locomotion, teleportView, TeleportSystem } from './locomotion/TeleportSystem.ts';
@@ -482,7 +483,11 @@ World.create(container, {
   if (import.meta.env.DEV) void import('./dev/harness.ts').then((m) => m.installHarness(world));
 
   // the curtain goes up the moment the session starts, before the island's first frame in it
-  world.renderer.xr.addEventListener('sessionstart', () => runBootIntro(world.camera as PerspectiveCamera, world.scene));
+  world.renderer.xr.addEventListener('sessionstart', () => {
+    runBootIntro(world.camera as PerspectiveCamera, world.scene);
+    // and while its shade is up, the shaders that would otherwise be built mid-game (fx/warm.ts)
+    warmUpNow(world.camera);
+  });
 
   progress(1);
   scene.visible = true;
