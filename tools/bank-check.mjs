@@ -111,13 +111,13 @@ console.log('\nbuying');
   const before = await req('/claim', { method: 'POST', headers: as('buyer'), body: {} });
   check('nothing to claim before paying', before.json?.coins === 0);
   const pay = await req('/dev-pay', { method: 'POST', headers: { 'content-type': 'application/json', accept: 'application/json' }, body: { s: co.json.id } });
-  check('paying credits the pack', pay.json?.paid === true && pay.json?.duplicate === false && pay.json?.credit === 1300, `credit ${pay.json?.credit}`);
+  check('paying credits the pack', pay.json?.paid === true && pay.json?.duplicate === false && pay.json?.credit === 9000, `credit ${pay.json?.credit}`);
   const again = await req('/dev-pay', { method: 'POST', headers: { 'content-type': 'application/json', accept: 'application/json' }, body: { s: co.json.id } });
-  check('the same payment told twice credits nothing more', again.json?.duplicate === true && again.json?.credit === 1300);
+  check('the same payment told twice credits nothing more', again.json?.duplicate === true && again.json?.credit === 9000);
   const other = await req('/claim', { method: 'POST', headers: as('someone-else'), body: {} });
   check("another player can't claim it", other.json?.coins === 0);
   const claim = await req('/claim', { method: 'POST', headers: as('buyer'), body: {} });
-  check('the buyer claims it', claim.json?.coins === 1300, `${claim.json?.coins}`);
+  check('the buyer claims it', claim.json?.coins === 9000, `${claim.json?.coins}`);
   const twice = await req('/claim', { method: 'POST', headers: as('buyer'), body: {} });
   check('and only once', twice.json?.coins === 0);
 
@@ -181,14 +181,14 @@ console.log('\nlogging in with the email you paid with');
   // the email link signs the phone in as a new uid wearing that email
   await req('/protect', { method: 'POST', headers: as('link-made'), body: { email: 'payer@example.com' } });
   const r = await hand('link-made', 'payer@example.com');
-  check('a LOG IN with the email you paid with hands off the account that paid', r.status === 200 && /^\d{6}$/.test(r.json?.code ?? '') && r.json?.purchases === 3000, `${r.status} ${JSON.stringify(r.json)}`);
+  check('a LOG IN with the email you paid with hands off the account that paid', r.status === 200 && /^\d{6}$/.test(r.json?.code ?? '') && r.json?.purchases === 21000, `${r.status} ${JSON.stringify(r.json)}`);
   check('and signs the phone in as that account too', r.json?.token === 'dev:lost-headset');
   const paid = await req('/whoami', { headers: as('lost-headset') });
   check('the email moves onto the account that paid', paid.json?.protected === true && paid.json?.email === 'p***@example.com', JSON.stringify(paid.json));
   const made = await req('/whoami', { headers: as('link-made') });
   check('and off the empty one the link made', made.json?.protected === false);
   const next = await hand('lost-headset', 'payer@example.com');
-  check('the next LOG IN goes straight there', next.status === 200 && next.json?.token === undefined && next.json?.purchases === 3000);
+  check('the next LOG IN goes straight there', next.status === 200 && next.json?.token === undefined && next.json?.purchases === 21000);
 
   const none = await hand('stranger', 'nobody@example.com');
   check('an email with nothing saved or bought says so, instead of handing off an empty account', none.status === 404 && none.json?.empty === true, none.json?.error);
@@ -206,7 +206,7 @@ console.log('\nlogging in with the email you paid with');
   const kept = await req('/protect', { method: 'POST', headers: as('receipt-headset'), body: { email: 'saved@example.com' } });
   check('SAVE MY PURCHASES under another email than the receipt', kept.status === 200 && kept.json?.protected === true, `${kept.status}`);
   const found = await hand('link-made-2', 'saved@example.com');
-  check('a LOG IN with the email you saved your purchases under finds them', found.status === 200 && found.json?.purchases === 3000 && found.json?.token === 'dev:receipt-headset', `${found.status} ${JSON.stringify(found.json)}`);
+  check('a LOG IN with the email you saved your purchases under finds them', found.status === 200 && found.json?.purchases === 21000 && found.json?.token === 'dev:receipt-headset', `${found.status} ${JSON.stringify(found.json)}`);
 
   await req('/protect', { method: 'POST', headers: as('ghost'), body: { email: 'mine@example.com' } });
   const back = await req('/protect', { method: 'POST', headers: as('keeper'), body: { email: 'mine@example.com' } });
