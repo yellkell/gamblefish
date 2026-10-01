@@ -2,7 +2,7 @@
  * Now and then a red-tailed hawk. It comes in high from somewhere over the island, finds a
  * thermal not far from you and circles up it, banked into the turn, wings held in a shallow V
  * and fingered at the tips, teetering in the gusts and giving a few deep flaps now and then,
- * then slides off on a long glide and is gone for a few minutes. A silent visitor. Sometimes
+ * then slides off on a long glide and is gone for a minute or so. A silent visitor. Often
  * its mate comes too. They keep a hawk's hours: visits only while the sun's well up, and home
  * before sunset, so none is ever seen in the dusk or after dark.
  *
@@ -37,8 +37,11 @@ const REACH = 650;
 /** out of sight past this (m): a visit's over */
 const GONE = 1100;
 /** the island hours (world/sky.ts: sunrise 6, sunset 18.5) a visit may start in, and when they head home */
-const VISITS_FROM = 7.5;
-const VISITS_TO = 16.8;
+// (from soon after sunrise, and on into the late afternoon a session starts in: it used to close at
+// 16:48, eighteen island minutes after you arrived, before the first hawk was due, so a session
+// saw none until the next morning)
+const VISITS_FROM = 6.8;
+const VISITS_TO = 17.0;
 const HOME_BY = 17.3;
 
 /* ── the bird ──────────────────────────────────────────────────────────── */
@@ -412,7 +415,7 @@ export class Hawks {
   private readonly birds = [new Hawk(), new Hawk()];
   private readonly thermal: Thermal = { x: 0, z: 0, r: 40, alt: 60, top: 100, turn: 1 };
   /** seconds to the next visit; the first comes soon after you arrive */
-  private wait = 30 + Math.random() * 25;
+  private wait = 12 + Math.random() * 13;
   private mateIn = -1;
   private time = 0;
   private readonly eye = new Vector3();
@@ -460,7 +463,7 @@ export class Hawks {
       // (and should one still be about as the light goes, it's gone: no hawks after dark)
       if ((b.mode === 'out' && far > GONE) || this.sky.night.value > 0.02) {
         b.mesh.visible = false;
-        if (!this.birds.some((o) => o.mesh.visible)) this.wait = 90 + Math.random() * 150;
+        if (!this.birds.some((o) => o.mesh.visible)) this.wait = 35 + Math.random() * 45;
       }
     }
   }
@@ -471,7 +474,7 @@ export class Hawks {
     let best = -Infinity;
     for (let i = 0; i < 8; i++) {
       const a = Math.random() * Math.PI * 2;
-      const r = 35 + Math.random() * 100;
+      const r = 30 + Math.random() * 60;
       const x = this.eye.x + Math.cos(a) * r;
       const z = this.eye.z + Math.sin(a) * r;
       // thermals come off warm ground: a bit of a preference for land
@@ -490,11 +493,12 @@ export class Hawks {
       const r = i === 8 ? 0 : t.r * 1.2;
       floor = Math.max(floor, this.ground.heightAt(t.x + Math.cos(a) * r, t.z + Math.sin(a) * r));
     }
-    t.alt = floor + 28 + Math.random() * 30;
-    t.top = t.alt + 35 + Math.random() * 40;
+    // low enough to see the colours on it, climbing to where it's still more than a speck
+    t.alt = floor + 18 + Math.random() * 20;
+    t.top = t.alt + 25 + Math.random() * 25;
     t.turn = Math.random() < 0.5 ? 1 : -1;
     this.launch(this.birds[0], 0);
-    this.mateIn = Math.random() < 0.3 ? 5 + Math.random() * 10 : -1;
+    this.mateIn = Math.random() < 0.55 ? 5 + Math.random() * 10 : -1;
   }
 
   private launch(b: Hawk, altOffset: number): void {
@@ -503,7 +507,7 @@ export class Hawks {
     // it comes in along a line clear of the hills
     const h = this.clearWay(t.x, t.z, t.alt + altOffset, y);
     this.from.set(t.x + Math.sin(h) * REACH, y, t.z + Math.cos(h) * REACH);
-    b.launch(this.from, t, 70 + Math.random() * 80, altOffset);
+    b.launch(this.from, t, 100 + Math.random() * 80, altOffset);
   }
 
   /**
