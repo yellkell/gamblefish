@@ -467,32 +467,40 @@ const receiptKey = (r) => String(r ?? '').replace(/[^0-9a-z]/gi, '').toLowerCase
  * here). Found once, it's noted (receiptOwner), and the next REDEEM with it is a straight lookup.
  */
 async function purchaseByReceipt(want) {
-  if (!stripe) return null;
+  if (!stripe) return { why: 'the bank has no Stripe connection' };
   let seen = 0;
   for await (const ch of stripe.charges.list({ limit: 100 })) {
     if (++seen > 3000) break;
     if (receiptKey(ch.receipt_number) !== want) continue;
-    if (!ch.paid || ch.refunded || typeof ch.payment_intent !== 'string') return null;
+    if (!ch.paid || ch.refunded) return { why: 'that payment was refunded or never went through' };
+    if (typeof ch.payment_intent !== 'string') return { why: 'that payment was not made at the Island Bank' };
     const s = (await stripe.checkout.sessions.list({ payment_intent: ch.payment_intent, limit: 1 })).data[0];
-    if (!s || s.metadata?.app !== 'gamblefish') return null;
+    if (!s || s.metadata?.app !== 'gamblefish') return { why: 'that receipt is for something other than Fish & Chips coins' };
     const uid = String(s.metadata?.uid ?? s.client_reference_id ?? '');
-    if (!UID_OK.test(uid)) return null;
+    if (!UID_OK.test(uid)) return { why: 'that purchase carries no game account' };
     const credited = (await ledger.receiptsOf(uid)).some((r) => r.id === s.id);
-    return credited ? { uid, session: s.id } : null;
+    if (!credited) {
+      console.log(`[bank] redeem: ${s.id} is paid but was never credited to ${uid}`);
+      return { why: 'that purchase was paid but never reached a game: contact us' };
+    }
+    return { uid, session: s.id };
   }
-  return null;
+  // (test and live payments are kept apart: a test receipt is invisible to a live bank)
+  return { why: `no ${MODE}-mode payment has that receipt number (looked through ${seen})` };
 }
 
-/** REDEEM: the account a receipt number's purchase was made on. */
+/** REDEEM: the account a receipt number's purchase was made on, or why there's none. */
 async function restoreTarget(receipt) {
   const want = receiptKey(receipt);
-  if (want.length < 6) return null;
+  if (want.length < 6) return { why: 'that is not a whole receipt number' };
   let owner = await ledger.receiptOwner(want);
   if (!owner) {
-    owner = await purchaseByReceipt(want);
-    if (owner) await ledger.noteReceipt(want, owner.uid, owner.session).catch((err) => console.error(`[bank] could not note a receipt: ${err?.message ?? err}`));
+    const found = await purchaseByReceipt(want);
+    if (found.why) return found;
+    owner = found;
+    await ledger.noteReceipt(want, owner.uid, owner.session).catch((err) => console.error(`[bank] could not note a receipt: ${err?.message ?? err}`));
   }
-  return owner ? { uid: owner.uid, credit: await ledger.creditOf(owner.uid) } : null;
+  return { uid: owner.uid, credit: await ledger.creditOf(owner.uid) };
 }
 
 function newHandoff(uid) {
@@ -828,10 +836,10 @@ export function handleHttp(req, res) {
       const body = await readBody(req);
       try {
         const to = await restoreTarget(body?.receipt);
-        if (!to) {
+        if (to.why) {
           restoreGuard.miss(who);
-          console.log('[bank] redeem: no purchase with that receipt number');
-          return json(res, 404, { error: 'no purchase has that receipt number: check it against your Stripe receipt' });
+          console.log(`[bank] redeem refused: ${to.why}`);
+          return json(res, 404, { error: to.why });
         }
         const token = auth ? await auth.createCustomToken(to.uid) : `dev:${to.uid}`;
         console.log(`[bank] redeem → ${to.uid}`);
