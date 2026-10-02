@@ -4,9 +4,8 @@
  * an <audio> element, the songs decoded lo-fi and levelled.
  *
  *  - 4 LEAF CLOVERS at the top, on the balcony while you read the warning.
- *  - SPEED on the way down, cut up at its drops: every launch cuts in on the next one (the first
- *    drop, the drop after the break, the last big lift for the FINAL DROP), and the music stops
- *    for every 3-2-1, the balcony's included.
+ *  - SPEED on the way down, from 1:53 (the drop after the break). The music stops for every
+ *    3-2-1, the balcony's included, and picks up where it left off at the launch.
  *  - DOWN's voiced 3-2-1 on every bay, BEGIN at the top, NICE and PERFECT on the landings, WELL
  *    DONE at the bottom, and the crash if a gate takes you off.
  *  - The coin ding: a bright tone that climbs a semitone with each coin in a streak; a gem gets a
@@ -37,14 +36,9 @@ export type SkelterSfx = keyof typeof SFX;
 
 /** the balcony's song, and the descent's */
 const LOBBY = 'four-leaf-clovers.mp3';
+/** SPEED from 1:53 on: the file's cut there, on the drop's downbeat (bar 82 at 174 BPM), a hair
+ * ahead of its attack. The first launch starts it there, and at the end it goes round from there. */
 const DESCENT = 'speed.mp3';
-/**
- * Where each tier's launch cuts into SPEED (174 BPM): seconds into the file, on the downbeat, a
- * hair ahead of its attack. Bar 4 (the first drop), bar 82 (the drop after the break), bar 112
- * (the last lift: its 16 bars run about as long as a tier). After the last it plays on, and
- * round from the first drop.
- */
-const DROPS = [5.5, 113.09, 154.47];
 
 function dB(x: number): number {
   return Math.pow(10, x / 20);
@@ -53,13 +47,23 @@ function dB(x: number): number {
 const SONG = dB(-3);
 const VOICE = dB(2);
 
+interface Playing {
+  src: AudioBufferSourceNode;
+  gain: GainNode;
+  /** seconds into the song it started from, and the context's clock then */
+  from: number;
+  t0: number;
+}
+
 class SkelterAudio {
   private readonly sfx = new Map<SkelterSfx, AudioBuffer>();
   private readonly songs = new Map<string, Promise<Loaded | null>>();
   private out: GainNode | null = null;
   private music: GainNode | null = null;
-  private lobby: { src: AudioBufferSourceNode; gain: GainNode } | null = null;
-  private run: { src: AudioBufferSourceNode; gain: GainNode } | null = null;
+  private lobby: Playing | null = null;
+  private run: Playing | null = null;
+  /** where SPEED picks up at the next launch */
+  private resumeAt = 0;
   private live = new Set<AudioBufferSourceNode>();
 
   private bus(): { ctx: AudioContext; out: GainNode; music: GainNode } | null {
@@ -88,6 +92,7 @@ class SkelterAudio {
           .catch(() => {}); // a missing line is never fatal
     this.song(LOBBY);
     this.song(DESCENT);
+    this.resumeAt = 0;
   }
 
   private song(name: string): Promise<Loaded | null> {
@@ -104,7 +109,7 @@ class SkelterAudio {
   }
 
   /** Play a song, looping, from `from` seconds in (its head by default) and round from `loopFrom`. */
-  private start(name: string, from?: number, loopFrom?: number): Promise<{ src: AudioBufferSourceNode; gain: GainNode } | null> {
+  private start(name: string, from?: number, loopFrom?: number): Promise<Playing | null> {
     return this.song(name).then((l) => {
       const b = this.bus();
       if (!l || !b) return null;
@@ -118,11 +123,19 @@ class SkelterAudio {
       gain.gain.value = l.level * SONG;
       src.connect(gain).connect(b.music);
       src.start(0, at);
-      return { src, gain };
+      return { src, gain, from: at, t0: b.ctx.currentTime };
     });
   }
 
-  private fade(p: { src: AudioBufferSourceNode; gain: GainNode } | null, seconds = 0.6): void {
+  /** how far into its song a player is now */
+  private where(p: Playing): number {
+    const ctx = audioContext();
+    const { loopStart, loopEnd } = p.src;
+    const t = p.from + (ctx ? ctx.currentTime - p.t0 : 0);
+    return t < loopEnd ? t : loopStart + ((t - loopStart) % Math.max(0.001, loopEnd - loopStart));
+  }
+
+  private fade(p: Playing | null, seconds = 0.6): void {
     const ctx = audioContext();
     if (!p || !ctx) return;
     p.gain.gain.setTargetAtTime(0, ctx.currentTime, seconds / 4);
@@ -136,7 +149,7 @@ class SkelterAudio {
   /** 4 Leaf Clovers at the top: keeps looping until the first drop. No-op if it's on. */
   playLobby(): void {
     if (this.lobby) return;
-    const marker = { src: null as unknown as AudioBufferSourceNode, gain: null as unknown as GainNode };
+    const marker = { src: null } as unknown as Playing;
     this.lobby = marker;
     void this.start(LOBBY).then((p) => {
       if (this.lobby !== marker) return this.fade(p, 0.05);
@@ -150,20 +163,22 @@ class SkelterAudio {
     if (l?.src) this.fade(l, seconds);
   }
 
-  /** The 3-2-1: the music stops (the voice lines carry on). */
+  /** The 3-2-1: the music stops (the voice lines carry on), SPEED marking its place. */
   hush(seconds = 0.12): void {
     this.stopLobby(seconds);
     const r = this.run;
     this.run = null;
-    if (r?.src) this.fade(r, seconds);
+    if (!r?.src) return;
+    this.resumeAt = this.where(r);
+    this.fade(r, seconds);
   }
 
-  /** A launch: SPEED cuts in on this tier's drop (0-based). */
-  drop(tier: number): void {
+  /** A launch: SPEED, from 1:53 on the first, from where it stopped after that. */
+  go(): void {
     this.hush();
-    const marker = { src: null as unknown as AudioBufferSourceNode, gain: null as unknown as GainNode };
+    const marker = { src: null } as unknown as Playing;
     this.run = marker;
-    void this.start(DESCENT, DROPS[Math.min(tier, DROPS.length - 1)], DROPS[0]).then((p) => {
+    void this.start(DESCENT, this.resumeAt).then((p) => {
       if (this.run !== marker) return this.fade(p, 0.05);
       this.run = p;
     });

@@ -777,7 +777,7 @@ export class SkelterSystem extends createSystem({}) {
     game.phase = 'SLIDE';
     game.timeInPhase = 0;
     this.slide.begin(game.tier - 1);
-    skelterAudio.drop(game.tier - 1);
+    skelterAudio.go();
     this.showBanner(game.tier >= TOTAL_TIERS ? 'FINAL DROP' : 'GO!', 1.4);
   }
 
@@ -924,7 +924,7 @@ export class SkelterSystem extends createSystem({}) {
       this.hudSet('status', game.tier === 1 ? 'FACE DOWNHILL' : 'CATCH YOUR BREATH');
       if (remaining <= this.beepAt && this.beepAt > 0) {
         // DOWN's voiced count: THREE... TWO... ONE... then the launch (the music stops for it,
-        // and comes back on the next drop)
+        // and picks up where it left off at the launch)
         if (this.beepAt === 3) skelterAudio.hush();
         skelterAudio.play(this.beepAt === 3 ? 'three' : this.beepAt === 2 ? 'two' : 'one', 0.9);
         this.beepAt -= 1;
