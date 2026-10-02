@@ -500,18 +500,16 @@ from the deployed site or any other host.
 
 The board lives in Firestore under `soundtrack/<team key>/songs`, each song's
 file split into ≤ 1 MB documents under its `parts`. The team key is the part of
-the link after the `#`, and `firestore.rules` opens it only once
-`soundtrackRooms/<team key>` exists. To set it up:
+the link after the `#`; `firestore.rules` holds only its SHA-256, so the key
+itself is never in the repo. Anyone with the link can change the board, as with
+a shared doc.
 
-1. Deploy the rules: `firebase deploy --only firestore:rules`.
-2. In the Firebase console → Firestore, start a collection `soundtrackRooms`
-   and add a document whose ID is a long random key (16+ letters, digits, `-`
-   or `_`). It needs no fields.
-3. Send the team `https://yellkell.github.io/gamblefish/soundtrack.html#<that key>`
-   (it publishes with the game on every push to main).
-
-Anyone with the link can change the board, as with a shared doc. To shut it,
-delete the `soundtrackRooms` document.
+- **Turn it on:** publish `firestore.rules` (Firebase console → Firestore →
+  Rules → paste → Publish, or `firebase deploy --only firestore:rules`).
+- **Send the team** `https://yellkell.github.io/gamblefish/soundtrack.html#<team key>`.
+  It publishes with the game on every push to main.
+- **New key** (to shut out an old link): `printf %s '<new key>' | sha256sum`,
+  put that hash in `teamOpen()` in `firestore.rules`, and publish the rules.
 
 ## Dev harness
 

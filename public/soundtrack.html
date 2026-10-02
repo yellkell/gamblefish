@@ -223,7 +223,7 @@ const MAX_FILE = 60 * 1024 * 1024;
 /**
  * The board lives in the Fish & Chips Firebase project (window-7b629), under
  * soundtrack/<team key>/songs. The key is the part of the team link after the #;
- * firestore.rules opens a key only once soundtrackRooms/<key> exists.
+ * firestore.rules opens only the key whose SHA-256 it holds.
  * The API key is a public identifier, not a secret.
  */
 const FIREBASE = {
