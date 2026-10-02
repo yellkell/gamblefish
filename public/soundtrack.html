@@ -1,0 +1,650 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>Fish &amp; Chips Soundtrack</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Instrument+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a 2×2 board, time of day down (day on sand, night on deep water), activity across; each cell is a playlist of numbered slots to fill. */
+:root {
+  --bg: #e9f0ef;
+  --surface: #f8fbfa;
+  --ink: #12262a;
+  --muted: #56696d;
+  --line: #c6d4d3;
+  --accent: #0b6f74;
+  --accent-ink: #ffffff;
+  --day-bg: #f4e6b9;
+  --day-fg: #3d2f05;
+  --day-muted: #7a6420;
+  --day-line: #dcc78a;
+  --day-slot: #fbf3d8;
+  --night-bg: #18214a;
+  --night-fg: #e6eaff;
+  --night-muted: #a2abd8;
+  --night-line: #34407a;
+  --night-slot: #222c5c;
+  --good: #1f7a46;
+  --warn: #a8500f;
+  --bad: #b3261e;
+  --f-display: "Bricolage Grotesque", "Avenir Next", "Segoe UI", system-ui, sans-serif;
+  --f-body: "Instrument Sans", "Helvetica Neue", Arial, system-ui, sans-serif;
+  --f-mono: "DM Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0c1618; --surface: #132124; --ink: #e2eded; --muted: #93a8ab; --line: #263a3d;
+    --accent: #4cc3c8; --accent-ink: #062224;
+    --day-bg: #332b12; --day-fg: #f6e7b4; --day-muted: #c7b06a; --day-line: #554820; --day-slot: #3f3516;
+    --night-bg: #121937; --night-fg: #e6eaff; --night-muted: #9aa3d2; --night-line: #2b3568; --night-slot: #1a2348;
+    --good: #5fcf8d; --warn: #f0a35e; --bad: #ff8a80;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0c1618; --surface: #132124; --ink: #e2eded; --muted: #93a8ab; --line: #263a3d;
+  --accent: #4cc3c8; --accent-ink: #062224;
+  --day-bg: #332b12; --day-fg: #f6e7b4; --day-muted: #c7b06a; --day-line: #554820; --day-slot: #3f3516;
+  --night-bg: #121937; --night-fg: #e6eaff; --night-muted: #9aa3d2; --night-line: #2b3568; --night-slot: #1a2348;
+  --good: #5fcf8d; --warn: #f0a35e; --bad: #ff8a80;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 15px/1.5 var(--f-body); }
+.wrap { max-width: 1180px; margin: 0 auto; padding-inline: 20px; padding-block: 28px 56px; display: grid; gap: 28px; }
+@media (max-width: 480px) { .wrap { padding-inline: 16px; } }
+
+header { display: grid; gap: 14px; }
+.eyebrow { font: 500 12px/1 var(--f-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+h1 { font: 800 clamp(30px, 5vw, 48px)/1.02 var(--f-display); letter-spacing: -.02em; margin: 0; text-wrap: balance; }
+.lede { margin: 0; max-width: 62ch; color: var(--muted); }
+.summary { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 22px; }
+.count { font: 600 15px/1.2 var(--f-mono); font-variant-numeric: tabular-nums; }
+.count b { font: 800 26px/1 var(--f-display); }
+.ticks { display: flex; gap: 10px; flex-wrap: wrap; }
+.tickgroup { display: flex; gap: 3px; }
+.tick { width: 14px; height: 14px; border-radius: 3px; border: 1.5px solid var(--line); background: transparent; }
+.tick.on { background: var(--accent); border-color: var(--accent); }
+
+.banner { border: 1px solid var(--line); background: var(--surface); padding: 10px 14px; border-radius: 8px; color: var(--muted); }
+
+.board { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; align-items: start; }
+.cell.wide { grid-column: 1 / -1; }
+.cell.wide .slots { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-flow: column; grid-template-rows: repeat(5, auto); gap: 6px 14px; }
+@media (max-width: 760px) { .cell.wide .slots { grid-template-columns: minmax(0, 1fr); grid-auto-flow: row; grid-template-rows: none; } }
+@media (max-width: 760px) { .board { grid-template-columns: minmax(0, 1fr); } }
+
+.cell { --c-bg: var(--day-bg); --c-fg: var(--day-fg); --c-muted: var(--day-muted); --c-line: var(--day-line); --c-slot: var(--day-slot);
+  background: var(--c-bg); color: var(--c-fg); border-radius: 14px; padding: 18px; display: grid; gap: 14px; align-content: start;
+  outline: 2px dashed transparent; outline-offset: -6px; transition: outline-color .15s; }
+.cell.night { --c-bg: var(--night-bg); --c-fg: var(--night-fg); --c-muted: var(--night-muted); --c-line: var(--night-line); --c-slot: var(--night-slot); }
+.cell.over { outline-color: var(--c-fg); }
+.cell-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 4px 12px; }
+.cell-head h2 { margin: 0; font: 700 22px/1.1 var(--f-display); letter-spacing: -.01em; }
+.cell-head h2 span { color: var(--c-muted); font-weight: 600; }
+.cell-meta { font: 400 12.5px/1.4 var(--f-mono); color: var(--c-muted); font-variant-numeric: tabular-nums; }
+.cell-meta .full { color: var(--c-fg); font-weight: 500; }
+.when { font-size: 13px; color: var(--c-muted); margin: -8px 0 0; }
+
+.slots { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.slot { display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 10px; align-items: center; min-height: 54px;
+  border-radius: 9px; padding: 8px 10px 8px 8px; background: var(--c-slot); position: relative; overflow: hidden; }
+.slot .n { font: 500 12px/1 var(--f-mono); color: var(--c-muted); text-align: center; font-variant-numeric: tabular-nums; }
+.slot.empty { background: transparent; border: 1.5px dashed var(--c-line); }
+.slot.empty button.pick { all: unset; cursor: pointer; color: var(--c-muted); font-size: 14px; padding: 6px 0; }
+.slot.empty button.pick:hover, .slot.empty button.pick:focus-visible { color: var(--c-fg); text-decoration: underline; }
+.slot.empty .waiting { color: var(--c-muted); font-size: 14px; }
+.slot.pending .what { color: var(--c-muted); font-size: 14px; }
+.slot.extra { box-shadow: inset 0 0 0 1.5px var(--warn); }
+
+.song { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; align-items: center; }
+.play { width: 34px; height: 34px; border-radius: 50%; border: 1.5px solid var(--c-fg); background: transparent; color: var(--c-fg);
+  cursor: pointer; display: grid; place-items: center; padding: 0; }
+.play:hover { background: var(--c-fg); color: var(--c-bg); }
+.play svg { width: 13px; height: 13px; fill: currentColor; }
+.play[disabled] { opacity: .5; cursor: progress; }
+.badge { font: 500 10.5px/1 var(--f-mono); letter-spacing: .06em; text-transform: uppercase; border: 1px solid var(--c-line);
+  color: var(--c-muted); border-radius: 99px; padding: 5px 7px; white-space: nowrap; }
+.info { min-width: 0; display: grid; gap: 1px; }
+.title { all: unset; font: 600 15px/1.3 var(--f-body); color: var(--c-fg); width: 100%; text-overflow: ellipsis; overflow: hidden; white-space: nowrap; border-radius: 4px; }
+.title:hover { box-shadow: 0 1px 0 var(--c-line); }
+.title:focus-visible { box-shadow: 0 0 0 2px var(--c-fg); }
+.sub { font: 400 12px/1.35 var(--f-mono); color: var(--c-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.acts { display: flex; gap: 6px; align-items: center; }
+.acts select, .acts button, .confirm button { font: 500 12.5px/1 var(--f-body); color: var(--c-fg); background: transparent;
+  border: 1px solid var(--c-line); border-radius: 6px; padding: 7px 8px; cursor: pointer; max-width: 120px; }
+.acts select:hover, .acts button:hover { border-color: var(--c-fg); }
+.acts select option { color: var(--ink); background: var(--surface); }
+.confirm { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; font-size: 14px; }
+.confirm .yes { background: var(--bad); border-color: var(--bad); color: #fff; }
+.bar { position: absolute; left: 0; bottom: 0; height: 3px; background: var(--c-fg); width: 0; }
+@media (max-width: 520px) {
+  .song { grid-template-columns: auto minmax(0, 1fr); }
+  .acts { grid-column: 1 / -1; justify-content: flex-end; }
+}
+
+section.shelf, section.notes { display: grid; gap: 12px; }
+h3 { margin: 0; font: 700 20px/1.2 var(--f-display); }
+.shelf p, .notes p { margin: 0; color: var(--muted); max-width: 70ch; }
+.shelf ul { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr)); gap: 6px 18px; }
+.shelf li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 9px 0; border-bottom: 1px solid var(--line); }
+.shelf .nm { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.shelf .nm small { font: 400 12px var(--f-mono); color: var(--muted); margin-left: 8px; font-variant-numeric: tabular-nums; }
+.shelf select { font: 500 13px var(--f-body); color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; cursor: pointer; }
+.shelf .placed { font: 500 12px var(--f-mono); color: var(--muted); }
+.notes ul { margin: 0; padding-left: 20px; color: var(--muted); display: grid; gap: 6px; max-width: 76ch; }
+.notes code, .shelf code { font: 13px var(--f-mono); color: var(--ink); }
+.who { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; font: 500 13px var(--f-mono); color: var(--muted); }
+.who input { font: 500 14px var(--f-body); color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 7px 10px; width: min(100%, 300px); }
+.who input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.storage { font: 400 12.5px var(--f-mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+
+#status { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(18px + env(safe-area-inset-bottom, 0px));
+  max-width: min(560px, calc(100% - 32px)); background: var(--ink); color: var(--bg); padding: 10px 16px; border-radius: 8px; font-size: 14px; box-shadow: 0 6px 24px rgb(0 0 0 / .25); }
+#status.err { background: var(--bad); color: #fff; }
+button:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+
+[hidden] { display: none !important; }
+html { color-scheme: light; }
+body { margin: 0; -webkit-font-smoothing: antialiased; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Fish &amp; Chips · island music</div>
+    <h1>Fill the three playlists</h1>
+    <p class="lede">Music plays the whole time, like it does now. By day, one playlist covers everything: wandering round town and fishing. At night it splits, so night fishing gets its own sound. When night falls, day breaks, or you start or stop fishing after dark, the music fades smoothly into the next playlist. Drop a song file onto a playlist to fill its next slot. Everyone with the team link sees the same board as it changes, and you can listen back to or download anything that's in.</p>
+    <div class="summary">
+      <div class="count" id="count"><b>0</b> of 16 songs · 0:00 of ~45:00</div>
+      <div class="ticks" id="ticks" aria-hidden="true"></div>
+    </div>
+    <label class="who" for="who">Your name <input id="who" maxlength="40" autocomplete="name" placeholder="So the team knows who added what"></label>
+    <div class="banner" id="banner" hidden></div>
+  </header>
+
+  <main class="board" id="board"></main>
+
+  <section class="shelf">
+    <h3>Songs already in the game</h3>
+    <p>These nine play on the island today, in one loop. Put any of them into a playlist and it counts toward the 16. You don't need to upload them again.</p>
+    <ul id="shelf"></ul>
+  </section>
+
+  <section class="notes">
+    <h3>Before you export</h3>
+    <ul>
+      <li>Send MP3 or M4A if you can. WAV, OGG, FLAC and Opus also work, but they take more of the shared storage.</li>
+      <li>The game plays music in mono at 24 kHz. Wide stereo effects won't come through, so check your mix in mono.</li>
+      <li>Loudness is evened out automatically, and silence at the start is trimmed, so you don't need to match levels between songs.</li>
+      <li>Songs in a playlist play back to back with no gap. Endings that lead nicely into another song work best.</li>
+      <li>When night falls or day breaks, and when you start or stop fishing at night, the music fades over a few seconds into the other playlist, often partway through a song. The two night playlists blend best when they sit at a similar tempo, even if they feel different.</li>
+      <li>A day lasts about 20 real minutes and a night about 7. Night songs come round less often, so fewer are needed.</li>
+    </ul>
+  </section>
+</div>
+
+<input type="file" id="picker" accept=".mp3,.m4a,.aac,.wav,.ogg,.oga,.flac,.opus,audio/*" multiple hidden>
+<audio id="player" preload="none"></audio>
+<div id="status" role="status" aria-live="polite" hidden></div>
+
+<script type="module">
+const PLAYLISTS = [
+  { key: 'day',           time: 'Day',   act: '',          cap: 10, target: 28 * 60, night: false, wide: true, when: 'Daylight, 06:00–18:30 on the island clock, about 20 real minutes. Plays while you wander round town and while you fish.' },
+  { key: 'night-wander',  time: 'Night', act: 'Wandering & Exploring', cap: 3, target: 8 * 60,  night: true,  when: 'After dark, 18:30–06:00, about 7 real minutes, walking round town or out exploring the island.' },
+  { key: 'night-fish',    time: 'Night', act: 'Fishing',   cap: 3, target: 8 * 60,  night: true,  when: 'After dark, with a line in the water under the lamps.' },
+];
+const BY_KEY = Object.fromEntries(PLAYLISTS.map(p => [p.key, p]));
+const label = p => (p.act ? `${p.time} · ${p.act}` : p.time);
+
+const GAME_SONGS = [
+  { path: 'src/audio/songs/01-paradise.m4a', name: 'Paradise', dur: 191 },
+  { path: 'src/audio/songs/02-poo-song.mp3', name: 'Poo Song', dur: 80 },
+  { path: 'src/audio/songs/04-experimental-song.mp3', name: 'Experimental Song', dur: 90 },
+  { path: 'src/audio/songs/05-new-song-35.mp3', name: 'New Song 35', dur: 173 },
+  { path: 'src/audio/songs/06-mist.m4a', name: 'Mist', dur: 209 },
+  { path: 'src/audio/songs/07-by-the-river.mp3', name: 'By the River', dur: 124 },
+  { path: 'src/audio/songs/08-like-that.mp3', name: 'Like That', dur: 135 },
+  { path: 'src/audio/songs/09-imagine.m4a', name: 'Imagine', dur: 273 },
+  { path: 'src/audio/songs/10-novus.mp3', name: 'Novus', dur: 240 },
+];
+
+const TYPES = { mp3: 'audio/mpeg', m4a: 'audio/mp4', aac: 'audio/aac', wav: 'audio/wav', ogg: 'audio/ogg', oga: 'audio/ogg', flac: 'audio/flac', opus: 'audio/ogg' };
+/** bytes per stored part: a Firestore document holds up to 1 MiB */
+const PART = 900_000;
+const MAX_FILE = 60 * 1024 * 1024;
+
+/**
+ * The board lives in the Fish & Chips Firebase project (window-7b629), under
+ * soundtrack/<team key>/songs. The key is the part of the team link after the #;
+ * firestore.rules opens a key only once soundtrackRooms/<key> exists.
+ * The API key is a public identifier, not a secret.
+ */
+const FIREBASE = {
+  apiKey: 'AIzaSyC0DoqZ92Bfdd5HLfkNFyCQ1LYjJPOurLk',
+  authDomain: 'window-7b629.firebaseapp.com',
+  projectId: 'window-7b629',
+  appId: '1:931382417550:web:e2c920adcf1424bcd3d1df',
+};
+const SDK = 'https://www.gstatic.com/firebasejs/12.19.0/';
+const KEY_OK = /^[A-Za-z0-9_-]{16,128}$/;
+const LINK_KEY = 'soundtrack.team-key';
+const NAME_KEY = 'soundtrack.name';
+
+const $ = id => document.getElementById(id);
+const state = { songs: [], pending: [], confirm: null, playing: null, ready: false, ok: false, reason: '', fs: null, songsCol: null };
+
+function fmt(s) {
+  if (!Number.isFinite(s) || s < 0) return '–:––';
+  s = Math.round(s);
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+}
+function mb(b) { return b < 1e6 ? Math.max(1, Math.round(b / 1e3)) + ' KB' : (b / 1e6).toFixed(b < 1e7 ? 1 : 0) + ' MB'; }
+function el(tag, attrs = {}, ...kids) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (v == null || v === false) continue;
+    if (k === 'class') e.className = v;
+    else if (k === 'text') e.textContent = v;
+    else if (k.startsWith('on')) e.addEventListener(k.slice(2), v);
+    else e.setAttribute(k, v === true ? '' : v);
+  }
+  for (const c of kids) if (c != null) e.append(c);
+  return e;
+}
+const PLAY_SVG = '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2 1l9 5-9 5z"/></svg>';
+const PAUSE_SVG = '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2 1h3v10H2zM7 1h3v10H7z"/></svg>';
+
+let statusTimer;
+function say(msg, err = false) {
+  const s = $('status');
+  s.textContent = msg;
+  s.className = err ? 'err' : '';
+  s.hidden = false;
+  clearTimeout(statusTimer);
+  statusTimer = setTimeout(() => (s.hidden = true), err ? 8000 : 4000);
+}
+
+function inList(key) {
+  return state.songs.filter(s => s.playlist === key).sort((a, b) => (a.order || 0) - (b.order || 0));
+}
+function room(key) {
+  return BY_KEY[key].cap - inList(key).length - state.pending.filter(p => p.playlist === key).length;
+}
+
+/* ---------- render ---------- */
+
+function render() {
+  // keep a title being edited as it is
+  const act = document.activeElement;
+  const keep = act && act.classList.contains('title') ? { id: act.id, value: act.value, a: act.selectionStart, b: act.selectionEnd } : null;
+
+  const filledTotal = PLAYLISTS.reduce((n, p) => n + Math.min(p.cap, inList(p.key).length), 0);
+  const secs = state.songs.reduce((t, s) => t + (s.duration || 0), 0);
+  $('count').replaceChildren(el('b', { text: String(filledTotal) }), ` of 16 songs · ${fmt(secs)} of ~45:00`);
+  $('ticks').replaceChildren(...PLAYLISTS.map(p => {
+    const n = inList(p.key).length;
+    return el('div', { class: 'tickgroup', title: label(p) }, ...Array.from({ length: p.cap }, (_, i) => el('span', { class: 'tick' + (i < n ? ' on' : '') })));
+  }));
+
+  $('board').replaceChildren(...PLAYLISTS.map(renderCell));
+  renderShelf();
+
+  if (keep) {
+    const t = $(keep.id);
+    if (t) { t.value = keep.value; t.focus(); try { t.setSelectionRange(keep.a, keep.b); } catch {} }
+  }
+}
+
+function renderCell(p) {
+  const songs = inList(p.key);
+  const pend = state.pending.filter(x => x.playlist === p.key);
+  const secs = songs.reduce((t, s) => t + (s.duration || 0), 0);
+  const full = songs.length >= p.cap;
+
+  const list = el('ol', { class: 'slots' });
+  const rows = Math.max(p.cap, songs.length + pend.length);
+  for (let i = 0; i < rows; i++) {
+    const n = el('span', { class: 'n', text: String(i + 1) });
+    if (i < songs.length) list.append(renderSong(songs[i], n, i >= p.cap));
+    else if (i < songs.length + pend.length) {
+      const x = pend[i - songs.length];
+      list.append(el('li', { class: 'slot pending' }, n, el('div', { class: 'what', text: `${x.name} · ${x.note}` })));
+    } else {
+      const canAdd = state.ok || !state.ready;
+      list.append(el('li', { class: 'slot empty' }, n, canAdd
+        ? el('button', { class: 'pick', type: 'button', text: 'Drop a song here, or choose a file', onclick: () => choose(p.key) })
+        : el('span', { class: 'waiting', text: 'Open slot' })));
+    }
+  }
+
+  const cell = el('section', { class: 'cell' + (p.night ? ' night' : '') + (p.wide ? ' wide' : ''), 'aria-label': label(p) },
+    el('div', { class: 'cell-head' },
+      el('h2', {}, p.time, p.act ? el('span', { text: ` · ${p.act}` }) : el('span', { text: ' · Wandering & Fishing' })),
+      el('div', { class: 'cell-meta' },
+        el('span', { class: full ? 'full' : '', text: `${Math.min(songs.length, p.cap)}/${p.cap} songs` }),
+        ` · ${fmt(secs)} of ~${fmt(p.target)}`)),
+    el('p', { class: 'when', text: p.when }),
+    list);
+
+  // drops: files from the desktop, or a song card from another playlist
+  let depth = 0;
+  const accepts = e => { const t = e.dataTransfer && e.dataTransfer.types; return t && (Array.from(t).includes('Files') || Array.from(t).includes('text/x-song')); };
+  cell.addEventListener('dragenter', e => { if (!accepts(e)) return; e.preventDefault(); depth++; cell.classList.add('over'); });
+  cell.addEventListener('dragover', e => { if (!accepts(e)) return; e.preventDefault(); e.dataTransfer.dropEffect = Array.from(e.dataTransfer.types).includes('Files') ? 'copy' : 'move'; });
+  cell.addEventListener('dragleave', () => { if (--depth <= 0) { depth = 0; cell.classList.remove('over'); } });
+  cell.addEventListener('drop', e => {
+    e.preventDefault(); depth = 0; cell.classList.remove('over');
+    const id = e.dataTransfer.getData('text/x-song');
+    if (id) return move(id, p.key);
+    if (e.dataTransfer.files && e.dataTransfer.files.length) upload(p.key, Array.from(e.dataTransfer.files));
+  });
+  return cell;
+}
+
+function renderSong(s, n, extra) {
+  const li = el('li', { class: 'slot' + (extra ? ' extra' : ''), 'data-id': s.id });
+  if (state.confirm === s.id) {
+    li.append(n, el('div', { class: 'confirm' },
+      el('span', { text: s.source === 'game' ? `Take “${s.title}” out of this playlist?` : `Remove “${s.title}” and delete its file?` }),
+      el('button', { class: 'yes', type: 'button', text: s.source === 'game' ? 'Take out' : 'Remove', onclick: () => remove(s) }),
+      el('button', { type: 'button', text: 'Keep', onclick: () => { state.confirm = null; render(); } })));
+    return li;
+  }
+
+  const lead = s.source === 'game'
+    ? el('span', { class: 'badge', title: s.gamePath, text: 'In game' })
+    : (() => {
+        const b = el('button', { class: 'play', type: 'button', 'aria-label': (state.playing === s.id ? 'Pause ' : 'Play ') + s.title, onclick: () => toggle(s, b) });
+        b.innerHTML = state.playing === s.id && !$('player').paused ? PAUSE_SVG : PLAY_SVG;
+        return b;
+      })();
+
+  const title = el('input', { class: 'title', id: 'title-' + s.id, value: s.title || '', 'aria-label': 'Song title', maxlength: '80', spellcheck: 'false' });
+  title.value = s.title || '';
+  title.addEventListener('keydown', e => { if (e.key === 'Enter') title.blur(); if (e.key === 'Escape') { title.value = s.title || ''; title.blur(); } });
+  title.addEventListener('change', () => rename(s, title.value));
+
+  const who = s.by || '';
+  const bits = [s.duration ? fmt(s.duration) : null, s.source === 'game' ? s.gamePath.split('/').pop() : s.file, s.size ? mb(s.size) : null, who ? 'added by ' + who : null].filter(Boolean);
+  const sub = el('div', { class: 'sub', text: bits.join(' · '), title: bits.join(' · ') });
+
+  const mv = el('select', { 'aria-label': 'Move to another playlist', id: 'move-' + s.id });
+  mv.append(el('option', { value: '', text: 'Move to…' }));
+  for (const q of PLAYLISTS) if (q.key !== s.playlist) mv.append(el('option', { value: q.key, disabled: room(q.key) <= 0, text: label(q) + (room(q.key) <= 0 ? ' (full)' : '') }));
+  mv.addEventListener('change', () => { if (mv.value) move(s.id, mv.value); });
+
+  const rm = el('button', { type: 'button', text: 'Remove', onclick: () => { state.confirm = s.id; render(); } });
+  const dl = s.source === 'upload' ? el('button', { type: 'button', text: 'Download', onclick: () => download(s) }) : null;
+
+  li.append(n, el('div', { class: 'song' }, lead, el('div', { class: 'info' }, title, sub), el('div', { class: 'acts' }, dl, mv, rm)));
+  if (state.playing === s.id) li.append(el('div', { class: 'bar', id: 'bar' }));
+  if (extra) sub.textContent = 'Over this playlist’s ' + BY_KEY[s.playlist].cap + ' slots · ' + sub.textContent;
+
+  li.draggable = true;
+  li.addEventListener('dragstart', e => {
+    if (document.activeElement === title) { e.preventDefault(); return; }
+    e.dataTransfer.setData('text/x-song', s.id);
+    e.dataTransfer.effectAllowed = 'move';
+  });
+  return li;
+}
+
+function renderShelf() {
+  $('shelf').replaceChildren(...GAME_SONGS.map((g, i) => {
+    const placed = state.songs.find(s => s.source === 'game' && s.gamePath === g.path);
+    const right = placed
+      ? el('span', { class: 'placed', text: 'In ' + (BY_KEY[placed.playlist] ? label(BY_KEY[placed.playlist]) : 'a playlist') })
+      : (() => {
+          const sel = el('select', { id: 'shelf-' + i, 'aria-label': `Add ${g.name} to a playlist` });
+          sel.append(el('option', { value: '', text: 'Add to…' }));
+          for (const q of PLAYLISTS) sel.append(el('option', { value: q.key, disabled: room(q.key) <= 0, text: label(q) + (room(q.key) <= 0 ? ' (full)' : '') }));
+          sel.addEventListener('change', () => { if (sel.value) addGameSong(g, sel.value); });
+          return sel;
+        })();
+    return el('li', {}, el('div', { class: 'nm' }, g.name, el('small', { text: fmt(g.dur) })), right);
+  }));
+}
+
+/* ---------- actions ---------- */
+
+const ERR = {
+  'permission-denied': 'The team link isn’t working. Check you opened the full link (it ends in #…), or ask for a fresh one.',
+  'resource-exhausted': 'The shared storage is busy or full. Wait a minute, then try again.',
+  unavailable: 'Can’t reach the server. Check your connection, then try again.',
+};
+const why = (e, fallback) => ERR[e && e.code] || fallback;
+
+async function ready() {
+  await boot;
+  if (!state.ok) { say(state.reason || 'This page needs the team link to make changes.', true); return false; }
+  return true;
+}
+
+function choose(key) {
+  const pick = $('picker');
+  pick.value = '';
+  pick.onchange = () => { if (pick.files.length) upload(key, Array.from(pick.files)); };
+  pick.click();
+}
+
+function measure(file) {
+  return new Promise(res => {
+    const a = new Audio();
+    const url = URL.createObjectURL(file);
+    const done = d => { clearTimeout(t); URL.revokeObjectURL(url); res(Number.isFinite(d) ? d : 0); };
+    const t = setTimeout(() => done(0), 10000);
+    a.preload = 'metadata';
+    a.onloadedmetadata = () => done(a.duration);
+    a.onerror = () => done(0);
+    a.src = url;
+  });
+}
+function niceTitle(file) {
+  return file.replace(/\.[^.]+$/, '').replace(/^\d+[\s._-]*/, '').replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim() || file;
+}
+function myName() { return ($('who').value || '').trim().slice(0, 40); }
+
+const partsOf = ref => fb.collection(ref, 'parts');
+async function dropParts(ref) {
+  const snap = await fb.getDocs(partsOf(ref));
+  const batch = fb.writeBatch(state.fs);
+  snap.forEach(d => batch.delete(d.ref));
+  if (!snap.empty) await batch.commit();
+}
+
+async function upload(key, files) {
+  if (!(await ready())) return;
+  let skipped = 0;
+  const bad = [], big = [];
+  for (const file of files) {
+    const ext = (file.name.split('.').pop() || '').toLowerCase();
+    if (!TYPES[ext]) { bad.push(file.name); continue; }
+    if (file.size > MAX_FILE) { big.push(file.name); continue; }
+    if (room(key) <= 0) { skipped++; continue; }
+    const job = { playlist: key, name: file.name, note: 'reading…' };
+    state.pending.push(job);
+    render();
+    const ref = fb.doc(state.songsCol);
+    try {
+      const duration = await measure(file);
+      const n = Math.max(1, Math.ceil(file.size / PART));
+      for (let k = 0; k < n; k++) {
+        job.note = `uploading ${Math.round((100 * k) / n)}%`;
+        render();
+        const bytes = new Uint8Array(await file.slice(k * PART, (k + 1) * PART).arrayBuffer());
+        await fb.setDoc(fb.doc(partsOf(ref), String(k).padStart(4, '0')), { n: k, bytes: fb.Bytes.fromUint8Array(bytes) });
+      }
+      await fb.setDoc(ref, {
+        playlist: key, source: 'upload', title: niceTitle(file.name), file: file.name, type: TYPES[ext],
+        size: file.size, duration: Math.round(duration * 10) / 10, parts: n, by: myName(), at: new Date().toISOString(), order: Date.now(),
+      });
+      say(`Added “${niceTitle(file.name)}” to ${label(BY_KEY[key])}.`);
+    } catch (e) {
+      dropParts(ref).catch(() => {});
+      say(why(e, `“${file.name}” didn’t upload. Check your connection and drop it again.`), true);
+    } finally {
+      state.pending = state.pending.filter(x => x !== job);
+      render();
+    }
+  }
+  if (bad.length) say(`${bad.join(', ')}: not an audio file the game can use. Send MP3, M4A, WAV, OGG, FLAC or Opus.`, true);
+  else if (big.length) say(`${big.join(', ')}: over 60 MB. Export as MP3 or M4A and drop it again.`, true);
+  else if (skipped) say(`${label(BY_KEY[key])} is full (${BY_KEY[key].cap} of ${BY_KEY[key].cap}). ${skipped} file${skipped > 1 ? 's weren’t' : ' wasn’t'} added. Remove a song first, or drop it on another playlist.`, true);
+}
+
+async function addGameSong(g, key) {
+  if (!(await ready())) { render(); return; }
+  if (room(key) <= 0) { say(`${label(BY_KEY[key])} is full.`, true); render(); return; }
+  try {
+    await fb.setDoc(fb.doc(state.songsCol), { playlist: key, source: 'game', gamePath: g.path, title: g.name, duration: g.dur, by: myName(), at: new Date().toISOString(), order: Date.now() });
+    say(`Put “${g.name}” in ${label(BY_KEY[key])}.`);
+  } catch (e) { say(why(e, 'That didn’t save. Try again.'), true); render(); }
+}
+
+async function move(id, key) {
+  const s = state.songs.find(x => x.id === id);
+  if (!s || s.playlist === key) return;
+  if (!(await ready())) { render(); return; }
+  if (room(key) <= 0) { say(`${label(BY_KEY[key])} is full. Remove a song from it first.`, true); render(); return; }
+  try {
+    await fb.updateDoc(fb.doc(state.songsCol, id), { playlist: key, order: Date.now() });
+    say(`Moved “${s.title}” to ${label(BY_KEY[key])}.`);
+  } catch (e) { say(why(e, 'The move didn’t save. Try again.'), true); render(); }
+}
+
+async function rename(s, value) {
+  const v = value.trim().slice(0, 80);
+  if (!v || v === s.title) { render(); return; }
+  if (!(await ready())) { render(); return; }
+  try { await fb.updateDoc(fb.doc(state.songsCol, s.id), { title: v }); }
+  catch (e) { say(why(e, 'The new title didn’t save. Try again.'), true); render(); }
+}
+
+async function remove(s) {
+  state.confirm = null;
+  if (!(await ready())) { render(); return; }
+  if (state.playing === s.id) stop();
+  try {
+    const ref = fb.doc(state.songsCol, s.id);
+    if (s.source === 'upload') await dropParts(ref);
+    await fb.deleteDoc(ref);
+    say(`Removed “${s.title}”.`);
+  } catch (e) { say(why(e, 'That didn’t remove. Try again.'), true); }
+  render();
+}
+
+/* ---------- listening ---------- */
+
+const urls = new Map();
+async function audioUrl(s) {
+  if (urls.has(s.id)) return urls.get(s.id);
+  const snap = await fb.getDocs(fb.query(partsOf(fb.doc(state.songsCol, s.id)), fb.orderBy('n')));
+  if (snap.size < (s.parts || 1)) throw new Error('missing');
+  const url = URL.createObjectURL(new Blob(snap.docs.map(d => d.data().bytes.toUint8Array()), { type: s.type || 'audio/mpeg' }));
+  urls.set(s.id, url);
+  return url;
+}
+
+async function toggle(s, btn) {
+  const p = $('player');
+  if (state.playing === s.id) {
+    if (p.paused) p.play().catch(() => {}); else p.pause();
+    render();
+    return;
+  }
+  btn.disabled = true;
+  try {
+    p.src = await audioUrl(s);
+    state.playing = s.id;
+    await p.play();
+  } catch {
+    say(`“${s.title}” won’t play here. Its file may be incomplete, or this browser can’t play ${(s.file || '').split('.').pop().toUpperCase()}.`, true);
+    state.playing = null;
+  }
+  render();
+}
+async function download(s) {
+  try {
+    const a = el('a', { href: await audioUrl(s), download: s.file || s.title });
+    document.body.append(a);
+    a.click();
+    a.remove();
+  } catch { say(`“${s.title}” didn’t download. Try again.`, true); }
+}
+function stop() { const p = $('player'); p.pause(); p.removeAttribute('src'); state.playing = null; }
+$('player').addEventListener('timeupdate', () => {
+  const p = $('player'), b = $('bar');
+  if (b && p.duration) b.style.width = (100 * p.currentTime / p.duration) + '%';
+});
+$('player').addEventListener('ended', () => { state.playing = null; render(); });
+$('player').addEventListener('play', () => render());
+$('player').addEventListener('pause', () => render());
+
+/* ---------- boot ---------- */
+
+// a file dropped outside a playlist shouldn't open in the tab
+window.addEventListener('dragover', e => e.preventDefault());
+window.addEventListener('drop', e => e.preventDefault());
+
+// your name, kept in this browser so it's there next time
+try { $('who').value = localStorage.getItem(NAME_KEY) || ''; } catch {}
+$('who').addEventListener('change', () => { try { localStorage.setItem(NAME_KEY, myName()); } catch {} });
+
+function block(msg) {
+  state.ok = false;
+  state.reason = msg;
+  $('banner').textContent = msg;
+  $('banner').hidden = false;
+  render();
+}
+
+render();
+
+let fb = null;
+const boot = (async () => {
+  // the team link carries its key after the #; remember it so a bookmark without it still works
+  let key = decodeURIComponent(location.hash.slice(1));
+  try {
+    if (KEY_OK.test(key)) localStorage.setItem(LINK_KEY, key);
+    else key = localStorage.getItem(LINK_KEY) || '';
+  } catch {}
+  if (!KEY_OK.test(key)) { state.ready = true; block('This page opens from the team link. Ask whoever sent it for the full link: it ends in # and a long code.'); return; }
+  try {
+    const [app, fs] = await Promise.all([import(SDK + 'firebase-app.js'), import(SDK + 'firebase-firestore.js')]);
+    fb = fs;
+    const appInst = app.getApps().find(a => a.name === 'soundtrack') || app.initializeApp(FIREBASE, 'soundtrack');
+    state.fs = fs.getFirestore(appInst);
+    state.songsCol = fs.collection(state.fs, 'soundtrack', key, 'songs');
+  } catch {
+    state.ready = true;
+    block('Couldn’t load the board. Check your connection and reload the page.');
+    return;
+  }
+  state.ok = true;
+  state.ready = true;
+  render();
+  await new Promise(resolve => {
+    fb.onSnapshot(state.songsCol, snap => {
+      state.songs = snap.docs.map(d => Object.assign({ id: d.id }, d.data()));
+      state.ok = true;
+      $('banner').hidden = true;
+      render();
+      resolve();
+    }, e => {
+      block(e && e.code === 'permission-denied'
+        ? 'This team link doesn’t open the board. Check you copied all of it, or ask for a fresh one.'
+        : 'Lost the connection to the board. Reload the page to see the latest.');
+      resolve();
+    });
+  });
+})();
+</script>
+</body>
+</html>

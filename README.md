@@ -489,6 +489,30 @@ and the vendors.
   wrists. Any change in the balance rings ff2's cash chime, pitched up for
   money in and down for money out.
 
+## Soundtrack board
+
+`public/soundtrack.html` is where the music team fills the island's playlists:
+**Day** (10 songs, wandering and fishing), **Night · Wandering & Exploring** (3)
+and **Night · Fishing** (3). They drop audio files onto a playlist, listen back,
+download, rename and move songs, and everyone with the team link sees the same
+board live. It's one self-contained page (Firebase from gstatic), so it works
+from the deployed site or any other host.
+
+The board lives in Firestore under `soundtrack/<team key>/songs`, each song's
+file split into ≤ 1 MB documents under its `parts`. The team key is the part of
+the link after the `#`, and `firestore.rules` opens it only once
+`soundtrackRooms/<team key>` exists. To set it up:
+
+1. Deploy the rules: `firebase deploy --only firestore:rules`.
+2. In the Firebase console → Firestore, start a collection `soundtrackRooms`
+   and add a document whose ID is a long random key (16+ letters, digits, `-`
+   or `_`). It needs no fields.
+3. Send the team `https://yellkell.github.io/gamblefish/soundtrack.html#<that key>`
+   (it publishes with the game on every push to main).
+
+Anyone with the link can change the board, as with a shared doc. To shut it,
+delete the `soundtrackRooms` document.
+
 ## Dev harness
 
 In `npm run dev`, `window.__harness` drives the emulated Quest:

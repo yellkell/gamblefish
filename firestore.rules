@@ -14,6 +14,9 @@ rules_version = '2';
  *
  * A player may READ their own and nobody may write from a client, because a
  * wallet a client can write is a wallet a client can print.
+ *
+ * The one thing clients do write is the music team's soundtrack board, which
+ * holds no money and opens only to a team key the owner has created.
  */
 
 service cloud.firestore {
@@ -34,6 +37,42 @@ service cloud.firestore {
     match /saves/{uid} {
       allow read: if mine(uid);
       allow write: if false;
+    }
+
+    /* ── the soundtrack board (public/soundtrack.html) ───────────────── */
+    // The music team's board: soundtrack/<team key>/songs, each song's file in
+    // its parts subcollection (≤ 1 MB a document). Anyone holding the team link
+    // (…/soundtrack.html#<team key>) may read and change it, like a shared doc;
+    // a key opens only once the owner has created soundtrackRooms/<team key>
+    // in the console, and nobody can list or create those from a client.
+    match /soundtrackRooms/{room} {
+      allow read, write: if false;
+    }
+
+    match /soundtrack/{room}/songs/{song} {
+      function teamOpen() {
+        return exists(/databases/$(database)/documents/soundtrackRooms/$(room));
+      }
+      function validSong() {
+        let d = request.resource.data;
+        return d.keys().hasOnly(['playlist', 'source', 'title', 'file', 'type', 'size', 'duration', 'parts', 'by', 'at', 'order', 'gamePath'])
+            && d.playlist in ['day', 'night-wander', 'night-fish']
+            && d.source in ['upload', 'game']
+            && d.title is string && d.title.size() > 0 && d.title.size() <= 80
+            && (!('by' in d) || (d.by is string && d.by.size() <= 40));
+      }
+      allow read, delete: if teamOpen();
+      allow create, update: if teamOpen() && validSong();
+
+      match /parts/{part} {
+        allow read, delete: if teamOpen();
+        allow create: if teamOpen()
+                      && request.resource.data.keys().hasOnly(['n', 'bytes'])
+                      && request.resource.data.n is int
+                      && request.resource.data.bytes is bytes
+                      && request.resource.data.bytes.size() <= 1000000;
+        allow update: if false;
+      }
     }
 
     /* ── the WINDOWS game's leaderboard ────────────────────────────────── */
