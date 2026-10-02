@@ -1,20 +1,19 @@
 /**
  * The helter skelter's lanterns: lit after dark like the pier's, all the way up the spiral. A
  * little iron lantern stands on the outer rail every few metres of the slide, from the balcony
- * 300 m up round and round to the plinth, with a festoon of bulbs strung along the rail between
- * them, so at night the whole tower is wound in a string of warm lights you can see from the
- * beach. Each lantern wears the pier lamps' halo (world/lamps.ts), holding some size from far off,
- * and the glass and the bulbs warm up as the sky darkens. Five draws in all, instanced.
+ * 300 m up round and round to the plinth, so at night the whole tower is wound in a spiral of
+ * warm lights you can see from the beach. Each lantern wears the pier lamps' halo
+ * (world/lamps.ts), holding some size from far off, and its glass warms up as the sky darkens.
+ * Four draws in all, instanced.
  */
 
-import { BoxGeometry, Color, ConeGeometry, CylinderGeometry, Group, IcosahedronGeometry, InstancedMesh, Matrix4, MeshBasicMaterial, MeshLambertMaterial, PlaneGeometry, Quaternion, Vector3 } from 'three';
+import { BoxGeometry, Color, ConeGeometry, CylinderGeometry, Group, InstancedMesh, Matrix4, MeshBasicMaterial, MeshLambertMaterial, PlaneGeometry, Quaternion, Vector3 } from 'three';
 import { haloMaterial } from '../world/lamps.ts';
 import { OUTER_LIP, TRACK_WIDTH } from './constants.ts';
 import { HelterPath } from './path.ts';
 
-/** a lantern every so many metres along the slide, and bulbs strung between them */
+/** a lantern every so many metres along the slide */
 const EVERY = 4.8;
-const BULBS = 4;
 /** a far halo grows past this many metres off (haloMaterial's grow) */
 const HALO_FAR = 60;
 /** the stem stands on the outer rail; the lantern sits this far over the lip's top */
@@ -24,8 +23,6 @@ const GLASS_Y = RAIL_Y + STEM + 0.1;
 /** the glass by day (unlit, a dull amber) and at night (lit) */
 const DAY = new Color(0x6f5a3c);
 const NIGHT = new Color(0xffd08a);
-const BULB_DAY = new Color(0x8a8070);
-const BULB_NIGHT = new Color(0xfff0c8);
 
 export interface SkelterLights {
   group: Group;
@@ -39,7 +36,6 @@ export function createLights(path: HelterPath): SkelterLights {
   const night = { value: 0 };
 
   const spots: { at: Vector3; yaw: number }[] = [];
-  const bulbAt: Vector3[] = [];
   const s = HelterPath.makeSample();
   const up = new Vector3(0, 1, 0);
   // on the outer rail (s.right points at the tower, so out is the other way)
@@ -50,11 +46,6 @@ export function createLights(path: HelterPath): SkelterLights {
   for (let d = EVERY * 0.5; d < path.totalLength; d += EVERY) {
     const at = onRail(d, 0);
     spots.push({ at, yaw: s.yaw });
-    // the festoon to the next lantern, sagging a little between them
-    for (let k = 1; k <= BULBS; k++) {
-      const t = k / (BULBS + 1);
-      if (d + t * EVERY < path.totalLength) bulbAt.push(onRail(d + t * EVERY, STEM * 0.8 - Math.sin(t * Math.PI) * 0.16));
-    }
   }
 
   const iron = new MeshLambertMaterial({ color: 0x2a2624 });
@@ -78,10 +69,7 @@ export function createLights(path: HelterPath): SkelterLights {
     glass.setMatrixAt(i, m);
     halos.setMatrixAt(i, m.makeTranslation(halo.copy(at).addScaledVector(up, GLASS_Y - RAIL_Y)));
   });
-  const bulbMat = new MeshBasicMaterial({ color: BULB_DAY.clone(), toneMapped: false });
-  const bulbs = new InstancedMesh(new IcosahedronGeometry(0.032, 0), bulbMat, bulbAt.length);
-  bulbAt.forEach((p, i) => bulbs.setMatrixAt(i, m.makeTranslation(p)));
-  for (const mesh of [stems, caps, glass, bulbs, halos]) {
+  for (const mesh of [stems, caps, glass, halos]) {
     // the tower's 300 m tall and the lanterns are strung all over it: never cull the lot for one bound
     mesh.frustumCulled = false;
     group.add(mesh);
@@ -92,7 +80,6 @@ export function createLights(path: HelterPath): SkelterLights {
     update(n: number): void {
       night.value = n;
       glassMat.color.copy(DAY).lerp(NIGHT, n);
-      bulbMat.color.copy(BULB_DAY).lerp(BULB_NIGHT, n);
       halos.visible = n > 0.01;
     },
   };
