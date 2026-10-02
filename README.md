@@ -364,8 +364,9 @@ and the vendors.
     ring on the balcony floor marks the middle; hold the Meta button to recentre), because the ride
     moves you and you dodge the gates with your real body.
   - **The ride:** helter's, carried over whole: DOWN's sliding, three tiers with a landing between,
-    gates to lean past, the voiced 3-2-1 on each bay, 4 Leaf Clovers at the top and New Song 98 or
-    New Song 129 on the way down (`src/audio/skelter.ts`). While you're up the teleport is off and
+    gates to lean past, the voiced 3-2-1 on each bay, 4 Leaf Clovers at the top and Speed on the
+    way down from 1:53, stopping for every 3-2-1 and picking up where it left off at each launch
+    (`src/audio/skelter.ts`). While you're up the teleport is off and
     the slide moves you, the rod's away and the island's songs step aside.
   - **The coins are money:** $1 a coin, $5 a gem, paid into your wallet at every landing. Clip a
     gate and you're off the ride, but you keep what you caught. At the bottom: back up to the top,
