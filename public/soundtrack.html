@@ -102,7 +102,7 @@ h1 { font: 800 clamp(30px, 5vw, 48px)/1.02 var(--f-display); letter-spacing: -.0
 .slot.pending .what { color: var(--c-muted); font-size: 14px; }
 .slot.extra { box-shadow: inset 0 0 0 1.5px var(--warn); }
 
-.song { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; align-items: center; }
+.song { display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto; gap: 10px; align-items: center; }
 .play { width: 34px; height: 34px; border-radius: 50%; border: 1.5px solid var(--c-fg); background: transparent; color: var(--c-fg);
   cursor: pointer; display: grid; place-items: center; padding: 0; }
 .play:hover { background: var(--c-fg); color: var(--c-bg); }
@@ -124,7 +124,7 @@ h1 { font: 800 clamp(30px, 5vw, 48px)/1.02 var(--f-display); letter-spacing: -.0
 .confirm .yes { background: var(--bad); border-color: var(--bad); color: #fff; }
 .bar { position: absolute; left: 0; bottom: 0; height: 3px; background: var(--c-fg); width: 0; }
 @media (max-width: 520px) {
-  .song { grid-template-columns: auto minmax(0, 1fr); }
+  .song { grid-template-columns: auto auto minmax(0, 1fr); }
   .acts { grid-column: 1 / -1; justify-content: flex-end; }
 }
 
@@ -132,12 +132,18 @@ section.shelf, section.notes { display: grid; gap: 12px; }
 h3 { margin: 0; font: 700 20px/1.2 var(--f-display); }
 .shelf p, .notes p { margin: 0; color: var(--muted); max-width: 70ch; }
 .shelf ul { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr)); gap: 6px 18px; }
-.shelf li { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 9px 8px 9px 4px; border-bottom: 1px solid var(--line); cursor: grab; border-radius: 6px; }
+section.shelf { --c-fg: var(--ink); --c-bg: var(--bg); }
+.shelf li { display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 8px 8px 8px 4px; border-bottom: 1px solid var(--line); cursor: grab; border-radius: 6px; }
 .shelf li:hover { background: var(--surface); }
-.shelf li.dragging { opacity: .45; }
-.shelf .grip { width: 14px; height: 20px; color: var(--muted); }
-.shelf .grip svg { width: 100%; height: 100%; fill: currentColor; display: block; }
-.slot[draggable="true"] { cursor: grab; }
+.shelf .play { width: 30px; height: 30px; }
+/* the grip: drag a song by it (on a touch screen only by it, so the page still scrolls) */
+.grip { width: 16px; height: 26px; display: grid; place-items: center; color: var(--c-muted, var(--muted)); cursor: grab; touch-action: none; }
+.grip svg { width: 10px; height: 16px; fill: currentColor; display: block; }
+.shelf li, .slot[data-id] { user-select: none; -webkit-user-select: none; }
+.slot[data-id] { cursor: grab; }
+body.dragging-song, body.dragging-song * { cursor: grabbing !important; }
+.ghost { position: fixed; left: 0; top: 0; z-index: 10; pointer-events: none; background: var(--ink); color: var(--bg);
+  font: 600 14px/1 var(--f-body); padding: 9px 12px; border-radius: 8px; box-shadow: 0 8px 24px rgb(0 0 0 / .3); white-space: nowrap; }
 .shelf .nm { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .shelf .nm small { font: 400 12px var(--f-mono); color: var(--muted); margin-left: 8px; font-variant-numeric: tabular-nums; }
 .shelf select { font: 500 13px var(--f-body); color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; cursor: pointer; }
@@ -179,7 +185,7 @@ body { margin: 0; -webkit-font-smoothing: antialiased; }
 
   <section class="shelf">
     <h3>Songs already in the game</h3>
-    <p>These nine play on the island today, in one loop. Drag any of them onto a playlist, or use Add to…, and it counts toward the 16. You don't need to upload them again.</p>
+    <p>These nine play on the island today, in one loop. Press play to hear one. Drag any of them onto a playlist, or use Add to…, and it counts toward the 16. You don't need to upload them again.</p>
     <ul id="shelf"></ul>
   </section>
 
@@ -331,7 +337,7 @@ function renderCell(p) {
     }
   }
 
-  const cell = el('section', { class: 'cell' + (p.night ? ' night' : '') + (p.wide ? ' wide' : ''), 'aria-label': label(p) },
+  const cell = el('section', { class: 'cell' + (p.night ? ' night' : '') + (p.wide ? ' wide' : ''), 'aria-label': label(p), 'data-key': p.key },
     el('div', { class: 'cell-head' },
       el('h2', {}, p.time, p.act ? el('span', { text: ` · ${p.act}` }) : el('span', { text: ' · Wandering & Fishing' })),
       el('div', { class: 'cell-meta' },
@@ -340,18 +346,14 @@ function renderCell(p) {
     el('p', { class: 'when', text: p.when }),
     list);
 
-  // drops: files from the desktop, or a song card from another playlist
+  // files dropped from the desktop (songs on the page are dragged with pointer events: see dragFrom)
   let depth = 0;
-  const accepts = e => { const t = e.dataTransfer && Array.from(e.dataTransfer.types || []); return t && (t.includes('Files') || t.includes('text/x-song') || t.includes('text/x-game')); };
+  const accepts = e => { const t = e.dataTransfer && Array.from(e.dataTransfer.types || []); return t && t.includes('Files'); };
   cell.addEventListener('dragenter', e => { if (!accepts(e)) return; e.preventDefault(); depth++; cell.classList.add('over'); });
-  cell.addEventListener('dragover', e => { if (!accepts(e)) return; e.preventDefault(); e.dataTransfer.dropEffect = Array.from(e.dataTransfer.types).includes('text/x-song') ? 'move' : 'copy'; });
+  cell.addEventListener('dragover', e => { if (!accepts(e)) return; e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; });
   cell.addEventListener('dragleave', () => { if (--depth <= 0) { depth = 0; cell.classList.remove('over'); } });
   cell.addEventListener('drop', e => {
     e.preventDefault(); depth = 0; cell.classList.remove('over');
-    const id = e.dataTransfer.getData('text/x-song');
-    if (id) return move(id, p.key);
-    const game = GAME_SONGS.find(g => g.path === e.dataTransfer.getData('text/x-game'));
-    if (game) return addGameSong(game, p.key);
     if (e.dataTransfer.files && e.dataTransfer.files.length) upload(p.key, Array.from(e.dataTransfer.files));
   });
   return cell;
@@ -367,13 +369,7 @@ function renderSong(s, n, extra) {
     return li;
   }
 
-  const lead = s.source === 'game'
-    ? el('span', { class: 'badge', title: s.gamePath, text: 'In game' })
-    : (() => {
-        const b = el('button', { class: 'play', type: 'button', 'aria-label': (state.playing === s.id ? 'Pause ' : 'Play ') + s.title, onclick: () => toggle(s, b) });
-        b.innerHTML = state.playing === s.id && !$('player').paused ? PAUSE_SVG : PLAY_SVG;
-        return b;
-      })();
+  const lead = playButton(s);
 
   const title = el('input', { class: 'title', id: 'title-' + s.id, value: s.title || '', 'aria-label': 'Song title', maxlength: '80', spellcheck: 'false' });
   title.value = s.title || '';
@@ -381,7 +377,7 @@ function renderSong(s, n, extra) {
   title.addEventListener('change', () => rename(s, title.value));
 
   const who = s.by || '';
-  const bits = [s.duration ? fmt(s.duration) : null, s.source === 'game' ? s.gamePath.split('/').pop() : s.file, s.size ? mb(s.size) : null, who ? 'added by ' + who : null].filter(Boolean);
+  const bits = [s.duration ? fmt(s.duration) : null, s.source === 'game' ? 'in the game · ' + s.gamePath.split('/').pop() : s.file, s.size ? mb(s.size) : null, who ? 'added by ' + who : null].filter(Boolean);
   const sub = el('div', { class: 'sub', text: bits.join(' · '), title: bits.join(' · ') });
 
   const mv = el('select', { 'aria-label': 'Move to another playlist', id: 'move-' + s.id });
@@ -392,16 +388,11 @@ function renderSong(s, n, extra) {
   const rm = el('button', { type: 'button', text: 'Remove', onclick: () => { state.confirm = s.id; render(); } });
   const dl = s.source === 'upload' ? el('button', { type: 'button', text: 'Download', onclick: () => download(s) }) : null;
 
-  li.append(n, el('div', { class: 'song' }, lead, el('div', { class: 'info' }, title, sub), el('div', { class: 'acts' }, dl, mv, rm)));
-  if (state.playing === s.id) li.append(el('div', { class: 'bar', id: 'bar' }));
+  li.append(n, el('div', { class: 'song' }, grip(), lead, el('div', { class: 'info' }, title, sub), el('div', { class: 'acts' }, dl, mv, rm)));
+  if (state.playing === playKey(s)) li.append(el('div', { class: 'bar', id: 'bar' }));
   if (extra) sub.textContent = 'Over this playlist’s ' + BY_KEY[s.playlist].cap + ' slots · ' + sub.textContent;
 
-  li.draggable = true;
-  li.addEventListener('dragstart', e => {
-    if (document.activeElement === title) { e.preventDefault(); return; }
-    e.dataTransfer.setData('text/x-song', s.id);
-    e.dataTransfer.effectAllowed = 'move';
-  });
+  dragFrom(li, { song: s.id }, s.title);
   return li;
 }
 
@@ -418,20 +409,98 @@ function renderShelf() {
           return sel;
         })();
     // drag it onto a playlist: a song not yet placed is added, a placed one moves
-    const li = el('li', { draggable: 'true', title: placed ? 'Drag to move it to another playlist' : 'Drag onto a playlist' });
-    const grip = el('span', { class: 'grip', 'aria-hidden': 'true' });
-    grip.innerHTML = GRIP_SVG;
-    li.append(grip, el('div', { class: 'nm' }, g.name, el('small', { text: fmt(g.dur) })), right);
-    li.addEventListener('dragstart', e => {
-      if (e.target.closest && e.target.closest('select')) { e.preventDefault(); return; }
-      if (placed) { e.dataTransfer.setData('text/x-song', placed.id); e.dataTransfer.effectAllowed = 'move'; }
-      else { e.dataTransfer.setData('text/x-game', g.path); e.dataTransfer.effectAllowed = 'copy'; }
-      li.classList.add('dragging');
-    });
-    li.addEventListener('dragend', () => li.classList.remove('dragging'));
+    const li = el('li', { title: placed ? 'Drag to move it to another playlist' : 'Drag onto a playlist' });
+    li.append(grip(), playButton(gameSong(g)), el('div', { class: 'nm' }, g.name, el('small', { text: fmt(g.dur) })), right);
+    dragFrom(li, placed ? { song: placed.id } : { game: g.path }, g.name);
     return li;
   }));
 }
+
+/** a song on the shelf, shaped like a playlist entry so it plays the same way */
+function gameSong(g) {
+  const file = g.path.split('/').pop();
+  return { id: 'game:' + g.path, source: 'game', gamePath: g.path, title: g.name, file, type: TYPES[file.split('.').pop()] };
+}
+/** what's playing: an in-game song is the same sound on the shelf and in a playlist */
+const playKey = s => (s.source === 'game' ? 'game:' + s.gamePath : s.id);
+
+function playButton(s) {
+  const on = state.playing === playKey(s) && !$('player').paused;
+  const b = el('button', { class: 'play', type: 'button', 'aria-label': (on ? 'Pause ' : 'Play ') + s.title, onclick: () => toggle(s, b) });
+  b.innerHTML = on ? PAUSE_SVG : PLAY_SVG;
+  return b;
+}
+function grip() {
+  const g = el('span', { class: 'grip', 'aria-hidden': 'true' });
+  g.innerHTML = GRIP_SVG;
+  return g;
+}
+
+/* ---------- dragging songs between the shelf and the playlists ---------- */
+
+// Pointer events rather than the browser's drag-and-drop, which never starts on a touch screen.
+// With a mouse a song lifts from anywhere on its row; with a finger from its grip, so the page
+// still scrolls under a swipe.
+const drag = { what: null, label: '', id: null, x0: 0, y0: 0, on: false, ghost: null };
+
+function dragFrom(row, what, labelText) {
+  row.addEventListener('pointerdown', e => {
+    if (e.button !== 0 || e.target.closest('button, select, a')) return;
+    if (e.pointerType !== 'mouse' && !e.target.closest('.grip')) return;
+    // no text selection; but a title still takes a click to edit it, and lifts only once it moves
+    if (e.pointerType === 'mouse' && !e.target.closest('input')) e.preventDefault();
+    Object.assign(drag, { what, label: labelText, id: e.pointerId, x0: e.clientX, y0: e.clientY, on: false });
+  });
+}
+const cellAt = (x, y) => { const t = document.elementFromPoint(x, y); return t && t.closest('.cell'); };
+function lightCell(cell) {
+  for (const c of document.querySelectorAll('.cell.over')) if (c !== cell) c.classList.remove('over');
+  if (cell) cell.classList.add('over');
+}
+window.addEventListener('pointermove', e => {
+  if (!drag.what || e.pointerId !== drag.id) return;
+  if (!drag.on) {
+    if (Math.hypot(e.clientX - drag.x0, e.clientY - drag.y0) < 6) return;
+    drag.on = true;
+    if (document.activeElement && document.activeElement.classList.contains('title')) document.activeElement.blur();
+    try { getSelection().removeAllRanges(); } catch {}
+    drag.ghost = el('div', { class: 'ghost', text: drag.label });
+    document.body.append(drag.ghost);
+    document.body.classList.add('dragging-song');
+  }
+  e.preventDefault();
+  drag.ghost.style.transform = `translate(${e.clientX + 14}px, ${e.clientY + 10}px)`;
+  lightCell(cellAt(e.clientX, e.clientY));
+  // near the top or bottom edge, scroll toward it
+  const edge = 70;
+  if (e.clientY < edge) window.scrollBy(0, -(edge - e.clientY) / 3);
+  else if (e.clientY > innerHeight - edge) window.scrollBy(0, (e.clientY - innerHeight + edge) / 3);
+}, { passive: false });
+function endDrag(e, dropped) {
+  if (!drag.what || e.pointerId !== drag.id) return;
+  const { what, on } = drag;
+  const cell = on && dropped ? cellAt(e.clientX, e.clientY) : null;
+  drag.what = null;
+  drag.on = false;
+  if (drag.ghost) drag.ghost.remove();
+  drag.ghost = null;
+  document.body.classList.remove('dragging-song');
+  lightCell(null);
+  if (!on) return;
+  // the release would land as a click on whatever is under it (an empty slot opens the file picker)
+  const swallow = ev => { ev.stopPropagation(); ev.preventDefault(); };
+  window.addEventListener('click', swallow, true);
+  setTimeout(() => window.removeEventListener('click', swallow, true), 0);
+  if (!cell) return;
+  const key = cell.dataset.key;
+  if (what.song) move(what.song, key);
+  else {
+    const g = GAME_SONGS.find(x => x.path === what.game);
+    if (g) addGameSong(g, key);
+  }
+}
+window.addEventListener('pointerup', e => endDrag(e, true));
+window.addEventListener('pointercancel', e => endDrag(e, false));
 
 /* ---------- actions ---------- */
 
@@ -551,7 +620,7 @@ async function rename(s, value) {
 async function remove(s) {
   state.confirm = null;
   if (!(await ready())) { render(); return; }
-  if (state.playing === s.id) stop();
+  if (state.playing === playKey(s) && s.source !== 'game') stop();
   try {
     const ref = fb.doc(state.songsCol, s.id);
     if (s.source === 'upload') await dropParts(ref);
@@ -563,9 +632,19 @@ async function remove(s) {
 
 /* ---------- listening ---------- */
 
+/** the songs already in the game, straight from the repo */
+const REPO_RAW = 'https://raw.githubusercontent.com/yellkell/gamblefish/main/';
 const urls = new Map();
 async function audioUrl(s) {
-  if (urls.has(s.id)) return urls.get(s.id);
+  const k = playKey(s);
+  if (urls.has(k)) return urls.get(k);
+  if (s.source === 'game') {
+    const r = await fetch(REPO_RAW + s.gamePath);
+    if (!r.ok) throw new Error('missing');
+    const url = URL.createObjectURL(new Blob([await r.arrayBuffer()], { type: s.type || TYPES[s.gamePath.split('.').pop()] || 'audio/mpeg' }));
+    urls.set(k, url);
+    return url;
+  }
   const snap = await fb.getDocs(fb.query(partsOf(fb.doc(state.songsCol, s.id)), fb.orderBy('n')));
   if (snap.size < (s.parts || 1)) throw new Error('missing');
   const url = URL.createObjectURL(new Blob(snap.docs.map(d => d.data().bytes.toUint8Array()), { type: s.type || 'audio/mpeg' }));
@@ -575,7 +654,7 @@ async function audioUrl(s) {
 
 async function toggle(s, btn) {
   const p = $('player');
-  if (state.playing === s.id) {
+  if (state.playing === playKey(s)) {
     if (p.paused) p.play().catch(() => {}); else p.pause();
     render();
     return;
@@ -583,10 +662,12 @@ async function toggle(s, btn) {
   btn.disabled = true;
   try {
     p.src = await audioUrl(s);
-    state.playing = s.id;
+    state.playing = playKey(s);
     await p.play();
-  } catch {
-    say(`“${s.title}” won’t play here. Its file may be incomplete, or this browser can’t play ${(s.file || '').split('.').pop().toUpperCase()}.`, true);
+  } catch (e) {
+    say(s.source === 'game' && !(e && e.name === 'NotSupportedError')
+      ? `“${s.title}” didn’t load from GitHub. Check your connection and press play again.`
+      : `“${s.title}” won’t play here. Its file may be incomplete, or this browser can’t play ${(s.file || '').split('.').pop().toUpperCase()}.`, true);
     state.playing = null;
   }
   render();
