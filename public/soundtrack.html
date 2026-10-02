@@ -142,6 +142,10 @@ section.shelf { --c-fg: var(--ink); --c-bg: var(--bg); }
 .shelf li, .slot[data-id] { user-select: none; -webkit-user-select: none; }
 .slot[data-id] { cursor: grab; }
 body.dragging-song, body.dragging-song * { cursor: grabbing !important; }
+/* where a dragged song will land: a line above or below the song it lands next to */
+.slot.drop-before::before, .slot.drop-after::before { content: ''; position: absolute; left: 6px; right: 6px; height: 3px; border-radius: 2px; background: var(--c-fg); }
+.slot.drop-before::before { top: 0; }
+.slot.drop-after::before { bottom: 0; }
 .ghost { position: fixed; left: 0; top: 0; z-index: 10; pointer-events: none; background: var(--ink); color: var(--bg);
   font: 600 14px/1 var(--f-body); padding: 9px 12px; border-radius: 8px; box-shadow: 0 8px 24px rgb(0 0 0 / .3); white-space: nowrap; }
 .shelf .nm { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -172,7 +176,7 @@ body { margin: 0; -webkit-font-smoothing: antialiased; }
   <header>
     <div class="eyebrow">Fish &amp; Chips · island music</div>
     <h1>Fill the three playlists</h1>
-    <p class="lede">Music plays the whole time. By day, one playlist covers everything: wandering round town and fishing. At night it splits, so night fishing gets its own sound. When night falls, day breaks, or you start or stop fishing after dark, the music fades smoothly into the next playlist. Drop a song file onto a playlist to fill its next slot. Everyone with the team link sees the same board as it changes, and you can listen back to or download anything that's in.</p>
+    <p class="lede">Music plays the whole time. By day, one playlist covers everything: wandering round town and fishing. At night it splits, so night fishing gets its own sound. When night falls, day breaks, or you start or stop fishing after dark, the music fades smoothly into the next playlist. Drop a song file onto a playlist to fill its next slot. Songs play in the order shown: drag them up or down to change it. Everyone with the team link sees the same board as it changes, and you can listen back to or download anything that's in.</p>
     <div class="summary">
       <div class="count" id="count"><b>0</b> of 16 songs · 0:00 of ~45:00</div>
       <div class="ticks" id="ticks" aria-hidden="true"></div>
@@ -457,6 +461,34 @@ function lightCell(cell) {
   for (const c of document.querySelectorAll('.cell.over')) if (c !== cell) c.classList.remove('over');
   if (cell) cell.classList.add('over');
 }
+
+/**
+ * Where in a playlist a drop at (x, y) lands: next to the nearest song, above it or below it.
+ * The order is a number between its new neighbours' (the Day list runs down one column, then
+ * the next, so "above" is always "before").
+ */
+function landing(cell, x, y, moving) {
+  const key = cell.dataset.key;
+  const list = inList(key).filter(s => s.id !== moving);
+  let near = null, best = Infinity;
+  for (const e of cell.querySelectorAll('.slot[data-id]')) {
+    if (e.dataset.id === moving) continue;
+    const r = e.getBoundingClientRect();
+    const d = Math.hypot(x - (r.left + r.width / 2), y - (r.top + r.height / 2));
+    if (d < best) { best = d; near = { e, mid: r.top + r.height / 2 }; }
+  }
+  if (!near || !list.length) return { key, at: list.length, order: Date.now(), mark: null };
+  const i = list.findIndex(s => s.id === near.e.dataset.id);
+  const before = y < near.mid;
+  const at = before ? i : i + 1;
+  const prev = list[at - 1], next = list[at];
+  const order = prev && next ? (prev.order + next.order) / 2 : prev ? prev.order + 1000 : next.order - 1000;
+  return { key, at, order, mark: near.e, side: before ? 'drop-before' : 'drop-after' };
+}
+function markLanding(l) {
+  for (const e of document.querySelectorAll('.drop-before, .drop-after')) e.classList.remove('drop-before', 'drop-after');
+  if (l && l.mark) l.mark.classList.add(l.side);
+}
 window.addEventListener('pointermove', e => {
   if (!drag.what || e.pointerId !== drag.id) return;
   if (!drag.on) {
@@ -470,7 +502,9 @@ window.addEventListener('pointermove', e => {
   }
   e.preventDefault();
   drag.ghost.style.transform = `translate(${e.clientX + 14}px, ${e.clientY + 10}px)`;
-  lightCell(cellAt(e.clientX, e.clientY));
+  const cell = cellAt(e.clientX, e.clientY);
+  lightCell(cell);
+  markLanding(cell ? landing(cell, e.clientX, e.clientY, drag.what.song) : null);
   // near the top or bottom edge, scroll toward it
   const edge = 70;
   if (e.clientY < edge) window.scrollBy(0, -(edge - e.clientY) / 3);
@@ -480,23 +514,28 @@ function endDrag(e, dropped) {
   if (!drag.what || e.pointerId !== drag.id) return;
   const { what, on } = drag;
   const cell = on && dropped ? cellAt(e.clientX, e.clientY) : null;
+  const land = cell ? landing(cell, e.clientX, e.clientY, what.song) : null;
   drag.what = null;
   drag.on = false;
   if (drag.ghost) drag.ghost.remove();
   drag.ghost = null;
   document.body.classList.remove('dragging-song');
   lightCell(null);
+  markLanding(null);
   if (!on) return;
   // the release would land as a click on whatever is under it (an empty slot opens the file picker)
   const swallow = ev => { ev.stopPropagation(); ev.preventDefault(); };
   window.addEventListener('click', swallow, true);
   setTimeout(() => window.removeEventListener('click', swallow, true), 0);
-  if (!cell) return;
-  const key = cell.dataset.key;
-  if (what.song) move(what.song, key);
-  else {
+  if (!land) return;
+  if (what.song) {
+    const s = state.songs.find(x => x.id === what.song);
+    // dropped back where it was: nothing to save
+    if (s && s.playlist === land.key && inList(land.key).findIndex(x => x.id === s.id) === land.at) return;
+    move(what.song, land.key, land.order);
+  } else {
     const g = GAME_SONGS.find(x => x.path === what.game);
-    if (g) addGameSong(g, key);
+    if (g) addGameSong(g, land.key, land.order);
   }
 }
 window.addEventListener('pointerup', e => endDrag(e, true));
@@ -589,23 +628,26 @@ async function upload(key, files) {
   else if (skipped) say(`${label(BY_KEY[key])} is full (${BY_KEY[key].cap} of ${BY_KEY[key].cap}). ${skipped} file${skipped > 1 ? 's weren’t' : ' wasn’t'} added. Remove a song first, or drop it on another playlist.`, true);
 }
 
-async function addGameSong(g, key) {
+async function addGameSong(g, key, order = Date.now()) {
   if (!(await ready())) { render(); return; }
   if (room(key) <= 0) { say(`${label(BY_KEY[key])} is full.`, true); render(); return; }
   try {
-    await fb.setDoc(fb.doc(state.songsCol), { playlist: key, source: 'game', gamePath: g.path, title: g.name, duration: g.dur, by: myName(), at: new Date().toISOString(), order: Date.now() });
+    await fb.setDoc(fb.doc(state.songsCol), { playlist: key, source: 'game', gamePath: g.path, title: g.name, duration: g.dur, by: myName(), at: new Date().toISOString(), order });
     say(`Put “${g.name}” in ${label(BY_KEY[key])}.`);
   } catch (e) { say(why(e, 'That didn’t save. Try again.'), true); render(); }
 }
 
-async function move(id, key) {
+/** Into another playlist (at the end, or at `order`), or to a new place in its own. */
+async function move(id, key, order) {
   const s = state.songs.find(x => x.id === id);
-  if (!s || s.playlist === key) return;
+  if (!s) return;
+  const same = s.playlist === key;
+  if (same && order == null) return;
   if (!(await ready())) { render(); return; }
-  if (room(key) <= 0) { say(`${label(BY_KEY[key])} is full. Remove a song from it first.`, true); render(); return; }
+  if (!same && room(key) <= 0) { say(`${label(BY_KEY[key])} is full. Remove a song from it first.`, true); render(); return; }
   try {
-    await fb.updateDoc(fb.doc(state.songsCol, id), { playlist: key, order: Date.now() });
-    say(`Moved “${s.title}” to ${label(BY_KEY[key])}.`);
+    await fb.updateDoc(fb.doc(state.songsCol, id), { playlist: key, order: order ?? Date.now() });
+    if (!same) say(`Moved “${s.title}” to ${label(BY_KEY[key])}.`);
   } catch (e) { say(why(e, 'The move didn’t save. Try again.'), true); render(); }
 }
 
