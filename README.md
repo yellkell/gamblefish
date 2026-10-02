@@ -373,8 +373,8 @@ and the vendors.
     or step off into the village.
   - The painted tower is lit by the island's sun, so it goes gold at sunset and dark at night.
     After dark its lanterns come on like the pier's (`src/skelter/lights.ts`): a little iron
-    lantern on the slide's outer rail every 5 m, with a festoon of bulbs strung between them,
-    so the whole tower is wound in a spiral of warm light you can see from the beach.
+    lantern on the slide's outer rail every 5 m, so the whole tower is wound in a spiral of warm
+    light you can see from the beach.
 - **The fire dancers' camps** (`src/camps/`): FIRE FIGHT 2's beach-party dancers (the glowstick
   crowd round its bonfires, ff2's `src/arena/cove/`) have gone off into the wilds in **twelve** little
   groups, each dancing round its own fire in a clearing with a chest beside it (the carpenter's
@@ -465,7 +465,8 @@ and the vendors.
   foot, to a fanfare, a 100%! banner and a word wherever you are. The fish is the game's
   own sailfish, 5.5 m bill to tail, bent into a leap, its markings kept as shading in the gold, its sail's
   rays standing out, leaping from a golden splash; little stars glint over it, and after dark it keeps a
-  warm glow of its own. On the plinth's face an engraved bronze plaque: *100% Complete! Thanks for
+  soft warm glow of its own, brightest round its edges so the fish keeps its shape, on a plinth
+  that's moonlit like the sand round it. On the plinth's face an engraved bronze plaque: *100% Complete! Thanks for
   Playing! Created by yellkell. Music by IBWildcat1998, poopoodoodoo689, JakeThePro & Crystalzach.*
   Once up it's saved (`journey.unveiled`), stands there every visit, and is a gold star on the field
   guide's chart (point at it to stand before the plaque). About five draws, built only once it's

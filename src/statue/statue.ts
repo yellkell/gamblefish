@@ -80,6 +80,8 @@ const BRONZE = '#a8743a';
 const CLOCK_GAP = 0.5;
 /** how often the clock goes into the save, if nothing else has saved it (s) */
 const CLOCK_SAVE = 60;
+/** the stone's studio light by day (it fades after dark: Statue.update) */
+const STONE_SHINE = 0.25;
 /** how long it takes to rise out of the sand (s) */
 const RISE_S = 6;
 /** the fish, bill to tail, as modelled (m: STATUE.scale stands it up bigger) */
@@ -105,6 +107,7 @@ export class Statue {
   private base = 0;
   private box: BoxCollider | null = null;
   private gold!: MeshStandardMaterial;
+  private stone!: MeshStandardMaterial;
   private plaque!: MeshStandardMaterial;
   private backPlaque!: MeshStandardMaterial;
   private sparkle: Points | null = null;
@@ -150,12 +153,15 @@ export class Statue {
         this.party.win({ at: this.bill.clone(), tier: 2, banner: '100%!', scale: 3.5, coins: false });
       }
     }
-    // gold shines in the sun; after dark its studio light goes and a warm glow of its own comes up
+    // gold shines in the sun; after dark its studio light goes (the stone's too, so the plinth's
+    // moonlit like the sand round it) and a soft warm glow of its own comes up, brightest at its
+    // edges so the fish keeps its shape against the night sky
     if (this.built) {
       const n = this.d.night.value;
-      this.gold.envMapIntensity = 1.3 * (1 - 0.85 * n);
-      this.gold.emissiveIntensity = 0.06 + 0.3 * n;
-      this.plaque.envMapIntensity = this.backPlaque.envMapIntensity = 1.1 * (1 - 0.85 * n);
+      this.gold.envMapIntensity = 1.3 * (1 - 0.9 * n);
+      this.gold.emissiveIntensity = 0.04 + 0.22 * n;
+      this.plaque.envMapIntensity = this.backPlaque.envMapIntensity = 1.1 * (1 - 0.8 * n);
+      this.stone.envMapIntensity = STONE_SHINE * (1 - 0.97 * n);
     }
   }
 
@@ -245,8 +251,18 @@ export class Statue {
     // (in the statue's own, unscaled frame)
     const sunk = (hi - lo) / STATUE.scale + 0.3;
 
-    this.gold = new MeshStandardMaterial({ vertexColors: true, metalness: 1, roughness: 0.26, envMap: casinoEnv(r), envMapIntensity: 1.3, side: DoubleSide, emissive: new Color(GOLD), emissiveIntensity: 0.06 });
-    const stone = stoneMaterial(r);
+    // (its glow takes each piece's own colour, so the fish's markings and the bronze frames keep
+    // theirs, and is strongest where the surface turns away from you: a flat glow made it a cutout)
+    this.gold = new MeshStandardMaterial({ vertexColors: true, metalness: 1, roughness: 0.26, envMap: casinoEnv(r), envMapIntensity: 1.3, side: DoubleSide, emissive: new Color(0xffffff), emissiveIntensity: 0.04 });
+    this.gold.onBeforeCompile = (shader) => {
+      shader.fragmentShader = shader.fragmentShader.replace(
+        '#include <emissivemap_fragment>',
+        `#include <emissivemap_fragment>
+        float rim = 1.0 - abs(dot(normal, normalize(vViewPosition)));
+        totalEmissiveRadiance *= diffuseColor.rgb * (0.3 + 0.9 * rim * rim);`,
+      );
+    };
+    const stone = (this.stone = stoneMaterial(r));
     const b = new Batch();
 
     // the plinth: two steps, the body, a cornice, a gold band at its foot and under the cornice
@@ -469,7 +485,7 @@ function stoneMaterial(r: Kit['renderer']): MeshStandardMaterial {
   map.colorSpace = SRGBColorSpace;
   map.wrapS = map.wrapT = RepeatWrapping;
   map.anisotropy = 4;
-  const m = new MeshStandardMaterial({ map, roughness: 0.78, metalness: 0, envMap: casinoEnv(r), envMapIntensity: 0.25 });
+  const m = new MeshStandardMaterial({ map, roughness: 0.78, metalness: 0, envMap: casinoEnv(r), envMapIntensity: STONE_SHINE });
   // one tile is 0.9 m of stone either way
   m.userData.tile = [0.9, 0.9];
   return m;
