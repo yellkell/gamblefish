@@ -30,7 +30,9 @@ export function pot(k: Kit, b: Batch, r: number, h: number, mat = M.terracotta(k
     ]),
   );
   const top = h * soilAt;
-  b.add(M.soil(k.renderer), turned([[0, top + 0.012], [r * 0.5, top + 0.008], [r * 0.9, top]], 20));
+  // (the soil's profile runs in from the rim, so its face looks up: drawn out from the middle it
+  // faces the floor, and from above you'd see down through the pot)
+  b.add(M.soil(k.renderer), turned([[r * 0.9, top], [r * 0.5, top + 0.008], [0, top + 0.012]], 20));
   return top;
 }
 
@@ -194,7 +196,7 @@ export function fern(k: Kit): Object3D {
   const R = 0.17;
   // the basket: a woven bowl with a rolled rim
   b.add(rat, turned([[0, -0.15], [R * 0.5, -0.14], [R * 0.85, -0.1], [R, -0.03], [R * 1.02, 0.01], [R * 0.95, 0.015], [R * 0.9, -0.005]], 24));
-  b.add(M.soil(k.renderer), turned([[0, 0.004], [R * 0.9, -0.004]], 20));
+  b.add(M.soil(k.renderer), turned([[R * 0.9, -0.004], [0, 0.004]], 20));
   // the hanger: three cords from the rim, knotted, up to a ring under the ceiling
   const jute = M.satin(k.renderer, '#c8a878');
   const ring = new Vector3(0, 0.42, 0);
@@ -284,7 +286,7 @@ export function orchid(k: Kit): Object3D {
   b.at(bam, turned([[0.13, -0.008], [0.14, 0], [0.13, 0.008], [0.12, 0]], 24), 0, 0.22, 0);
   // the pot: white glaze, moss on top
   b.at(M.glaze(k.renderer, '#f4f0ea'), turned([[0, 0], [0.07, 0], [0.088, 0.12], [0.095, 0.15], [0.09, 0.155], [0.082, 0.14]], 24), 0, H, 0);
-  b.at(M.satin(k.renderer, '#4e5e2a'), turned([[0, 0.145], [0.082, 0.14]], 16), 0, H, 0);
+  b.at(M.satin(k.renderer, '#4e5e2a'), turned([[0.082, 0.14], [0, 0.145]], 16), 0, H, 0);
   const top = H + 0.14;
   // the leaves: broad, fleshy, splayed out over the pot's rim
   const leaf = M.leaf(k.renderer);
@@ -345,7 +347,7 @@ export function monstera(k: Kit): Object3D {
   // the basket: woven rattan round a hidden liner, with a rolled rim
   const rat = M.rattan(k.renderer, '#c09a60');
   b.add(rat, turned([[0, 0], [0.17, 0], [0.18, 0.01], [0.2, 0.28], [0.215, 0.29], [0.215, 0.31], [0.2, 0.315], [0.19, 0.3]], 28));
-  b.add(M.soil(k.renderer), turned([[0, 0.295], [0.19, 0.29]], 20));
+  b.add(M.soil(k.renderer), turned([[0.19, 0.29], [0, 0.295]], 20));
   const soil = 0.29;
   // a coir pole for it to climb
   b.add(M.cloth(k.renderer, '#6a4a2e', 'canvas'), stalk([new Vector3(0.02, soil - 0.02, -0.03), new Vector3(0.02, soil + 0.62, -0.03)], 0.022, 0.02, 10, 2, true));

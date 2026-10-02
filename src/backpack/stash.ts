@@ -166,7 +166,7 @@ export class Stash {
       }
       b.add(gold, stalk(pts, cord, cord, 5, 24));
       const end = pts[pts.length - 1];
-      b.at(gold, turned([[0, 0.012], [0.004, 0.008], [0.006, -0.01], [0, -0.012]], 10), end.x, end.y - 0.01, end.z);
+      b.at(gold, turned([[0, -0.012], [0.006, -0.01], [0.004, 0.008], [0, 0.012]], 10), end.x, end.y - 0.01, end.z);
     }
     this.pouch.add(b.group());
     this.pouch.position.set(0, 0, 0.14);
