@@ -171,7 +171,8 @@ export function globe(k: Kit): Object3D {
     b.at(wood, turned([[0, 0], [0.03, 0], [0.028, 0.02], [0, 0.03]], 10), foot.x, 0, foot.z);
   }
   b.at(wood, new TorusGeometry(0.2, 0.012, 6, 32).rotateX(Math.PI / 2), 0, 0.3, 0);
-  b.at(wood, turned([[0, 0.25], [0.03, 0.25], [0.02, 0.3], [0.025, 0.4], [0.012, 0.5], [0, 0.5]], 12), 0, 0, 0);
+  // the pedestal, up to a little cup the meridian sits in
+  b.at(wood, turned([[0, 0.25], [0.03, 0.25], [0.02, 0.3], [0.025, 0.4], [0.012, 0.5], [0.018, 0.518], [0.018, 0.524], [0, 0.524]], 12), 0, 0, 0);
   // the horizon ring: a flat wooden band, calendar painted on it
   b.at(M.painted(k.renderer, 'horizon', 512, 32, (g, w, h) => {
     g.fillStyle = '#e8d8b0';
@@ -179,12 +180,17 @@ export function globe(k: Kit): Object3D {
     g.fillStyle = '#3a2a1a';
     for (let i = 0; i < 72; i++) g.fillRect((i * w) / 72, 0, 1, i % 6 ? h * 0.35 : h * 0.7);
   }, 0.5), turned([[0.28, 0.8], [0.31, 0.8], [0.31, 0.812], [0.28, 0.812]], 48), 0, 0, 0);
-  // the brass meridian, and the globe on its tilted axis
+  // the brass meridian: a whole ring standing upright in the pedestal's cup, through the horizon
+  // ring; the globe turns inside it on an axis tilted in the ring's plane, pinned at both poles
   const tilt = 0.41;
   const cy = 0.8;
-  b.at(brass, new TorusGeometry(0.265, 0.008, 6, 48, Math.PI * 1.25).rotateZ(-Math.PI * 0.125 - Math.PI / 2), 0, cy, 0, 0, 0, tilt);
-  b.at(M.painted(k.renderer, 'oldworld', 1024, 512, oldWorld, 0.55), new SphereGeometry(0.25, 36, 24), 0, cy, 0, 0, 1.2, tilt);
-  for (const s of [-1, 1]) b.at(brass, turned([[0, 0], [0.012, 0], [0.008, 0.02], [0, 0.022]], 8), -Math.sin(tilt) * 0.265 * s, cy + Math.cos(tilt) * 0.265 * s, 0, s < 0 ? Math.PI : 0, 0, tilt);
+  const mr = 0.272;
+  b.at(brass, new TorusGeometry(mr, 0.008, 6, 64), 0, cy, 0);
+  // (spun about its own axis first, then tilted: the other way round, its poles miss the pins)
+  b.at(M.painted(k.renderer, 'oldworld', 1024, 512, oldWorld, 0.55), new SphereGeometry(0.25, 36, 24).rotateY(1.2), 0, cy, 0, 0, 0, tilt);
+  // each pin: an axle out of the pole, through the meridian, and a nut on the outside
+  const pin = turned([[0, 0], [0.005, 0], [0.005, 0.03], [0.012, 0.03], [0.012, 0.036], [0.008, 0.046], [0, 0.048]], 10);
+  for (const s of [-1, 1]) b.at(brass, pin, -Math.sin(tilt) * 0.245 * s, cy + Math.cos(tilt) * 0.245 * s, 0, 0, 0, tilt + (s < 0 ? Math.PI : 0));
   return b.group();
 }
 

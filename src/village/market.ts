@@ -95,7 +95,9 @@ export class FishMarket {
     const arm = new Mesh(new BoxGeometry(0.04, 0.04, 0.22), steel);
     arm.position.set(0, 0.56, -0.08);
     const dial = new Mesh(new CylinderGeometry(0.11, 0.11, 0.025, 28), new MeshLambertMaterial({ map: dialTexture(), color: 0xffffff }));
-    dial.rotation.x = Math.PI / 2;
+    // stood up to face you, and turned a quarter about its axis: a cylinder's end cap lays its
+    // picture on sideways, and the kg would read on its side
+    dial.rotation.set(Math.PI / 2, Math.PI / 2, 0);
     dial.position.set(0, 0.42, -0.16);
     this.needle = new Mesh(new BoxGeometry(0.008, 0.09, 0.004), new MeshBasicMaterial({ color: 0xc23b2e }));
     this.needle.geometry.translate(0, 0.04, 0);
@@ -260,7 +262,8 @@ export class FishMarket {
     // the dial: a spring toward the weight, overshooting a little like a real one
     this.needleVel += ((this.needleTarget - this.needleAngle) * 60 - this.needleVel * 7) * dt;
     this.needleAngle += this.needleVel * dt;
-    this.needle.rotation.z = -this.needleAngle;
+    // (from the dial's first mark, low on the left: 0.8π round from the top)
+    this.needle.rotation.z = Math.PI * 0.8 - this.needleAngle;
     for (const a of [...this.anims]) {
       a.t += dt;
       const k = Math.min(1, a.t / a.dur);
