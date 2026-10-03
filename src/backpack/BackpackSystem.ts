@@ -31,6 +31,11 @@
  *  (backpack/fieldGuide.ts) is a book of the island's fish that lies open in the tray in place
  *  of the slots, filling itself in as you catch each species.
  *
+ *  THE FISH MARKET TIP: the first time the backpack's half full you're told you can sell your fish
+ *  at the fish market to empty it, and the field guide opens at its chart (or does the next time
+ *  you open the backpack, if it was shut); the chart's fish market, and the FIELD GUIDE tab, glow and
+ *  pulse till you've sold a fish or gone there off the chart (backpack/marketTip.ts).
+ *
  * The rules (shapes, fitting, merging, value) are backpack/logic.ts; the pieces live on the
  * save's own fish entries, so layout and tiers persist and the market sells at tier value.
  */
@@ -45,6 +50,7 @@ import {
   Mesh,
   MeshBasicMaterial,
   MeshStandardMaterial,
+  type PlaneGeometry,
   Quaternion,
   RingGeometry,
   SRGBColorSpace,
@@ -66,7 +72,9 @@ import { locomotion } from '../locomotion/TeleportSystem.ts';
 import { font } from '../ui/fonts.ts';
 import { INK, Panel, roundRect } from '../ui/panel.ts';
 import { bounds, cellsOf, fill, findSpot, fits, GRID_SIZES, merge, MERGE_BONUS, mergePartners, rotate, shapeFor, TIERS, type Piece, type Rot } from './logic.ts';
-import { FieldGuide } from './fieldGuide.ts';
+import { beat, FieldGuide, glowFrame } from './fieldGuide.ts';
+import { TIP_FILL } from './marketTip.ts';
+import { Toast } from '../fishing/hud.ts';
 import { Stash } from './stash.ts';
 import type { ChartSource, Place } from './chart.ts';
 import { CELL, Tray } from './tray.ts';
@@ -235,6 +243,11 @@ export class BackpackSystem extends createSystem({}) {
   private tabs!: InteractivePanel;
   private guide!: FieldGuide;
   private tab: 'pack' | 'guide' = 'pack';
+  /** the FIELD GUIDE tab glowing while the fish market tip beckons, and the tip's message */
+  private tabGlow!: Mesh<PlaneGeometry, MeshBasicMaterial>;
+  private toast!: Toast;
+  /** told while the backpack was shut: it opens at the field guide's chart */
+  private chartNext = false;
 
   /** the fish in your hand */
   private held: { piece: Piece; model: FishModel; hand: Hand; from: { x: number; y: number; rot: Rot } | null } | null = null;
@@ -304,9 +317,26 @@ export class BackpackSystem extends createSystem({}) {
     this.paintTabs();
     this.tray.group.add(this.tabs.mesh);
     register(this.tabs);
-    // going somewhere off the chart shuts the backpack behind you
+    // (over the FIELD GUIDE tab, the lower half: as paintTabs draws it)
+    const [TW, TH] = this.tabs.px;
+    this.tabGlow = glowFrame(TW - 12, TH / 2 - 12, 22, this.tabs.size[0] / TW);
+    this.tabGlow.position.set(0, -this.tabs.size[1] / 4, 0.0006);
+    this.tabs.mesh.add(this.tabGlow);
+    this.toast = new Toast();
+    this.toast.panel.mesh.visible = false;
+    this.scene.add(this.toast.panel.mesh);
+    // going somewhere off the chart shuts the backpack behind you (and going to the fish market
+    // is what the tip was pointing you to)
     const travel = backpackDeps.travel;
-    this.guide = new FieldGuide(backpackDeps.state!, backpackDeps.props!, this.renderer, backpackDeps.chart, backpackDeps.where, backpackDeps.walks, travel ? (p) => travel(p) && this.close() : null, backpackDeps.skelter ?? null);
+    const go = (p: Place): void => {
+      if (!travel?.(p)) return;
+      if (p.building === 'stall' && this.state.marketTip !== 'done') {
+        this.state.marketTip = 'done';
+        this.state.save();
+      }
+      this.close();
+    };
+    this.guide = new FieldGuide(backpackDeps.state!, backpackDeps.props!, this.renderer, backpackDeps.chart, backpackDeps.where, backpackDeps.walks, travel ? go : null, backpackDeps.skelter ?? null);
     this.guide.group.position.y = 0.03;
     this.tray.group.add(this.guide.group);
     backpackView.takeInHand = (id, hand) => this.takeInHand(id, hand);
@@ -610,7 +640,13 @@ export class BackpackSystem extends createSystem({}) {
     for (const h of ['left', 'right'] as const) this.trig[h] = (this.input.xr.gamepads[h]?.getButtonValue(InputComponent.Trigger) ?? 0) > 0.3;
     this.infoKey = '';
     this.syncModels();
-    // a fish in hand wants the slots; otherwise it opens where you left it
+    // a fish in hand wants the slots; otherwise it opens where you left it (or at the chart, if
+    // you were told of the fish market while it was shut)
+    if (this.chartNext && !this.held && this.state.marketTip === 'beckoning') {
+      this.chartNext = false;
+      this.guide.toChart();
+      this.tab = 'guide';
+    }
     this.setTab(this.held ? 'pack' : this.tab);
     // the box's lid: two latches
     shot('bail_click', MIX.bail + 8, { rate: 0.62 });
@@ -647,6 +683,8 @@ export class BackpackSystem extends createSystem({}) {
       this.carrying = null;
     }
     this.trackTargets(time);
+    this.marketTip(time);
+    this.toast.update(dt, this.camera);
     if (backpackView.open) {
       this.handleInput();
       if (this.tab === 'pack') {
@@ -661,6 +699,39 @@ export class BackpackSystem extends createSystem({}) {
     backpackView.holding = !!this.held;
     backpackView.hand = this.held?.hand ?? null;
     backpackView.heavy = this.held?.piece.species === SHARK_ID;
+  }
+
+  /**
+   * The fish market tip: the first time the backpack's half full (once a fish has landed in its
+   * slot, and any merge it set off is done), you're told, and the field guide opens at its chart;
+   * till you've sold one or gone there off the chart, the FIELD GUIDE tab glows (the chart's fish
+   * market does too: backpack/fieldGuide.ts).
+   */
+  private marketTip(time: number): void {
+    const st = this.state;
+    if (st.marketTip === 'waiting' && !this.anims.some((a) => a.kind === 'drop' || a.kind === 'fuse')) {
+      const [C, R] = this.grid;
+      const { used, total } = fill(this.pieces, C, R);
+      if (used >= total * TIP_FILL) {
+        st.marketTip = 'beckoning';
+        st.save();
+        this.toast.show('Backpack half full! Sell your fish at the fish market to empty it. Point at it on the chart to go there', 7, INK.amber);
+        this.buzz(this.held?.hand ?? 'right', 0.3, 60);
+        // the book, open at the chart: now if the backpack's open (and no fish in hand), else the
+        // next time it is
+        if (backpackView.open && !this.held) {
+          this.guide.toChart();
+          this.setTab('guide');
+        } else this.chartNext = true;
+      }
+    }
+    const on = st.marketTip === 'beckoning' && backpackView.open && this.tab === 'pack';
+    this.tabGlow.visible = on;
+    if (on) {
+      const k = beat(time);
+      this.tabGlow.material.opacity = 0.35 + 0.65 * k;
+      this.tabGlow.scale.setScalar(1 + 0.05 * k);
+    }
   }
 
   /** Where's the fish hand relative to the tray: over it (and which slot), or away. */

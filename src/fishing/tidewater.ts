@@ -18,6 +18,7 @@ import type { CampSave, ChestFish } from '../camps/stock.ts';
 import { registerSharkFish, sharkOdds, sharkUnlocked } from './shark.ts';
 import { freshGems, readGems, type GemSave } from '../mining/gems.ts';
 import { freshJourney, readJourney, type JourneySave } from '../statue/save.ts';
+import { readMarketTip, type MarketTip } from '../backpack/marketTip.ts';
 
 export interface FishInfo {
   name: string;
@@ -185,6 +186,8 @@ export interface GameState {
   gems: GemSave;
   /** the journey (statue/): full helter skelter descents, and whether the golden statue is up */
   journey: JourneySave;
+  /** the fish market tip (backpack/marketTip.ts): told once your backpack's half full, till you sell */
+  marketTip: MarketTip;
   /**
    * The gear you've chosen to fish with, by track (fishing/gear.ts shownLevel): the rod in your
    * hand and the reel on it (the tackle shop's rack board) and the bait on your hook (the bait
@@ -315,6 +318,7 @@ export function createGameState(): GameState {
   s.coral = { thanked: [], visits: 0 };
   s.gems = freshGems();
   s.journey = freshJourney();
+  s.marketTip = 'waiting';
   s.looks = {};
   // the gear in your hand, not the best you've bought: Tidewater's stats read the upgrades
   Object.defineProperty(s, 'gear', { get: () => usedGear(s.upgrades, s.looks) });
@@ -323,7 +327,7 @@ export function createGameState(): GameState {
   const fromJSON = s.fromJSON.bind(s);
   const reset = s.reset.bind(s);
   // (baitGoop: this save's bait levels count goop bait: fishing/gear.ts baitShift)
-  s.toJSON = () => ({ ...(toJSON() as object), home: s.home, woodworks: s.woodworks, camps: s.camps, coral: s.coral, gems: s.gems, journey: s.journey, looks: s.looks, baitGoop: true });
+  s.toJSON = () => ({ ...(toJSON() as object), home: s.home, woodworks: s.woodworks, camps: s.camps, coral: s.coral, gems: s.gems, journey: s.journey, marketTip: s.marketTip, looks: s.looks, baitGoop: true });
   s.fromJSON = (d: unknown) => {
     if (!fromJSON(d)) return false;
     s.upgrades.bait = (s.upgrades.bait | 0) + baitShift(d as Parameters<typeof baitShift>[0]);
@@ -334,6 +338,7 @@ export function createGameState(): GameState {
     s.coral = readCoral(d, s.home);
     s.gems = readGems(d);
     s.journey = readJourney(d);
+    s.marketTip = readMarketTip(d);
     s.looks = readLooks(d, s.upgrades);
     return true;
   };
@@ -382,6 +387,16 @@ export function createGameState(): GameState {
       catching = false;
     }
   };
+  // a first sale at the fish market: the tip's done with (the chart stops pulsing)
+  const sell = s.sell.bind(s);
+  s.sell = (ids) => {
+    const r = sell(ids);
+    if (r.count && s.marketTip !== 'done') {
+      s.marketTip = 'done';
+      s.save();
+    }
+    return r;
+  };
   s.logs = () => {
     s.save();
     for (const fn of logs) owed.add(fn);
@@ -401,6 +416,7 @@ export function createGameState(): GameState {
     s.coral = { thanked: [], visits: 0 };
     s.gems = freshGems();
     s.journey = freshJourney();
+    s.marketTip = 'waiting';
     s.looks = {};
     reset();
   };

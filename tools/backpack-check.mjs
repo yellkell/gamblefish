@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 /**
  * THE BACKPACK — headless. Drives src/backpack/logic.ts (Node strips the types):
- * shapes from real lengths and body plans, rotation, fitting, merging and chain merges.
+ * shapes from real lengths and body plans, rotation, fitting, merging and chain merges; and the
+ * fish market tip's save (src/backpack/marketTip.ts, through fishing/tidewater.ts).
  *
  *   node tools/backpack-check.mjs
  */
@@ -144,6 +145,30 @@ console.log('\nthe biggest fish');
   const kg = FISH[SHARK_ID].kg[0];
   const shark = piece(1, SHARK_ID, fishLengthCm(SHARK_ID, kg), kg, { placed: false });
   check(`even the smallest great white fits no backpack, not an empty ${CL}×${RL}`, !findSpot(shark, [], CL, RL), `${bounds(shark.shape).w} cells long`);
+}
+
+console.log('\nthe fish market tip');
+{
+  const { createGameState } = await import('../src/fishing/tidewater.ts');
+  const { readMarketTip } = await import('../src/backpack/marketTip.ts');
+  const s = createGameState();
+  s.reset();
+  check('a new save hasn\'t been told yet', s.marketTip === 'waiting');
+  s.marketTip = 'beckoning';
+  const t = createGameState();
+  t.fromJSON(JSON.parse(JSON.stringify(s.toJSON())));
+  check('told, it survives a save and a load (the chart keeps pulsing)', t.marketTip === 'beckoning');
+  check('selling nothing leaves it beckoning', (s.sell([]), s.marketTip === 'beckoning'));
+  s.addFish('grunt', 0.5);
+  s.sell();
+  check('a first sale is the end of it', s.marketTip === 'done');
+  const old = { ...s.toJSON(), marketTip: undefined };
+  check('a save from before it that\'s earned money has been to the market', readMarketTip({ ...old, money: 40 }) === 'done');
+  check('…and one that\'s bought gear', readMarketTip({ ...old, money: 0, upgrades: { rod: 1 } }) === 'done');
+  check('…but one that hasn\'t still gets told', readMarketTip({ ...old, money: 0, upgrades: { rod: 0 } }) === 'waiting');
+  check('nonsense reads as not told', readMarketTip({ money: 0, marketTip: 'pulsing' }) === 'waiting');
+  s.reset();
+  check('a reset tells you again', s.marketTip === 'waiting');
 }
 
 const failed = results.filter((r) => !r).length;
