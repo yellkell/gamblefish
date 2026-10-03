@@ -88,8 +88,15 @@ check('every one of the 13,824 stops enumerated: returns 94.85% (the topper says
 const tally = [0, 0, 0].map(() => new Array(STOPS).fill(0));
 for (let i = 0; i < 240000; i++) pull().forEach((s, r) => tally[r][s]++);
 const chiS = tally.map((t) => t.reduce((a, c) => a + (c - 10000) ** 2 / 10000, 0));
-// 23 degrees of freedom: 99.9% of fair reels come in under 49.7
-check('240,000 crypto pulls: each reel stops evenly (χ² < 50)', chiS.every((x) => x < 50), chiS.map((x) => x.toFixed(1)).join(', '));
+// 24 stops → 23 degrees of freedom. The old bar of 50 sat at p ≈ 9.2e-4 per reel, so with three
+// reels a fair machine failed ~1 run in 360 (it did, χ² 54.6 on a deploy). Instead we ask for a 1e-6
+// chance of a false fail across the whole check, Bonferroni-split over the 3 reels: 1e-6 / 3 per reel
+// puts the χ²(23) quantile at 73.6; we round up to 74, where P(χ² ≥ 74) = 2.9e-7 per reel and
+// 1 − (1 − 2.9e-7)³ = 8.7e-7 for the run — about one false fail in 1.2 million runs.
+// It still catches a biased reel: one stop just 10% heavier than the rest gives a non-central χ²(23)
+// with λ = 240,000 · Σ(pᵢ − 1/24)² / (1/24) ≈ 95 and trips 74 99% of the time (12% heavier: 99.999%);
+// a real bug (a dead stop, modulo bias) lands in the thousands.
+check('240,000 crypto pulls: each reel stops evenly (χ² < 74)', chiS.every((x) => x < 74), chiS.map((x) => x.toFixed(1)).join(', '));
 
 console.log('\nblackjack: hands');
 const C = (s) => s.split(' ').map((x) => ({ rank: { A: 1, J: 11, Q: 12, K: 13 }[x] ?? Number(x), suit: 0 }));
