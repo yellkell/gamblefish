@@ -24,11 +24,14 @@
  * every camp's fire marked on it, and a list of them, found or not. Point at one you've found (on
  * the map or in the list) and you're there; the rest you walk to, and the map says where.
  *
+ * The first time your backpack's half full (backpack/marketTip.ts), the book opens at the chart,
+ * and the fish market's marker and its line of the key glow and pulse, till you've sold a fish or gone there off the chart.
+ *
  * Once the golden statue's up, the title page carries one more line, small, over the title: how
  * long the journey took on the game clock (statue/save.ts), for the speedrunners.
  */
 
-import { Group, Mesh, MeshLambertMaterial, BoxGeometry, Vector3, type Points } from 'three';
+import { BoxGeometry, CanvasTexture, Group, Mesh, MeshBasicMaterial, MeshLambertMaterial, PlaneGeometry, SRGBColorSpace, Vector3, type Points } from 'three';
 import type { WebGLRenderer } from 'three';
 import { uiClick } from '../audio/sfx.ts';
 import type { Props } from '../fishing/props.ts';
@@ -143,6 +146,46 @@ const GEM_PIC = 196;
 
 const PX: [number, number] = [900, 1170];
 const SIZE: [number, number] = [0.3, 0.39];
+/** the fish market's line of the key (and its marker is that number): it pulses while the tip beckons */
+const MARKET = KEY.findIndex((p) => p.building === 'stall');
+
+/**
+ * A glowing gold outline (a rounded box w × h canvas pixels, corners r; a ring when r is half of
+ * both) on a plane of its own, `m` metres a pixel, to lie over a board and pulse without the
+ * board's canvas being painted again each frame.
+ */
+export function glowFrame(w: number, h: number, r: number, m: number): Mesh<PlaneGeometry, MeshBasicMaterial> {
+  const pad = 22;
+  const c = document.createElement('canvas');
+  c.width = Math.ceil(w + pad * 2);
+  c.height = Math.ceil(h + pad * 2);
+  const g = c.getContext('2d')!;
+  roundRect(g, pad, pad, w, h, r);
+  g.fillStyle = 'rgba(255, 196, 40, 0.34)';
+  g.fill();
+  g.shadowColor = '#ffb000';
+  g.shadowBlur = 16;
+  g.lineWidth = 6;
+  g.strokeStyle = '#ffd24a';
+  g.stroke();
+  g.shadowBlur = 0;
+  g.lineWidth = 2.5;
+  g.strokeStyle = '#fff6d0';
+  g.stroke();
+  const tex = new CanvasTexture(c);
+  tex.colorSpace = SRGBColorSpace;
+  const mesh = new Mesh(
+    new PlaneGeometry(c.width * m, c.height * m),
+    new MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, fog: false, toneMapped: false }),
+  );
+  // (over the board it lies on: boards draw at 10)
+  mesh.renderOrder = 11;
+  mesh.visible = false;
+  return mesh;
+}
+
+/** 0..1..0, a beat a little over a second long */
+export const beat = (t: number): number => 0.5 - 0.5 * Math.cos(t * Math.PI * 1.6);
 const PAPER = '#f2e6cc';
 const INK_BROWN = '#2e2214';
 const INK_FADED = 'rgba(46, 34, 20, 0.55)';
@@ -162,6 +205,11 @@ export class FieldGuide {
   private dirty = true;
 
   private chart: ReturnType<typeof drawChart> | null = null;
+  /** the fish market's marker and line of the key glowing (the tip: backpack/marketTip.ts), and
+   *  where on the chart's page (canvas px) they are, once it's been painted */
+  private readonly marketRing = glowFrame(40, 40, 20, SIZE[0] / PX[0]);
+  private readonly marketLine = glowFrame((PX[0] - 80) / 3 - 6, 38, 10, SIZE[0] / PX[0]);
+  private marketAt: { ring: [number, number]; line: [number, number] } | null = null;
   private island: ReturnType<typeof drawChart> | null = null;
 
   /** the bay's chart (the page's width, less its margins) */
@@ -278,11 +326,34 @@ export class FieldGuide {
     if (this.open && this.dirty) this.paint();
     if (!this.open) return;
     const t = performance.now() / 1000;
+    this.beckon(t);
     let i = 0;
     for (const { holder } of this.stones.values()) {
       if (holder.visible) holder.rotation.set(-0.5 + 0.12 * Math.sin(t * 0.8 + i), t * 0.5 + i * 1.3, 0.1 * Math.cos(t * 0.6 + i));
       i++;
     }
+  }
+
+  /**
+   * While the tip beckons and the chart's open in front of you: the fish market's marker and its
+   * line of the key glow, beating.
+   */
+  private beckon(t: number): void {
+    const n = this.pages.findIndex((p) => p.kind === 'chart');
+    const on = this.state.marketTip === 'beckoning' && !!this.marketAt && n >= 0 && Math.floor(n / 2) === this.spread;
+    this.marketRing.visible = this.marketLine.visible = on;
+    if (!on) return;
+    const page = n % 2 ? this.right : this.left;
+    const k = beat(t);
+    const at = (m: Mesh, [u, v]: [number, number]): void => {
+      if (m.parent !== page.mesh) page.mesh.add(m);
+      m.position.set((u / PX[0] - 0.5) * SIZE[0], (0.5 - v / PX[1]) * SIZE[1], 0.0006);
+      (m.material as MeshBasicMaterial).opacity = 0.35 + 0.65 * k;
+    };
+    at(this.marketRing, this.marketAt!.ring);
+    at(this.marketLine, this.marketAt!.line);
+    this.marketRing.scale.setScalar(1 + 0.45 * k);
+    this.marketLine.scale.setScalar(1 + 0.04 * k);
   }
 
   /** the places on the chart page you can point at to go to, by button id */
@@ -297,6 +368,14 @@ export class FieldGuide {
   /** Is this panel one of the book's pages? */
   isPage(p: InteractivePanel | null): boolean {
     return p === this.left || p === this.right;
+  }
+
+  /** Open at the chart of the bay (the fish market tip shows you where to go). */
+  toChart(): void {
+    const n = this.pages.findIndex((p) => p.kind === 'chart');
+    if (n < 0 || Math.floor(n / 2) === this.spread) return;
+    this.spread = Math.floor(n / 2);
+    if (this.open) this.paint();
   }
 
   /** Back a spread (-1) or on one (1). */
@@ -849,10 +928,12 @@ export class FieldGuide {
       c.fillText('YOU', a + 14, b + 7);
     }
     // the markers are buttons too (and light up with their line of the key)
+    let ring: [number, number] | null = null;
     for (const m of ch.markers) {
       const id = `go:${m.n - 1}`;
       this.places.set(id, KEY[m.n - 1]);
       buttons.push({ id, x: X + m.x - 18, y: Y + m.y - 18, w: 36, h: 36 });
+      if (m.n - 1 === MARKET) ring = [X + m.x, Y + m.y];
       if (hover === id || hover === `key:${m.n - 1}`) {
         c.strokeStyle = '#ffd24a';
         c.lineWidth = 5;
@@ -874,6 +955,7 @@ export class FieldGuide {
       const id = `key:${i}`;
       this.places.set(id, place);
       buttons.push({ id, x, y: y - 28, w: colW - 6, h: 38 });
+      if (i === MARKET && ring) this.marketAt = { ring, line: [x - 4 + (colW - 6) / 2, y - 28 + 19] };
       if (hover === id || hover === `go:${i}`) {
         c.fillStyle = 'rgba(154, 42, 26, 0.14)';
         roundRect(c, x - 4, y - 28, colW - 6, 38, 10);
