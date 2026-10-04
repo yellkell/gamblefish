@@ -322,7 +322,8 @@ export class BackpackSystem extends createSystem({}) {
     this.tabGlow = glowFrame(TW - 12, TH / 2 - 12, 22, this.tabs.size[0] / TW);
     this.tabGlow.position.set(0, -this.tabs.size[1] / 4, 0.0006);
     this.tabs.mesh.add(this.tabGlow);
-    this.toast = new Toast();
+    // (up by your eyes: the backpack's below them)
+    this.toast = new Toast(true);
     this.toast.panel.mesh.visible = false;
     this.scene.add(this.toast.panel.mesh);
     // going somewhere off the chart shuts the backpack behind you (and going to the fish market
@@ -720,7 +721,7 @@ export class BackpackSystem extends createSystem({}) {
       if (used >= total * TIP_FILL) {
         st.marketTip = 'beckoning';
         st.save();
-        this.toast.show('Backpack half full! Sell your fish at the fish market to empty it. Point at it on the chart to go there', 7, INK.amber);
+        this.toast.show('Backpack half full! Sell at the fish market', 7, INK.amber);
         this.buzz(this.held?.hand ?? 'right', 0.3, 60);
         // the book, open at the chart: now if the backpack's open (and no fish in hand), else the
         // next time it is

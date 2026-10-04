@@ -27,6 +27,12 @@ export class Toast {
   private readonly want = new Vector3();
   private readonly fwd = new Vector3();
 
+  /**
+   * `high`: it keeps up near your eye line however far down you're looking (no lower than a
+   * little under it), so it comes in over an open backpack, not under it.
+   */
+  constructor(private readonly high = false) {}
+
   /** `plain`: just the words (outlined so they read against sky, sea or sand), no panel */
   show(text: string, seconds = 2, colour: string = INK.hot, plain = false): void {
     const c = this.panel.ctx;
@@ -74,9 +80,9 @@ export class Toast {
     this.t += dt;
     head.getWorldPosition(this.want);
     head.getWorldDirection(this.fwd);
-    this.fwd.y = Math.max(-0.35, Math.min(0.2, this.fwd.y));
+    this.fwd.y = Math.max(this.high ? -0.2 : -0.35, Math.min(0.2, this.fwd.y));
     this.fwd.normalize();
-    this.want.addScaledVector(this.fwd, 1.1).y -= 0.18;
+    this.want.addScaledVector(this.fwd, 1.1).y -= this.high ? 0 : 0.18;
     if (this.t < dt * 1.5) this.pos.copy(this.want);
     this.pos.lerp(this.want, 1 - Math.exp(-dt * 4));
     m.position.copy(this.pos);
