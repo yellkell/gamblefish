@@ -716,7 +716,7 @@ export class BackpackSystem extends createSystem({}) {
       if (used >= total * TIP_FILL) {
         st.marketTip = 'beckoning';
         st.save();
-        this.toast.show('Backpack half full! Sell at the fish market', 5, INK.amber);
+        this.toast.show('Backpack half full! Sell at the fish market', 7, INK.amber);
         this.buzz(this.held?.hand ?? 'right', 0.3, 60);
         // the book, open at the chart: now if the backpack's open (and no fish in hand), else the
         // next time it is
