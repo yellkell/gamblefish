@@ -461,7 +461,7 @@ export class CampSystem extends createSystem({}) {
   /* ── the chest's fish ────────────────────────────────────────────────── */
 
   private makeModel(f: ChestFish): FishModel {
-    const { mesh, uniforms } = campDeps.props!.makeFish(f.species);
+    const { mesh, uniforms } = campDeps.props!.makeFish(f.species, f.seed);
     const mat = mesh.material;
     mat.emissive.setHex(TIER_GLOW[f.tier] ?? 0);
     uniforms.uSwim.value = 0.012;

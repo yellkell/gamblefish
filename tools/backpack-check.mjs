@@ -109,6 +109,11 @@ check('taking only the bigger shape (frees space)', res && res.piece.shape.lengt
 const before = fill([m1, m2], C, R).used;
 const after = fill([res.piece], C, R).used;
 check('the backpack has more room after', after < before, `${before} → ${after} cells`);
+{
+  const big = m2.shape.length >= m1.shape.length ? m2 : m1; // (merge's own order: a tie goes to the first)
+  const r = merge({ ...m2, seed: 0.25 }, { ...m1, seed: 0.75 }, [m1, m2], C, R, 98);
+  check("keeping the bigger one's markings", r && r.piece.seed === (big === m1 ? 0.75 : 0.25), r?.piece.seed);
+}
 
 console.log('\nchain merge');
 // two Silvers touching → Gold

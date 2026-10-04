@@ -71,6 +71,7 @@ import {
   habitatAt,
   pickSpecies,
   rollWeight,
+  type CaughtFish,
   type GameState,
   type Habitat,
 } from './tidewater.ts';
@@ -159,6 +160,19 @@ const LINE_N = 128;
 /** the float's radius (Tidewater's buildBobberGeometry), at arm's length where it isn't scaled up */
 const BOBBER_R = 0.028;
 
+/**
+ * A catch's save entry gets the markings of the fish that was on the line (props.makeFish), so
+ * the one in your hand and in the backpack is that fish, not another of its kind. Its id back.
+ */
+function keepMarkings(state: GameState, fish: CaughtFish | null, seed: number | undefined): number | null {
+  if (!fish) return null;
+  if (seed !== undefined) {
+    fish.seed = seed;
+    state.save();
+  }
+  return fish.id;
+}
+
 /** A point `t` along the curve from `a` up through a point `rise` m high over `a`, to `b`. */
 function bezier(a: Vector3, rise: number, b: Vector3, t: number, out: Vector3): Vector3 {
   const u = 1 - t;
@@ -205,7 +219,7 @@ export class FishingSystem extends createSystem({}) {
   /** the fish on the line, from the strike until it's landed (or gone): hooked by the mouth at
    * `bob`, its head along `yaw`; `run` eases 0..1 as it turns away to run, `slip` how long it's
    * been taking line */
-  private hooked: { mesh: Mesh; u: FishUniforms; len: number; yaw: number; run: number; slip: number } | null = null;
+  private hooked: { mesh: Mesh; u: FishUniforms; seed: number; len: number; yaw: number; run: number; slip: number } | null = null;
   private wander = 0;
   private lastDist = 0;
   private splashed = false;
@@ -712,7 +726,7 @@ export class FishingSystem extends createSystem({}) {
     if (st === 'caught') {
       const state = fishingDeps.state!;
       const wasUnlocked = sharkUnlocked(state.log, FISH_IDS);
-      this.caughtId = state.addFish(f.species, f.kg, hourNow())?.id ?? null;
+      this.caughtId = keepMarkings(state, state.addFish(f.species, f.kg, hourNow()), this.hooked?.seed);
       waterExitFish(this.bob, f.kg);
       fishingDeps.fx?.splash(this.bob, 0.7 + Math.min(1, f.kg / 8) * 0.6);
       shot('fish_flop', MIX.fishFlop, { rate: 0.9 + Math.random() * 0.2, delay: 0.35 });
@@ -843,7 +857,7 @@ export class FishingSystem extends createSystem({}) {
    */
   private landShark(kg: number): void {
     const state = fishingDeps.state!;
-    this.caughtId = state.addFish(SHARK_ID, kg, hourNow())?.id ?? null;
+    this.caughtId = keepMarkings(state, state.addFish(SHARK_ID, kg, hourNow()), this.shark.seed);
     this.sharkLanding = true;
     this.shark.stop();
     waterExitFish(this.bob, 400);
@@ -853,7 +867,7 @@ export class FishingSystem extends createSystem({}) {
     catchSting(true);
     bigWinHit();
     window.setTimeout(() => winFanfare(40), 350);
-    this.startLanding(SHARK_ID, kg);
+    this.startLanding(SHARK_ID, kg, this.shark.seed);
     const at = this.rod.tip.clone();
     this.party.win({ at: at.clone().add(new Vector3(0, 0.4, 0)), tier: 3, banner: 'GREAT WHITE!', bannerAt: at.clone().add(new Vector3(0, 1.4, 0)), quiet: true, scale: 2, coins: false });
     this.toast.show('Landed! Too big for your backpack: grab it and carry it to the fish market', 5, INK.amber);
@@ -871,14 +885,14 @@ export class FishingSystem extends createSystem({}) {
 
   /** The fish on the line from the strike: in the water at the end of it, fighting. */
   private hookFish(species: string, kg: number): void {
-    const { mesh, uniforms } = fishingDeps.props!.makeFish(species);
+    const { mesh, uniforms, seed } = fishingDeps.props!.makeFish(species);
     const len = fishLengthCm(species, kg) / 100;
     mesh.scale.setScalar(len);
     mesh.rotation.order = 'YXZ';
     this.scene.add(mesh);
     _v.copy(this.rod.tip).sub(this.bob);
     // struck, it turns away from you
-    this.hooked = { mesh, u: uniforms, len, yaw: Math.atan2(-_v.x, -_v.z), run: 1, slip: 0 };
+    this.hooked = { mesh, u: uniforms, seed, len, yaw: Math.atan2(-_v.x, -_v.z), run: 1, slip: 0 };
   }
 
   private dropHooked(): void {
@@ -957,18 +971,19 @@ export class FishingSystem extends createSystem({}) {
   /** how far up the line from the hook the float is while a fish is on (placeFloat) */
   private floatAlong = 0;
 
-  private startLanding(species: string, kg: number): void {
-    // the fish that's been on the line (a fresh one if there wasn't: the shark's is its own)
+  private startLanding(species: string, kg: number, seed?: number): void {
+    // the fish that's been on the line (a fresh one if there wasn't: the shark's is its own, drawn
+    // again with its markings)
     let H = this.hooked;
     this.hooked = null;
     if (!H) {
-      const { mesh, uniforms } = fishingDeps.props!.makeFish(species);
+      const { mesh, uniforms, seed: drawn } = fishingDeps.props!.makeFish(species, seed);
       // (the great white hangs smaller than life, or it'd stand on the deck over the rod tip)
       const len = Math.min(species === SHARK_ID ? SHARK_HANG : Infinity, (fishingDeps.state!.lastCatch?.cm ?? 30) / 100);
       mesh.scale.setScalar(len);
       mesh.rotation.order = 'YXZ';
       this.scene.add(mesh);
-      H = { mesh, u: uniforms, len, yaw: 0, run: 0, slip: 0 };
+      H = { mesh, u: uniforms, seed: drawn, len, yaw: 0, run: 0, slip: 0 };
     }
     const { mesh, u: uniforms, len } = H;
     // under the pier, it's drawn out past the deck's edge through the water before it comes up

@@ -156,6 +156,8 @@ export interface Piece {
   rot: Rot;
   /** the shape at rot 0 (kept, so a merged fish keeps the bigger of its parents' shapes) */
   shape: Cell[];
+  /** its markings (props.makeFish; a merged fish keeps the bigger one's); none on old saves till adoptOld */
+  seed?: number;
 }
 
 /** The cells a piece covers in the grid (at its x, y, rot). */
@@ -216,7 +218,7 @@ export function merge(a: Piece, b: Piece, others: Piece[], cols: number, rows: n
   const tier = a.tier + 1;
   const bigger = a.shape.length >= b.shape.length ? a : b;
   const rest = others.filter((o) => o.id !== a.id && o.id !== b.id);
-  const base = { id: newId, species: a.species, kg: Math.round((a.kg + b.kg) * 100) / 100, cm: Math.max(a.cm, b.cm), tier, shape: bigger.shape, placed: true };
+  const base = { id: newId, species: a.species, kg: Math.round((a.kg + b.kg) * 100) / 100, cm: Math.max(a.cm, b.cm), tier, shape: bigger.shape, seed: bigger.seed, placed: true };
   const value = Math.round((a.value + b.value) * MERGE_BONUS[tier]);
   const tryAt = (x: number, y: number, rot: Rot): Piece | null => {
     const p = { ...base, value, x, y, rot } as Piece;

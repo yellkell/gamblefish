@@ -154,6 +154,8 @@ export interface CaughtFish {
   value: number;
   caughtAt: number;
   record: boolean;
+  /** its markings (props.makeFish): kept, so it's the same fish in your hand and the backpack as on the line */
+  seed?: number;
 }
 
 export interface LastCatch {
@@ -293,6 +295,8 @@ function readCamps(d: unknown): Record<string, CampSave> {
     if (!e || typeof e !== 'object') continue;
     const fish = Array.isArray(e.fish)
       ? e.fish.filter((f: ChestFish): f is ChestFish => !!f && typeof f.species === 'string' && !!FISH[f.species] && Array.isArray(f.shape) && Number.isFinite(f.x) && Number.isFinite(f.y) && Number.isFinite(f.value))
+          // (chests saved before the fish kept their markings: some now, kept from here on)
+          .map((f) => (Number.isFinite(f.seed) ? f : { ...f, seed: Math.random() }))
       : [];
     out[id] = { day: Math.floor(Number(e.day) || 0), fish, logs: Math.max(0, Math.floor(Number(e.logs) || 0)), found: e.found === true };
   }
