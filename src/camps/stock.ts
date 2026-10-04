@@ -46,6 +46,8 @@ export interface ChestFish {
   x: number;
   y: number;
   rot: Rot;
+  /** its markings (props.makeFish): the same in the chest, in your hand and in the backpack */
+  seed: number;
 }
 
 export interface ChestStock {
@@ -119,13 +121,15 @@ export function stockFor(site: CampSite, day: number): ChestStock {
     if (!spot) continue;
     Object.assign(piece, spot);
     laid.push(piece);
-    fish.push({ species, kg, cm, tier, value: Math.round(fishValue(species, kg) * TIER_VALUE[tier]), shape, x: spot.x, y: spot.y, rot: spot.rot });
+    // (from the chest's own hash, not r: drawing on r would change what the chest holds)
+    const seed = (hash(`${site.id}:${day}:${fish.length}`) >>> 0) / 4294967296;
+    fish.push({ species, kg, cm, tier, value: Math.round(fishValue(species, kg) * TIER_VALUE[tier]), shape, x: spot.x, y: spot.y, rot: spot.rot, seed });
   }
   const [lo, hi] = site.logs;
   return { day, fish, logs: lo + Math.floor(r() * (hi - lo + 1)) };
 }
 
 /** A chest fish as a save entry for the backpack (its id from the save's own counter). */
-export function toCaught(f: ChestFish, id: number, hour: number): CaughtFish & Pick<Piece, 'tier' | 'shape' | 'placed' | 'x' | 'y' | 'rot'> {
-  return { id, species: f.species, kg: f.kg, cm: f.cm, value: f.value, caughtAt: hour, record: false, tier: f.tier, shape: f.shape.map(([c, r]) => [c, r] as Cell), placed: false, x: 0, y: 0, rot: 0 };
+export function toCaught(f: ChestFish, id: number, hour: number): CaughtFish & Pick<Piece, 'tier' | 'shape' | 'seed' | 'placed' | 'x' | 'y' | 'rot'> {
+  return { id, species: f.species, kg: f.kg, cm: f.cm, value: f.value, caughtAt: hour, record: false, tier: f.tier, shape: f.shape.map(([c, r]) => [c, r] as Cell), seed: f.seed, placed: false, x: 0, y: 0, rot: 0 };
 }

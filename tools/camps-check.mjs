@@ -29,7 +29,7 @@ import { decodeTerrain } from '../src/world/data.ts';
 import { Heightfield } from '../src/world/heightfield.ts';
 import { Surfaces } from '../src/world/surfaces.ts';
 import { ALL_CAMPS, BEACH_CAMP, CAMPS, CAMP_PLOT, CHEST_R, campStand, chestSpot } from '../src/camps/sites.ts';
-import { BEACH_FISH, CHEST_GRID, CHEST_MAX_LEN, TIER_VALUE, stockFor } from '../src/camps/stock.ts';
+import { BEACH_FISH, CHEST_GRID, CHEST_MAX_LEN, TIER_VALUE, stockFor, toCaught } from '../src/camps/stock.ts';
 import { bounds, cellsOf, GRID_SIZES } from '../src/backpack/logic.ts';
 import { fishValue } from '../src/fishing/tidewater.ts';
 
@@ -185,6 +185,7 @@ for (const c of ALL_CAMPS) {
   let fits = true;
   let backpackable = true;
   let worth = true;
+  let marked = true;
   const taken = new Set();
   for (let d = day; d < day + 60; d++) {
     const s = stockFor(c, d);
@@ -195,12 +196,14 @@ for (const c of ALL_CAMPS) {
         taken.add(`${d},${x},${y}`);
       }
       if (bounds(f.shape).w > Math.min(CHEST_MAX_LEN, minC)) backpackable = false;
+      if (!(f.seed >= 0 && f.seed < 1) || toCaught(f, 1, 12).seed !== f.seed) marked = false;
       if (f.tier > c.bestTier || (c.beach && f.tier < 1) || f.value !== Math.round(fishValue(f.species, f.kg) * TIER_VALUE[f.tier])) worth = false;
     }
   }
   check(`${c.name}: 60 days of chests, every fish in the grid, none overlapping`, fits);
   check(`${c.name}: every fish would fit the smallest backpack`, backpackable);
   check(`${c.name}: every fish worth its tier, none above the camp's best`, worth);
+  check(`${c.name}: every fish has its markings, and takes them into the backpack`, marked && new Set(a.fish.map((f) => f.seed)).size === a.fish.length);
   console.log(`       (day ${day}: ${a.fish.map((f) => `${f.species}${f.tier ? `*${f.tier}` : ''}`).join(', ')}; ${a.logs} logs)`);
 }
 

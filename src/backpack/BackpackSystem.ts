@@ -361,11 +361,15 @@ export class BackpackSystem extends createSystem({}) {
     return this.state.inventory as unknown as Piece[];
   }
 
-  /** Fish saved before the backpack existed (or left loose) get a shape and a spot. */
+  /** Fish saved before the backpack existed (or left loose) get a shape and a spot; before they kept their markings, some. */
   private adoptOld(): void {
     const [C, R] = this.grid;
     let changed = false;
     for (const p of this.pieces) {
+      if (typeof p.seed !== 'number') {
+        p.seed = Math.random();
+        changed = true;
+      }
       if (!Array.isArray(p.shape)) {
         p.shape = shapeFor(p.species, p.cm, p.kg);
         p.tier = p.tier ?? 0;
@@ -387,7 +391,7 @@ export class BackpackSystem extends createSystem({}) {
   /* ── fish models ─────────────────────────────────────────────────────── */
 
   private makeModel(p: Piece): FishModel {
-    const { mesh, uniforms } = backpackDeps.props!.makeFish(p.species);
+    const { mesh, uniforms } = backpackDeps.props!.makeFish(p.species, p.seed);
     const mat = mesh.material;
     mat.emissive.setHex(TIER_GLOW[p.tier] ?? 0);
     uniforms.uSwim.value = 0.012;
@@ -437,6 +441,7 @@ export class BackpackSystem extends createSystem({}) {
     if (this.held && this.held.piece !== p) this.stowHeld();
     p.shape = shapeFor(p.species, p.cm, p.kg);
     p.tier = p.tier ?? 0;
+    p.seed ??= Math.random();
     const b = bounds(p.shape);
     p.rot = b.w >= b.h ? 0 : 1;
     p.placed = false;

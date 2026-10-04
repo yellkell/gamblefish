@@ -111,7 +111,12 @@ export interface Props {
   bobberGeometry: BufferGeometry;
   makeRod(): { mesh: Mesh; uniforms: RodUniforms };
   makeBobber(): Mesh;
-  makeFish(species: string): { mesh: Mesh<BufferGeometry, MeshStandardMaterial>; uniforms: FishUniforms };
+  /**
+   * A fish of `species`. `seed` sets its own markings (where the spots fall, and for some species
+   * which colouring it has: a French or a blue grunt, a male or a female bluehead, a stoplight or a
+   * queen parrotfish); a new one if not given. Pass the one it came back with to draw that fish again.
+   */
+  makeFish(species: string, seed?: number): { mesh: Mesh<BufferGeometry, MeshStandardMaterial>; uniforms: FishUniforms; seed: number };
   /** the reflections the silvery fish show (set once the renderer can make one) */
   setEnv(env: Texture): void;
 }
@@ -302,7 +307,7 @@ export function loadProps(buf: ArrayBuffer): Props {
       return m;
     },
 
-    makeFish(species: string) {
+    makeFish(species: string, seed = Math.random()) {
       let g = fishGeo.get(species);
       if (!g) {
         g = geometry(arrays, `fish.${species}`, { along: [1, true], data: [4, false], ...(arrays[`fish.${species}.jaw`] ? { jaw: [1, true] as [number, boolean] } : {}) });
@@ -311,7 +316,7 @@ export function loadProps(buf: ArrayBuffer): Props {
       const uniforms: FishUniforms = { uTime: { value: 0 }, uSwim: { value: 0.06 }, uFreq: { value: 2 }, uPhase: { value: 0 }, uJaw: { value: 0 } };
       const fm = fishMeta[species];
       const rows = Array.from({ length: 8 }, (_, i) => new Vector4().fromArray(fm?.rows ?? [], i * 4));
-      const skin = { uRows: { value: rows }, uPattern: { value: fm?.pattern ?? 0 }, uSeed: { value: Math.random() }, uHinge: { value: new Vector2(sharkHinge[0], sharkHinge[1]) } };
+      const skin = { uRows: { value: rows }, uPattern: { value: fm?.pattern ?? 0 }, uSeed: { value: seed }, uHinge: { value: new Vector2(sharkHinge[0], sharkHinge[1]) } };
       const mat = new MeshStandardMaterial({ side: DoubleSide, envMap: env, envMapIntensity: 0.9 });
       mat.onBeforeCompile = (shader) => {
         Object.assign(shader.uniforms, uniforms, skin);
@@ -332,7 +337,7 @@ export function loadProps(buf: ArrayBuffer): Props {
       const mesh = new Mesh(g, mat);
       mesh.name = `fish_${species}`;
       mesh.frustumCulled = false;
-      return { mesh, uniforms };
+      return { mesh, uniforms, seed };
     },
 
     setEnv(tex: Texture) {

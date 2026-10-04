@@ -45,6 +45,8 @@ type Mode = 'off' | 'cruise' | 'breach';
 
 export class SharkShow {
   readonly mesh: Mesh;
+  /** its markings (props.makeFish): the one you land and carry is drawn with them */
+  readonly seed: number;
   private readonly u: FishUniforms;
   /** its length (m) */
   len = 4.2;
@@ -68,8 +70,9 @@ export class SharkShow {
     private readonly sea: (x: number, z: number) => number,
     private readonly fx: () => WaterFx | null,
   ) {
-    const { mesh, uniforms } = props.makeFish(SHARK_ID);
+    const { mesh, uniforms, seed } = props.makeFish(SHARK_ID);
     this.mesh = mesh;
+    this.seed = seed;
     this.u = uniforms;
     mesh.visible = false;
     mesh.rotation.order = 'YXZ';
