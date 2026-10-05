@@ -3,12 +3,12 @@
  * keeps them (ported from ff2's src/net/bank.ts). Every step that matters is
  * somebody else's word, never the client's:
  *
- *   1. The headset asks the bank server (server/bank.mjs) for a CHECKOUT,
+ *   1. The headset asks the bank server (server/bank.mjs) for a PAY CODE,
  *      signed with its Firebase ID token so the server knows which uid is
- *      buying. The server opens a Stripe Checkout and hands back its URL, and
- *      a short link to it that the board can draw as a QR code.
- *   2. You scan the QR with your phone and pay there (or OPEN ON THIS HEADSET).
- *      Stripe takes the card; this code never sees a digit of it.
+ *      buying. The code is six letters, and stands for this uid at the bank.
+ *   2. You type it at yellkell.com/chips on your phone or computer, pick a
+ *      pack and pay there (or OPEN ON THIS HEADSET). Stripe takes the card;
+ *      this code never sees a digit of it.
  *   3. Stripe tells the server it was paid (a signed webhook); the server
  *      writes the coins into the ledger, keyed on the session so nothing is
  *      credited twice.
@@ -41,9 +41,12 @@ export interface CoinPack {
 export type BankMode = 'live' | 'test' | 'dev' | 'closed' | '';
 
 export interface Checkout {
-  id: string;
+  /** the six letters to type on the pay page */
+  code: string;
+  /** the pay page, as the board writes it (yellkell.com/chips) */
+  page: string;
+  /** the pay page with the code filled in: OPEN ON THIS HEADSET */
   url: string;
-  short: string;
   pack: CoinPack;
   at: number;
   state: 'opening' | 'waiting' | 'paid' | 'failed' | 'expired';
@@ -183,12 +186,12 @@ function stopPolling(): void {
   pollTimer = null;
 }
 
-/** Open a checkout for a pack. One at a time. */
+/** Ask for a pay code for a pack (the pay page can change the pack). One at a time. */
 export async function startCheckout(packId: string): Promise<void> {
   const pack = bank.packs.find((p) => p.id === packId);
   if (!pack) return;
   if (bank.checkout && (bank.checkout.state === 'opening' || bank.checkout.state === 'waiting')) return;
-  const co: Checkout = { id: '', url: '', short: '', pack, at: performance.now(), state: 'opening', paid: 0, note: '' };
+  const co: Checkout = { code: '', page: '', url: '', pack, at: performance.now(), state: 'opening', paid: 0, note: '' };
   bank.checkout = co;
   bump();
   const who = await identity();
@@ -199,15 +202,14 @@ export async function startCheckout(packId: string): Promise<void> {
     return;
   }
   try {
-    const reply = await call<{ id: string; url: string; short: string; pack: CoinPack }>('/checkout', {
+    const reply = await call<{ code: string; page: string; url: string; pack: CoinPack }>('/code', {
       method: 'POST',
       headers: { 'content-type': 'application/json', ...who },
-      // so Stripe brings the buyer back to this copy of the game, not another address with its own save
-      body: JSON.stringify({ pack: packId, home: gameHome() }),
+      body: JSON.stringify({ pack: packId }),
     });
-    co.id = reply.id;
+    co.code = reply.code;
+    co.page = reply.page;
     co.url = reply.url;
-    co.short = reply.short || reply.url;
     co.pack = reply.pack ?? pack;
     co.state = 'waiting';
     stopPolling();
@@ -244,7 +246,7 @@ export function cancelCheckout(): void {
   bump();
 }
 
-/** OPEN ON THIS HEADSET: the checkout in a new tab (it shows when you take the headset off, or on a flat screen). */
+/** OPEN ON THIS HEADSET: the pay page in a new tab, code filled in (it shows when you take the headset off, or on a flat screen). */
 export function openCheckout(): boolean {
   const co = bank.checkout;
   if (!co?.url) return false;

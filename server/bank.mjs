@@ -11,6 +11,10 @@
  *   GET  /            the catalogue: mode, currency, packs      (public)
  *   POST /checkout    {pack} → {id, url, short, pack}           (signed)
  *   GET  /go/<code>   the short link → 302 to the checkout      (public)
+ *   POST /code        {pack} → {code, page, url, ttl}: a PAY CODE (signed)
+ *   GET  /code/<CODE> {state, pack, packs, currency, mode}      (public, throttled)
+ *   POST /code/<CODE>/pay  {pack} → {url} of a Stripe Checkout  (public)
+ *   POST /code/<CODE>/done {session} → {state, coins}           (public)
  *   POST /webhook     Stripe's word that a session was paid     (Stripe)
  *   POST /claim       {} → {coins, credit, claimed, email}      (signed)
  *   GET  /whoami      {uid, protected, email (masked)}          (signed)
@@ -36,6 +40,16 @@
  * hands off the account that paid with it instead, moving the email onto it so
  * the next LOG IN goes straight there. No purchases anywhere for that email, on a
  * brand-new uid, and it says so rather than handing the headset an empty account.
+ *
+ * PAY CODES. A headset can't hand anyone a link, and a QR code inside a headset can't
+ * be scanned. So the board asks for a six-letter code and shows it; the buyer types it
+ * at yellkell.com/chips (PAY_PAGE) on a phone or computer, picks a pack there and pays.
+ * The code stands for the headset's uid, which only this server knows: the page never
+ * sees it. The Checkout carries the uid in its metadata like any other, so the webhook
+ * credits it, and the headset, polling /claim while its code is on the board, collects.
+ * Back from Stripe, the page asks /done, which asks Stripe and credits too (once, by
+ * session), so the page can say "paid" even if the webhook is slow or this server
+ * restarted and forgot the code. Codes live in memory for CODE_TTL_MS.
  *
  * THE LEDGER is `bank/{uid}` in Firestore: `credit` (what Stripe has been paid
  * for, ever), `claimed` (what the headset has collected), and one receipt per
@@ -63,6 +77,7 @@
  *   PUBLIC_URL               where paid.html lives (default https://gamblefish.web.app)
  *   RETURN_URLS              other addresses the game is served from, comma-separated: a
  *                            checkout started there returns there (default the GitHub Pages copy)
+ *   PAY_PAGE                 where pay codes are typed (default https://yellkell.com/chips)
  *   BANK_TAX_CODE            the packs' Stripe tax code (default txcd_10201000, downloaded video games)
  *   BANK_DEV=1               force dev mode (never on a public host)
  */
@@ -76,6 +91,7 @@ const CURRENCY = (process.env.BANK_CURRENCY || 'usd').toLowerCase();
 const PUBLIC_URL = (process.env.PUBLIC_URL || 'https://gamblefish.web.app').replace(/\/$/, '');
 /** Every address a checkout may return to (see guards.mjs). */
 const RETURN_URLS = [PUBLIC_URL, ...(process.env.RETURN_URLS ?? 'https://yellkell.github.io/gamblefish').split(',')].map((u) => u.trim()).filter(Boolean);
+const PAY_PAGE = (process.env.PAY_PAGE || 'https://yellkell.com/chips').replace(/\/$/, '');
 const STRIPE_KEY = process.env.STRIPE_SECRET_KEY || '';
 const WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET || '';
 const FORCE_DEV = process.env.BANK_DEV === '1';
@@ -84,6 +100,10 @@ const TAX_CODE = process.env.BANK_TAX_CODE || 'txcd_10201000';
 /** Stripe's minimum session life is 30 minutes; the client calls it expired at 25. */
 const SESSION_TTL_MS = 35 * 60 * 1000;
 const MAX_OPEN_PER_UID = 6;
+/** A pay code lives a little longer than the board waits for it (25 minutes). */
+const CODE_TTL_MS = 40 * 60 * 1000;
+/** No 0/O, 1/I/L: the code is read off a headset and typed on a phone. */
+const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 /** A save is a few KB; this is a generous ceiling, not a target. */
 const MAX_SAVE_BYTES = 200 * 1024;
 
@@ -307,6 +327,10 @@ console.log(
 const sessions = new Map();
 /** short code → session id */
 const codes = new Map();
+/** pay code → { uid, pack, at, session } */
+const payCodes = new Map();
+/** Unknown pay codes, counted like LOG IN codes: a code is somebody's checkout, not to be fished for. */
+const payGuard = new RedeemGuard();
 /** handoff code → { uid, at } */
 const handoffs = new Map();
 const HANDOFF_TTL_MS = 10 * 60 * 1000;
@@ -325,6 +349,8 @@ setInterval(() => {
       sessions.delete(id);
       codes.delete(s.code);
     }
+  const stale = Date.now() - CODE_TTL_MS;
+  for (const [code, c] of payCodes) if (c.at < stale) payCodes.delete(code);
   const dead = Date.now() - HANDOFF_TTL_MS;
   for (const [code, h] of handoffs) if (h.at < dead) handoffs.delete(code);
 }, 60_000).unref();
@@ -521,6 +547,26 @@ function newCode() {
   return code;
 }
 
+/** A fresh pay code for a uid, or null when it has too many on the go. */
+function newPayCode(uid, pack) {
+  let live = 0;
+  for (const c of payCodes.values()) if (c.uid === uid) live++;
+  if (live >= MAX_OPEN_PER_UID) return null;
+  let code = '';
+  do {
+    code = '';
+    for (const b of randomBytes(6)) code += CODE_ALPHABET[b % CODE_ALPHABET.length];
+  } while (payCodes.has(code));
+  payCodes.set(code, { uid, pack: pack.id, at: Date.now(), session: '' });
+  return code;
+}
+
+/** What the buyer typed, as the codes are kept: no spaces or dashes, upper case. */
+const cleanCode = (s) => String(s ?? '').replace(/[\s-]+/g, '').toUpperCase();
+
+/** Whether a pay code's checkout has been paid, as far as this server knows. */
+const codePaid = (c) => !!(c.session && sessions.get(c.session)?.paid);
+
 function openFor(uid) {
   let n = 0;
   for (const s of sessions.values()) if (s.uid === uid && !s.paid) n++;
@@ -626,10 +672,16 @@ function price(minor) {
 
 /* ── the checkout ────────────────────────────────────────────────────── */
 
-async function createCheckout(req, uid, pack, home) {
+/**
+ * Open a Stripe Checkout for `uid`. It returns to paid.html on the game's own address, or for a
+ * pay code (`payCode`), to the pay page with the code and the session on it.
+ */
+async function createCheckout(req, uid, pack, home, payCode = '') {
   const code = newCode();
   const base = selfBase(req);
   const back = returnBase(home, RETURN_URLS, PUBLIC_URL);
+  const success = payCode ? `${PAY_PAGE}?c=${payCode}&session={CHECKOUT_SESSION_ID}` : `${back}/paid.html?s={CHECKOUT_SESSION_ID}`;
+  const cancel = payCode ? `${PAY_PAGE}?c=${payCode}&cancelled=1` : `${back}/paid.html?cancel=1`;
   let id;
   let url;
   if (stripe) {
@@ -638,7 +690,7 @@ async function createCheckout(req, uid, pack, home) {
       client_reference_id: uid,
       // `app` tells this bank's webhook the session is ours: the Stripe account is shared with
       // ff2's bank, and Stripe sends every account's checkout events to every endpoint
-      metadata: { app: 'gamblefish', uid, pack: pack.id, coins: String(pack.coins) },
+      metadata: { app: 'gamblefish', uid, pack: pack.id, coins: String(pack.coins), ...(payCode ? { code: payCode } : {}) },
       line_items: [
         {
           quantity: 1,
@@ -656,8 +708,8 @@ async function createCheckout(req, uid, pack, home) {
           },
         },
       ],
-      success_url: `${back}/paid.html?s={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${back}/paid.html?cancel=1`,
+      success_url: success,
+      cancel_url: cancel,
       expires_at: Math.floor(Date.now() / 1000) + 31 * 60,
     });
     id = session.id;
@@ -666,7 +718,8 @@ async function createCheckout(req, uid, pack, home) {
     id = `dev_${code}`;
     url = `${base}/dev-pay?s=${id}`;
   }
-  sessions.set(id, { uid, pack: pack.id, coins: pack.coins, url, code, at: Date.now(), paid: false });
+  // (`back`: the dev PAY button goes where Stripe would, so the pay page can be tried on a laptop)
+  sessions.set(id, { uid, pack: pack.id, coins: pack.coins, url, code, at: Date.now(), paid: false, back: payCode ? success.replace('{CHECKOUT_SESSION_ID}', id) : '' });
   codes.set(code, id);
   return { id, url, short: `${base}/go/${code}`, pack };
 }
@@ -693,20 +746,29 @@ async function handleWebhook(req, res) {
   if (event.type === 'checkout.session.completed' || event.type === 'checkout.session.async_payment_succeeded') {
     const s = event.data.object;
     if (s.metadata?.app !== 'gamblefish') return json(res, 200, { received: true, ignored: 'not a gamblefish checkout' });
-    if (s.payment_status === 'paid') {
-      const uid = String(s.metadata?.uid ?? s.client_reference_id ?? '');
-      const coins = Number(s.metadata?.coins ?? 0);
-      if (UID_OK.test(uid) && Number.isInteger(coins) && coins > 0 && coins <= 100000) {
-        const email = String(s.customer_details?.email ?? '').trim().toLowerCase();
-        await settle(s.id, uid, coins, { pack: String(s.metadata?.pack ?? ''), amount: s.amount_total ?? 0, currency: s.currency ?? CURRENCY, event: event.id, email: EMAIL_OK.test(email) ? email : '' });
-        // and a receipt, whatever the account's email settings: its number is what LOG IN BY
-        // RECEIPT asks for (Stripe numbers a payment only once it has emailed a receipt for it)
-        if (EMAIL_OK.test(email) && typeof s.payment_intent === 'string')
-          await stripe.paymentIntents.update(s.payment_intent, { receipt_email: email }).catch((err) => console.error(`[bank] no receipt for ${s.id}: ${err?.message ?? err}`));
-      } else console.error(`[bank] paid session ${s.id} carries no usable uid/coins — not credited`);
-    }
+    await creditSession(s, event.id);
   }
   return json(res, 200, { received: true });
+}
+
+/**
+ * Credit a paid Checkout Session of ours to the uid it carries, once (the ledger keys on the
+ * session). The webhook's job, and /code/<CODE>/done's when the buyer is back first.
+ */
+async function creditSession(s, eventId) {
+  if (s.metadata?.app !== 'gamblefish' || s.payment_status !== 'paid') return;
+  const uid = String(s.metadata?.uid ?? s.client_reference_id ?? '');
+  const coins = Number(s.metadata?.coins ?? 0);
+  if (!UID_OK.test(uid) || !Number.isInteger(coins) || coins <= 0 || coins > 100000) {
+    console.error(`[bank] paid session ${s.id} carries no usable uid/coins — not credited`);
+    return;
+  }
+  const email = String(s.customer_details?.email ?? '').trim().toLowerCase();
+  const out = await settle(s.id, uid, coins, { pack: String(s.metadata?.pack ?? ''), amount: s.amount_total ?? 0, currency: s.currency ?? CURRENCY, event: eventId, email: EMAIL_OK.test(email) ? email : '' });
+  // and a receipt, whatever the account's email settings: its number is what LOG IN BY
+  // RECEIPT asks for (Stripe numbers a payment only once it has emailed a receipt for it)
+  if (!out.duplicate && EMAIL_OK.test(email) && typeof s.payment_intent === 'string')
+    await stripe.paymentIntents.update(s.payment_intent, { receipt_email: email }).catch((err) => console.error(`[bank] no receipt for ${s.id}: ${err?.message ?? err}`));
 }
 
 function devPayPage(req, s, id, paid) {
@@ -720,6 +782,51 @@ function devPayPage(req, s, id, paid) {
 main{padding:32px}h1{color:#ffb000;letter-spacing:.08em}.big{font-size:3rem;font-weight:800;margin:.2em 0}
 button{font:inherit;font-weight:800;letter-spacing:.1em;padding:18px 48px;border:0;border-radius:12px;background:#ffb000;color:#221302;font-size:1.2rem}
 em{color:#3fd6c6;font-style:normal}</style><main>${body}</main>`;
+}
+
+/* ── the pay page's doors ────────────────────────────────────────────── */
+
+/** /code/<CODE> (what the code is for), /pay (open its checkout), /done (back from Stripe: paid?). */
+async function payCodeDoor(req, res, code, step) {
+  const c = payCodes.get(code);
+  const live = !!c && c.at > Date.now() - CODE_TTL_MS;
+  try {
+    if (req.method === 'GET' && !step) {
+      const who = callerOf(req);
+      const refused = payGuard.refuse(who);
+      if (refused) return json(res, 429, { error: refused });
+      if (!live) payGuard.miss(who);
+      return json(res, 200, { state: !live ? 'unknown' : codePaid(c) ? 'paid' : 'waiting', pack: live ? c.pack : '', currency: CURRENCY, mode: MODE, packs: PACKS });
+    }
+    if (req.method === 'POST' && step === 'pay') {
+      if (!live) return json(res, 404, { error: "That code isn't right, or it has run out. Check the board at the Island Bank." });
+      if (codePaid(c)) return json(res, 200, { state: 'paid' });
+      const body = await readBody(req);
+      const pack = PACKS.find((p) => p.id === body?.pack);
+      if (!pack) return json(res, 400, { error: 'no such pack' });
+      const co = await createCheckout(req, c.uid, pack, '', code);
+      c.session = co.id;
+      c.pack = pack.id;
+      console.log(`[bank] code ${code} → checkout ${co.id} (${pack.id})`);
+      return json(res, 200, { url: co.url });
+    }
+    if (req.method === 'POST' && step === 'done') {
+      if (live && codePaid(c)) return json(res, 200, { state: 'paid', coins: sessions.get(c.session)?.coins ?? 0 });
+      const body = await readBody(req);
+      const id = String(body?.session ?? '');
+      if (!stripe || !/^cs_[A-Za-z0-9_]{8,200}$/.test(id)) return json(res, 200, { state: live ? 'waiting' : 'unknown' });
+      // the session the page came back with, asked of Stripe: ours, for this code, and paid?
+      const s = await stripe.checkout.sessions.retrieve(id);
+      if (s.metadata?.app !== 'gamblefish' || s.metadata?.code !== code) return json(res, 200, { state: 'unknown' });
+      if (s.payment_status !== 'paid') return json(res, 200, { state: 'waiting' });
+      await creditSession(s, 'return');
+      return json(res, 200, { state: 'paid', coins: Number(s.metadata?.coins ?? 0) });
+    }
+    json(res, 405, { error: 'not like that' });
+  } catch (err) {
+    console.error(`[bank] ${req.method} ${req.url} failed: ${err?.message ?? err}`);
+    if (!res.headersSent) json(res, 502, { error: "Couldn't reach the payment service. Try again in a minute." });
+  }
 }
 
 /* ── the router ──────────────────────────────────────────────────────── */
@@ -765,6 +872,21 @@ export function handleHttp(req, res) {
       if (openFor(uid) >= MAX_OPEN_PER_UID) return json(res, 429, { error: 'too many open checkouts: pay or wait' });
       json(res, 200, await createCheckout(req, uid, pack, body?.home));
     });
+
+  if (req.method === 'POST' && path === '/code')
+    return signed(req, res, async (uid) => {
+      const body = await readBody(req);
+      const pack = PACKS.find((p) => p.id === body?.pack) ?? PACKS.find((p) => p.best) ?? PACKS[0];
+      const code = newPayCode(uid, pack);
+      if (!code) return json(res, 429, { error: 'too many codes on the go: pay or wait' });
+      json(res, 200, { code, page: PAY_PAGE.replace(/^https?:\/\//, ''), url: `${PAY_PAGE}?c=${code}`, ttl: CODE_TTL_MS, pack });
+    });
+
+  const payDoor = path.match(/^\/code\/([A-Za-z0-9-]{1,16})(?:\/(pay|done))?$/);
+  if (payDoor) {
+    void payCodeDoor(req, res, cleanCode(payDoor[1]), payDoor[2] ?? '');
+    return;
+  }
 
   if (req.method === 'POST' && path === '/claim') return signed(req, res, async (uid) => json(res, 200, await ledger.claim(uid)));
 
@@ -897,6 +1019,11 @@ export function handleHttp(req, res) {
         const out = await settle(id, s.uid, s.coins, { pack: s.pack, amount: PACKS.find((p) => p.id === s.pack)?.minor ?? 0, currency: CURRENCY, event: 'dev', email: String(body?.email ?? ''), receiptNumber });
         if (!out.duplicate) await ledger.noteReceipt(receiptKey(receiptNumber), s.uid, id);
         if (String(req.headers.accept ?? '').includes('application/json') || String(req.headers['content-type'] ?? '').includes('json')) return json(res, 200, { paid: true, duplicate: !!out.duplicate, credit: out.credit, receiptNumber });
+        if (s.back) {
+          res.writeHead(303, { location: s.back });
+          res.end();
+          return;
+        }
         html(res, 200, devPayPage(req, s, id, true));
       })();
       return;

@@ -12,11 +12,12 @@
  *   PACKS     SUPPORT THE GAME, four packs (coins big, price small, BEST VALUE flagged), the
  *             REDEEM for coins bought on another headset, and the terms in one line.
  *   CONFIRM   the 18+ and no-cash-value agreement, every purchase.
- *   CHECKOUT  a QR code: screenshot it, bring the screenshot up on your
- *             phone and tap the code there to pay (or OPEN ON THIS HEADSET).
- *             The coins land by themselves within seconds while this face
- *             is up; step 4 says to refresh the page once paid, since the
- *             boot claim is the one that always collects them.
+ *   CHECKOUT  a PAY CODE: six letters on ivory tiles, to type at
+ *             yellkell.com/chips on a phone or computer, where you pick a
+ *             pack and pay (or OPEN ON THIS HEADSET, code filled in). The
+ *             coins land by themselves within seconds while this face is up;
+ *             the small print says a refresh collects them if not, since the
+ *             boot claim is the one that always does.
  *   PAID      the coins that landed, and the word to keep the receipt Stripe emails:
  *             its number redeems them. Coins that landed at boot (after the refresh)
  *             bring this face up on the next visit.
@@ -40,7 +41,6 @@ import { Keyboard } from '../ui/keyboard.ts';
 import { INK, roundRect } from '../ui/panel.ts';
 import { InteractivePanel, register } from '../ui/pointer.ts';
 import { Lettering, LOOKS, mount, type InkName } from '../ui/boards.ts';
-import { drawQr } from '../ui/qr.ts';
 import type { Interior } from './interiors.ts';
 
 type Face = 'packs' | 'confirm' | 'checkout' | 'paid' | 'login';
@@ -318,23 +318,19 @@ export class IslandBank {
           text(co.note, W / 2, 420, 32, INK.dim, 'center');
           btn('back', 'BACK', W / 2 - 200, 520, 400, 100);
         } else {
-          // the QR on white, big enough to scan from a phone held up to the lens
-          roundRect(c, 60, 130, 560, 560, 24);
-          c.fillStyle = '#f4f2ee';
-          c.fill();
-          drawQr(c, co.short, 90, 160, 500);
-          text('Pay on your phone', 680, 200, 54, INK.hot, 'left', 700);
-          text(`${priceLabel(co.pack.minor)} support · ${co.pack.coins.toLocaleString('en-US')} coins back`, 680, 252, 36, INK.dim, 'left', 600, W - 724);
-          text('1.  Take a screenshot of this code.', 680, 306, 32, INK.hot);
-          text('2.  Bring the screenshot up on your phone.', 680, 346, 32, INK.hot);
-          text('3.  Tap the QR code there to pay.', 680, 386, 32, INK.hot);
-          text('4.  Once paid, refresh the Fish & Chips', 680, 426, 32, BRASS, 'left', 700, W - 724);
-          text('     browser page and enjoy your coins!', 680, 462, 32, BRASS, 'left', 700, W - 724);
+          // the pay code: what you type on your phone or computer, big enough to read at arm's length
+          text('Pay on your phone or computer', 44, 186, 54, INK.hot, 'left', 700);
+          text(`${priceLabel(co.pack.minor)} support · ${co.pack.coins.toLocaleString('en-US')} coins back (you can pick another pack there)`, 44, 236, 30, INK.dim, 'left', 600, W - 88);
+          text('1.  Go to', 44, 316, 40, INK.hot);
+          text(co.page, 228, 318, 56, '#ffd24a', 'left', 700);
+          text('2.  Type this code:', 44, 392, 40, INK.hot);
+          codeTiles(c, co.code, W / 2, 420);
+          text('3.  Pay there. The coins land here by themselves.', 44, 666, 36, INK.hot);
           const dots = '.'.repeat(1 + (Math.floor(performance.now() / 500) % 3));
-          text(`waiting for the payment${dots}`, 680, 516, 38, '#3fd6c6', 'left', 700);
-          btn('open', 'OPEN ON THIS HEADSET', 680, 548, 560, 90, 'rgba(255,255,255,0.3)', true, 34);
-          btn('back', 'CANCEL', 680, 652, 560, 90, 'rgba(255,255,255,0.18)', true, 34);
-          text(co.short.replace(/^https?:\/\//, ''), 340, 740, 26, INK.dim, 'center');
+          text(`waiting for the payment${dots}`, W - 44, 666, 36, '#3fd6c6', 'right', 700);
+          btn('open', 'OPEN ON THIS HEADSET', 44, 712, 860, 96, 'rgba(255,255,255,0.3)', true, 36);
+          btn('back', 'CANCEL', 936, 712, 520, 96, 'rgba(255,255,255,0.18)', true, 36);
+          text('Paid and no coins after a minute? Refresh the Fish & Chips page: they land as it starts.', 44, 864, 24, INK.dim, 'left', 500, W - 88);
         }
         break;
       }
@@ -368,6 +364,51 @@ export class IslandBank {
       }
     }
     L.end();
+  }
+}
+
+/**
+ * A pay code on six ivory tiles edged in brass, like a teller's number plates: one letter each,
+ * in big dark type, so nobody mistakes a letter typing it on a phone. Centred on `cx`, top at `y`.
+ */
+function codeTiles(c: CanvasRenderingContext2D, code: string, cx: number, y: number): void {
+  const n = code.length;
+  const tw = 150;
+  const th = 190;
+  const gap = n > 3 ? 22 : 0;
+  // a wider gap down the middle: two groups of three read faster than six in a row
+  const mid = n === 6 ? 30 : 0;
+  const total = n * tw + (n - 1) * gap + mid;
+  let x = cx - total / 2;
+  for (let i = 0; i < n; i++) {
+    if (n === 6 && i === 3) x += mid;
+    c.save();
+    // a soft drop shadow under each plate
+    c.shadowColor = 'rgba(0, 0, 0, 0.55)';
+    c.shadowBlur = 18;
+    c.shadowOffsetY = 8;
+    roundRect(c, x, y, tw, th, 22);
+    const face = c.createLinearGradient(0, y, 0, y + th);
+    face.addColorStop(0, '#fbf5e6');
+    face.addColorStop(1, '#e6d8b8');
+    c.fillStyle = face;
+    c.fill();
+    c.restore();
+    // the brass edge, bright on top
+    roundRect(c, x + 3, y + 3, tw - 6, th - 6, 19);
+    const edge = c.createLinearGradient(0, y, 0, y + th);
+    edge.addColorStop(0, '#ffe7a6');
+    edge.addColorStop(0.5, BRASS);
+    edge.addColorStop(1, '#8a6a2c');
+    c.lineWidth = 6;
+    c.strokeStyle = edge;
+    c.stroke();
+    c.font = font(700, 150);
+    c.textAlign = 'center';
+    c.textBaseline = 'middle';
+    c.fillStyle = '#1a1206';
+    c.fillText(code[i], x + tw / 2, y + th / 2 + 8);
+    x += tw + gap;
   }
 }
 
