@@ -29,7 +29,9 @@ export const REGION = {
   shrub: [0.75, 0.75, 1, 1] as [number, number, number, number],
   frond: [0.5, 0.625, 1, 0.75] as [number, number, number, number],
   fern: [0.5, 0.5, 0.75, 0.625] as [number, number, number, number],
-  grass: [0, 0.25, 0.5, 0.5] as [number, number, number, number],
+  // the top stops a few pixels short of the tree tiles above (the blades never reach that high), so
+  // the far mips can't blend a trunk into the tips
+  grass: [0, 0.25, 0.5, 0.5 - 8 / 1024] as [number, number, number, number],
 };
 
 /** Metres the tree sprite spans (width, height) at scale 1. */
@@ -68,6 +70,12 @@ function paintTree(c: CanvasRenderingContext2D, ox: number, oy: number, size: nu
   const m = size / TREE_SPRITE.w; // px per metre
   const px = (x: number): number => ox + size / 2 + x * m;
   const py = (y: number): number => oy + size - y * m;
+  // kept to its own tile: the trunk's round foot hung over the bottom edge into the grass strip
+  // below, and every tuft wore a dark stub floating over its tips
+  c.save();
+  c.beginPath();
+  c.rect(ox, oy, size, size);
+  c.clip();
   // trunk and fork
   c.strokeStyle = '#5b4a3a';
   c.lineCap = 'round';
@@ -105,6 +113,7 @@ function paintTree(c: CanvasRenderingContext2D, ox: number, oy: number, size: nu
       leaf(c, px(x), py(y), (0.55 + rnd() * 0.35) * m, (0.18 + rnd() * 0.1) * m, rnd() * Math.PI * 2, hsl(hue + rnd() * 18 - 9, 42 + rnd() * 18, l), hsl(hue, 30, l - 8));
     }
   }
+  c.restore();
 }
 
 function paintCluster(c: CanvasRenderingContext2D, ox: number, oy: number, size: number, n: number, len: number, hue: number, light: number): void {
