@@ -4,8 +4,9 @@
  * an <audio> element, the songs decoded lo-fi and levelled.
  *
  *  - 4 LEAF CLOVERS at the top, on the balcony while you read the warning.
- *  - SPEED on the way down, from 1:53 (the drop after the break). The music stops for every
- *    3-2-1, the balcony's included, and picks up where it left off at the launch.
+ *  - BRAIN EATER (FireFight's boss theme) on the way down: in from its top when you're centred,
+ *    DOWN's 3-2-1 on its beats, and the launch off the balcony right on its drop. From there it
+ *    just plays, through every landing, round from its second break.
  *  - DOWN's voiced 3-2-1 on every bay, BEGIN at the top, NICE and PERFECT on the landings, WELL
  *    DONE at the bottom, and the crash if a gate takes you off.
  *  - The coin ding: a bright tone that climbs a semitone with each coin in a streak; a gem gets a
@@ -36,9 +37,17 @@ export type SkelterSfx = keyof typeof SFX;
 
 /** the balcony's song, and the descent's */
 const LOBBY = 'four-leaf-clovers.mp3';
-/** SPEED from 1:53 on: the file's cut there, on the drop's downbeat (bar 82 at 174 BPM), a hair
- * ahead of its attack. The first launch starts it there, and at the end it goes round from there. */
-const DESCENT = 'speed.mp3';
+/** BRAIN EATER: 150 BPM on the dot, from its first sample; the file's cut just past bar 52 */
+const DESCENT = 'brain-eater.mp3';
+const BEAT = 60 / 150;
+/** its drop, 4 bars in: where the first launch lands */
+const DROP = 16 * BEAT;
+/** the balcony's 3-2-1, a line every two beats into the drop */
+export const COUNT_STEP = 2 * BEAT;
+/** round from the break before the second drop (bar 20) at the end of the third (bar 52), short
+ * of the outro: whole bars, so the beat never stumbles */
+const LOOP_FROM = 80 * BEAT;
+const LOOP_TO = 208 * BEAT;
 
 function dB(x: number): number {
   return Math.pow(10, x / 20);
@@ -62,8 +71,6 @@ class SkelterAudio {
   private music: GainNode | null = null;
   private lobby: Playing | null = null;
   private run: Playing | null = null;
-  /** where SPEED picks up at the next launch */
-  private resumeAt = 0;
   private live = new Set<AudioBufferSourceNode>();
 
   private bus(): { ctx: AudioContext; out: GainNode; music: GainNode } | null {
@@ -92,7 +99,6 @@ class SkelterAudio {
           .catch(() => {}); // a missing line is never fatal
     this.song(LOBBY);
     this.song(DESCENT);
-    this.resumeAt = 0;
   }
 
   private song(name: string): Promise<Loaded | null> {
@@ -108,8 +114,8 @@ class SkelterAudio {
     b.music.gain.setTargetAtTime(musicView.muted ? 0 : 1, b.ctx.currentTime, 0.12);
   }
 
-  /** Play a song, looping, from `from` seconds in (its head by default) and round from `loopFrom`. */
-  private start(name: string, from?: number, loopFrom?: number): Promise<Playing | null> {
+  /** Play a song, looping, from `from` seconds in (its head by default), round from `loopFrom` at `loopTo`. */
+  private start(name: string, from?: number, loopFrom?: number, loopTo?: number): Promise<Playing | null> {
     return this.song(name).then((l) => {
       const b = this.bus();
       if (!l || !b) return null;
@@ -118,21 +124,15 @@ class SkelterAudio {
       src.buffer = l.buffer;
       src.loop = true;
       src.loopStart = Math.min(Math.max(loopFrom ?? l.head, l.head), l.buffer.duration);
-      src.loopEnd = l.buffer.duration;
+      src.loopEnd = Math.min(loopTo ?? l.buffer.duration, l.buffer.duration);
       const gain = b.ctx.createGain();
       gain.gain.value = l.level * SONG;
       src.connect(gain).connect(b.music);
-      src.start(0, at);
-      return { src, gain, from: at, t0: b.ctx.currentTime };
+      // a hair ahead, so the clock knows exactly when it started
+      const t0 = b.ctx.currentTime + 0.05;
+      src.start(t0, at);
+      return { src, gain, from: at, t0 };
     });
-  }
-
-  /** how far into its song a player is now */
-  private where(p: Playing): number {
-    const ctx = audioContext();
-    const { loopStart, loopEnd } = p.src;
-    const t = p.from + (ctx ? ctx.currentTime - p.t0 : 0);
-    return t < loopEnd ? t : loopStart + ((t - loopStart) % Math.max(0.001, loopEnd - loopStart));
   }
 
   private fade(p: Playing | null, seconds = 0.6): void {
@@ -163,25 +163,32 @@ class SkelterAudio {
     if (l?.src) this.fade(l, seconds);
   }
 
-  /** The 3-2-1: the music stops (the voice lines carry on), SPEED marking its place. */
-  hush(seconds = 0.12): void {
-    this.stopLobby(seconds);
-    const r = this.run;
-    this.run = null;
-    if (!r?.src) return;
-    this.resumeAt = this.where(r);
-    this.fade(r, seconds);
-  }
-
-  /** A launch: SPEED, from 1:53 on the first, from where it stopped after that. */
-  go(): void {
-    this.hush();
+  /**
+   * I'M CENTRED: 4 Leaf Clovers out, BRAIN EATER in from its top, DOWN's 3-2-1 set on its beats.
+   * Resolves to when (on the context's clock) its drop lands, the launch, or null if it can't play.
+   */
+  drop(): Promise<number | null> {
+    this.stopLobby(0.3);
     const marker = { src: null } as unknown as Playing;
     this.run = marker;
-    void this.start(DESCENT, this.resumeAt).then((p) => {
-      if (this.run !== marker) return this.fade(p, 0.05);
+    return this.start(DESCENT, 0, LOOP_FROM, LOOP_TO).then((p) => {
+      if (this.run !== marker) {
+        this.fade(p, 0.05);
+        return null;
+      }
       this.run = p;
+      if (!p) return null;
+      const at = p.t0 + DROP - p.from;
+      this.play('three', 0.9, at - 3 * COUNT_STEP);
+      this.play('two', 0.9, at - 2 * COUNT_STEP);
+      this.play('one', 0.9, at - COUNT_STEP);
+      return at;
     });
+  }
+
+  /** the context's clock, that drop() times the launch on */
+  now(): number {
+    return audioContext()?.currentTime ?? 0;
   }
 
   /** The run's song and any line still playing, gone. */
@@ -203,7 +210,8 @@ class SkelterAudio {
     this.stopRun(seconds);
   }
 
-  play(name: SkelterSfx, volume = 1): void {
+  /** A voice line, now or at `at` on the context's clock. */
+  play(name: SkelterSfx, volume = 1, at = 0): void {
     const b = this.bus();
     const buffer = this.sfx.get(name);
     if (!b || !buffer || b.ctx.state !== 'running') return;
@@ -214,7 +222,7 @@ class SkelterAudio {
     src.connect(g).connect(b.out);
     this.live.add(src);
     src.onended = () => this.live.delete(src);
-    src.start();
+    src.start(at);
   }
 
   /** The coin ding: climbs with the streak, Subway Surfers style; a gem's is two notes. */
