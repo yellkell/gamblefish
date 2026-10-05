@@ -7,10 +7,12 @@
  * over them, and a paytable in the lit topper ringed with bulbs.
  *
  * PLAYING IT, every step has weight:
- *  - The LEVER is heavy: it trails your hand a little, ratchets notch by notch (a click and a
- *    tick in the controller each time), hits its catch with a clunk you feel, and twangs back
- *    when you let go. Or press the big SPIN button on the deck: poke it with your controller
- *    (it goes down under your hand) or point and pull the trigger.
+ *  - The LEVER is heavy: its ball glows when your hand is close enough to take it (grip or
+ *    trigger), it trails your hand a little, ratchets notch by notch (a click and a tick in the
+ *    controller each time), hits its catch with a clunk you feel, and twangs back when you let
+ *    go. Haul it toward you or straight down: either counts. Or point at it and pull the
+ *    trigger, and it hauls itself. Or press the big SPIN button on the deck: poke it with your
+ *    controller (it goes down under your hand) or point and pull the trigger.
  *  - The REELS kick back before they launch, blur at speed, then slow, ticking past their last
  *    few symbols, and thunk onto their detents one by one. The cabinet jolts at each.
  *  - A TEASE: when the first two match a marlin or a chest, the last reel crawls in, the bulbs
@@ -85,7 +87,7 @@ const WIN_H = 0.19;
 const BAY = { y0: 1.1, y1: 1.56 }; // the recess the reels sit in
 const DECK = { z0: 0.4, y0: 0.93, z1: FRONT, y1: 1.06 }; // the sloped button deck, front lip to back
 const TOPPER_Y = 1.84;
-const LEVER = { x: W / 2 + 0.05, y: 1.3, z: 0.02, len: 0.36, catch: 1.0, max: 1.22 };
+const LEVER = { x: W / 2 + 0.05, y: 1.3, z: 0.02, len: 0.36, catch: 1.0, max: 1.22, reach: 0.17 };
 const TRAY = { z: 0.39, hx: 0.17, hz: 0.12, y: 0.567 }; // the coin tray's floor, out in front of the stand
 const SPEED = 15;
 
@@ -144,6 +146,8 @@ export class SlotMachine {
   private readonly reels: Reel[] = [];
   private readonly lever = new Group();
   private readonly knob: Mesh;
+  private readonly knobMat: MeshStandardMaterial;
+  private readonly leverPanel: InteractivePanel;
   private readonly bulbs: InstancedMesh;
   private readonly bulbCount: number;
   private readonly coins: InstancedMesh;
@@ -181,7 +185,15 @@ export class SlotMachine {
   private leverAngle = 0;
   private leverVel = 0;
   private grabbedBy: Hand | null = null;
-  private gripWas: Record<Hand, boolean> = { left: false, right: false };
+  private heldWas: Record<Hand, boolean> = { left: false, right: false };
+  private nearWas: Record<Hand, boolean> = { left: false, right: false };
+  /** the lever's angle, and the hand's, when it was taken: the lever follows the hand's travel from there */
+  private grabBase = 0;
+  private grabFrom: [number, number] = [0, 0];
+  private readonly grabOff = new Vector3();
+  /** pointed at and triggered: the lever hauling itself (seconds in, or -1) */
+  private autoT = -1;
+  private autoHand: Hand = 'right';
   private lastNotch = 0;
   private fired = false;
 
@@ -348,11 +360,22 @@ export class SlotMachine {
     this.lever.position.set(LEVER.x, LEVER.y, LEVER.z);
     const arm = new Mesh(new CylinderGeometry(0.01, 0.014, LEVER.len, 14), chrome);
     arm.position.y = LEVER.len / 2;
-    this.knob = new Mesh(new SphereGeometry(0.038, 24, 18), look.gloss(r, 0xd8141e));
+    this.knobMat = look.gloss(r, 0xd8141e);
+    this.knobMat.emissive = new Color(0xff2a1a);
+    this.knobMat.emissiveIntensity = 0;
+    this.knob = new Mesh(new SphereGeometry(0.038, 24, 18), this.knobMat);
     this.knob.position.y = LEVER.len;
     this.lever.add(arm, this.knob);
     this.lever.rotation.x = -0.12;
     this.body.add(this.lever);
+    // a hit-target round the arm and ball: point at the lever and pull the trigger to haul it
+    this.leverPanel = new InteractivePanel([100, 400], [0.16, 0.56]);
+    (this.leverPanel.mesh.material as MeshBasicMaterial).opacity = 0;
+    this.leverPanel.mesh.position.set(LEVER.x, LEVER.y + 0.2, LEVER.z + 0.04);
+    this.leverPanel.buttons = [{ id: 'lever', x: 0, y: 0, w: 100, h: 400 }];
+    this.leverPanel.onClick = (_id, hand) => this.haul(hand);
+    this.body.add(this.leverPanel.mesh);
+    register(this.leverPanel);
 
     // big-win sparks out of the topper
     this.sparks = new InstancedMesh(new PlaneGeometry(0.024, 0.024), new MeshBasicMaterial({ map: glowTexture(), color: 0xffe080, transparent: true, blending: AdditiveBlending, depthWrite: false, toneMapped: false }), 120);
@@ -447,30 +470,77 @@ export class SlotMachine {
     pulseHand(this.world.renderer.xr.getSession() ?? undefined, h, k, ms);
   }
 
-  /** The lever: grab the knob with grip and haul it down past the catch. */
+  /** Pointed at and triggered: the lever hauls itself down to the catch, with every notch and the clunk. */
+  private haul(hand: Hand): void {
+    if (this.grabbedBy || this.autoT >= 0) return;
+    this.autoT = 0;
+    this.autoHand = hand;
+    this.fired = false;
+  }
+
+  /**
+   * Where the ball would be in a hand, as angles round the pivot: hauled toward you (its angle
+   * round it) and pulled straight down (how far it has dropped). The hand's offset off the ball
+   * when it took it is carried along.
+   */
+  private handAngles(h: Hand): [number, number] {
+    const hp = this.group.worldToLocal(this.world.player.gripSpaces[h].getWorldPosition(_h)).add(this.grabOff);
+    const dy = hp.y - LEVER.y;
+    return [Math.atan2(hp.z - LEVER.z, dy), Math.acos(Math.max(-1, Math.min(1, dy / LEVER.len)))];
+  }
+
+  /** The lever: take the ball with grip or trigger and haul it down past the catch. */
   private updateLever(dt: number): void {
     const input = this.world.input;
     const player = this.world.player;
     const knobW = this.knob.getWorldPosition(_v);
+    let reachable = false;
     for (const h of ['left', 'right'] as const) {
-      const grip = (input.xr.gamepads[h]?.getButtonValue(InputComponent.Squeeze) ?? 0) > 0.5;
-      const pressed = grip && !this.gripWas[h];
-      this.gripWas[h] = grip;
-      const hp = player.gripSpaces[h].getWorldPosition(_h);
-      if (pressed && !this.grabbedBy && hp.distanceTo(knobW) < 0.13) {
+      const pad = input.xr.gamepads[h];
+      const held = (pad?.getButtonValue(InputComponent.Squeeze) ?? 0) > 0.4 || (pad?.getButtonValue(InputComponent.Trigger) ?? 0) > 0.6;
+      const pressed = held && !this.heldWas[h];
+      this.heldWas[h] = held;
+      // the hand's reach: its grip or the controller's nose, whichever is nearer the ball
+      const d = Math.min(player.gripSpaces[h].getWorldPosition(_h).distanceTo(knobW), player.raySpaces[h].getWorldPosition(_h).distanceTo(knobW));
+      const near = d < LEVER.reach;
+      // a soft tick as your hand comes within reach of it
+      if (near && !this.nearWas[h] && !this.grabbedBy) this.pulse(h, 0.12, 12);
+      this.nearWas[h] = near;
+      if (near) reachable = true;
+      if (pressed && near && !this.grabbedBy && this.autoT < 0) {
         this.grabbedBy = h;
+        this.grabBase = Math.max(0, this.leverAngle);
+        this.grabOff.copy(this.group.worldToLocal(_k.copy(knobW))).sub(this.group.worldToLocal(player.gripSpaces[h].getWorldPosition(_h)));
+        this.grabFrom = this.handAngles(h);
         this.fired = false;
         this.pulse(h, 0.45, 25);
       }
-      if (this.grabbedBy === h && !grip) {
+      if (this.grabbedBy === h && !held) {
         this.grabbedBy = null;
         if (this.leverAngle > 0.4) leverSpring();
       }
     }
+    let target: number | null = null;
+    let hand: Hand | null = this.grabbedBy;
     if (this.grabbedBy) {
-      // the hand's angle round the pivot; the lever follows with some weight behind it
-      const hp = this.group.worldToLocal(this.world.player.gripSpaces[this.grabbedBy].getWorldPosition(_h));
-      const target = Math.max(0, Math.min(LEVER.max, Math.atan2(hp.z - LEVER.z, hp.y - LEVER.y)));
+      // the lever follows your hand's travel from where you took it (toward you or straight down,
+      // whichever has gone further), with some weight behind it
+      const [arc, drop] = this.handAngles(this.grabbedBy);
+      target = this.grabBase + Math.max(arc - this.grabFrom[0], drop - this.grabFrom[1]);
+    } else if (this.autoT >= 0) {
+      // hauled for you: an accelerating pull down to the stop, a beat there, then it's let go
+      this.autoT += dt;
+      hand = this.autoHand;
+      const k = Math.min(1, this.autoT / 0.34);
+      target = LEVER.max * k * k;
+      if (this.autoT > 0.5) {
+        this.autoT = -1;
+        target = null;
+        leverSpring();
+      }
+    }
+    if (target !== null && hand) {
+      target = Math.max(0, Math.min(LEVER.max, target));
       const k = 1 - Math.exp(-dt * (this.leverAngle > LEVER.catch - 0.12 ? 9 : 16));
       const prev = this.leverAngle;
       this.leverAngle += (target - this.leverAngle) * k;
@@ -478,13 +548,13 @@ export class SlotMachine {
       const notch = Math.floor(this.leverAngle / 0.14);
       if (notch > this.lastNotch) {
         leverClick(this.leverAngle / LEVER.max);
-        this.pulse(this.grabbedBy, 0.2 + 0.45 * (this.leverAngle / LEVER.max), 10);
+        this.pulse(hand, 0.2 + 0.45 * (this.leverAngle / LEVER.max), 10);
       }
       this.lastNotch = notch;
       if (!this.fired && this.leverAngle > LEVER.catch) {
         this.fired = true;
         leverClunk();
-        this.pulse(this.grabbedBy, 1, 70);
+        this.pulse(hand, 1, 70);
         this.shake = Math.max(this.shake, 0.004);
         this.spin();
       }
@@ -494,6 +564,9 @@ export class SlotMachine {
       this.lastNotch = Math.floor(Math.max(0, this.leverAngle) / 0.14);
     }
     this.lever.rotation.x = this.leverAngle - 0.12;
+    // the ball lights when it's yours to take (a hand close by, or a ray on it), brighter in your hand
+    const glow = this.grabbedBy || this.autoT >= 0 ? 0.55 : reachable || this.leverPanel.hover === 'lever' ? 0.4 : 0;
+    this.knobMat.emissiveIntensity += (glow - this.knobMat.emissiveIntensity) * Math.min(1, dt * 14);
   }
 
   /** Poking the deck buttons with a controller: the cap goes down under it and fires near the bottom. */
@@ -896,6 +969,7 @@ function perimeter(u: number, hw: number, hh: number): [number, number] {
 
 const _v = new Vector3();
 const _h = new Vector3();
+const _k = new Vector3();
 const _o = new Object3D();
 const _c = new Color();
 
