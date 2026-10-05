@@ -6,7 +6,7 @@
  *  - 4 LEAF CLOVERS at the top, on the balcony while you read the warning.
  *  - BRAIN EATER (FireFight's boss theme) on the way down: in from its top when you're centred,
  *    DOWN's 3-2-1 on its beats, and the launch off the balcony right on its drop. From there it
- *    just plays, through every landing, round from its second break.
+ *    just plays, through every landing, once: its outro at the bottom, then the island's songs.
  *  - DOWN's voiced 3-2-1 on every bay, BEGIN at the top, NICE and PERFECT on the landings, WELL
  *    DONE at the bottom, and the crash if a gate takes you off.
  *  - The coin ding: a bright tone that climbs a semitone with each coin in a streak; a gem gets a
@@ -37,17 +37,13 @@ export type SkelterSfx = keyof typeof SFX;
 
 /** the balcony's song, and the descent's */
 const LOBBY = 'four-leaf-clovers.mp3';
-/** BRAIN EATER: 150 BPM on the dot, from its first sample; the file's cut just past bar 52 */
+/** BRAIN EATER: 150 BPM on the dot, from its first sample, played once through */
 const DESCENT = 'brain-eater.mp3';
 const BEAT = 60 / 150;
 /** its drop, 4 bars in: where the first launch lands */
 const DROP = 16 * BEAT;
 /** the balcony's 3-2-1, a line every two beats into the drop */
 export const COUNT_STEP = 2 * BEAT;
-/** round from the break before the second drop (bar 20) at the end of the third (bar 52), short
- * of the outro: whole bars, so the beat never stumbles */
-const LOOP_FROM = 80 * BEAT;
-const LOOP_TO = 208 * BEAT;
 
 function dB(x: number): number {
   return Math.pow(10, x / 20);
@@ -72,6 +68,8 @@ class SkelterAudio {
   private lobby: Playing | null = null;
   private run: Playing | null = null;
   private live = new Set<AudioBufferSourceNode>();
+  /** BRAIN EATER's played out (not stopped): the system hands the music back to the island */
+  onEnd: (() => void) | null = null;
 
   private bus(): { ctx: AudioContext; out: GainNode; music: GainNode } | null {
     const ctx = audioContext();
@@ -114,17 +112,16 @@ class SkelterAudio {
     b.music.gain.setTargetAtTime(musicView.muted ? 0 : 1, b.ctx.currentTime, 0.12);
   }
 
-  /** Play a song, looping, from `from` seconds in (its head by default), round from `loopFrom` at `loopTo`. */
-  private start(name: string, from?: number, loopFrom?: number, loopTo?: number): Promise<Playing | null> {
+  /** Play a song from `from` seconds in (its head by default): looping, unless `loop` is false. */
+  private start(name: string, from?: number, loop = true): Promise<Playing | null> {
     return this.song(name).then((l) => {
       const b = this.bus();
       if (!l || !b) return null;
       const at = Math.min(Math.max(from ?? l.head, l.head), l.buffer.duration);
       const src = b.ctx.createBufferSource();
       src.buffer = l.buffer;
-      src.loop = true;
-      src.loopStart = Math.min(Math.max(loopFrom ?? l.head, l.head), l.buffer.duration);
-      src.loopEnd = Math.min(loopTo ?? l.buffer.duration, l.buffer.duration);
+      src.loop = loop;
+      src.loopStart = l.head;
       const gain = b.ctx.createGain();
       gain.gain.value = l.level * SONG;
       src.connect(gain).connect(b.music);
@@ -171,13 +168,19 @@ class SkelterAudio {
     this.stopLobby(0.3);
     const marker = { src: null } as unknown as Playing;
     this.run = marker;
-    return this.start(DESCENT, 0, LOOP_FROM, LOOP_TO).then((p) => {
+    return this.start(DESCENT, 0, false).then((p) => {
       if (this.run !== marker) {
         this.fade(p, 0.05);
         return null;
       }
       this.run = p;
       if (!p) return null;
+      // (a stop clears this.run first, so only the song running out gets here)
+      p.src.onended = () => {
+        if (this.run !== p) return;
+        this.run = null;
+        this.onEnd?.();
+      };
       const at = p.t0 + DROP - p.from;
       this.play('three', 0.9, at - 3 * COUNT_STEP);
       this.play('two', 0.9, at - 2 * COUNT_STEP);

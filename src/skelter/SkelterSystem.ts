@@ -185,6 +185,10 @@ export class SkelterSystem extends createSystem({}) {
     const gate = this.gateSpot();
     skelterView.gate = { at: gate, face: [SKELTER.x, SKELTER.z] };
     skelterView.system = this;
+    // Brain Eater's outro done at the bottom: the island's songs come back in
+    skelterAudio.onEnd = () => {
+      if (game.phase === 'WIN') musicView.away = false;
+    };
     this.sign.draw();
     this.state.onChange(() => this.sign.draw(), { logs: true });
     on('slide-complete', () => this.onTierComplete());
