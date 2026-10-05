@@ -13,7 +13,7 @@
  * soft edge on Quest, and it sorts like opaque).
  */
 
-import { CanvasTexture, LinearMipmapLinearFilter, SRGBColorSpace } from 'three';
+import { LinearMipmapLinearFilter, SRGBColorSpace, Texture } from 'three';
 
 type Lobe = [number, number, number, number];
 
@@ -170,7 +170,87 @@ function paintGrass(c: CanvasRenderingContext2D, x0: number, y0: number, w: numb
   }
 }
 
-export function paintFoliage(treeLobes: Lobe[]): CanvasTexture {
+/**
+ * Give every see-through pixel the colour of the painted ones nearest it (alpha stays 0). A canvas
+ * keeps them black, and the mipmaps blend that black into the edges: far grass wore a black fringe
+ * on every blade tip, a dark haze floating over the patch. Push-pull: average the painted colour
+ * down a pyramid of halvings, then fill each empty pixel from the finest level that has any.
+ */
+function bleed(img: ImageData): void {
+  const d = img.data;
+  const levels: { n: number; c: Float32Array; a: Float32Array }[] = [];
+  // level 1 from the pixels, each further level from the one before
+  let n = img.width >> 1;
+  let c = new Float32Array(n * n * 3);
+  let a = new Float32Array(n * n);
+  for (let y = 0; y < img.height; y++) {
+    for (let x = 0; x < img.width; x++) {
+      const p = (y * img.width + x) * 4;
+      const w = d[p + 3] / 255;
+      if (w === 0) continue;
+      const q = (y >> 1) * n + (x >> 1);
+      c[q * 3] += d[p] * w;
+      c[q * 3 + 1] += d[p + 1] * w;
+      c[q * 3 + 2] += d[p + 2] * w;
+      a[q] += w;
+    }
+  }
+  levels.push({ n, c, a });
+  while (n > 1) {
+    const m = n >> 1;
+    const c2 = new Float32Array(m * m * 3);
+    const a2 = new Float32Array(m * m);
+    for (let y = 0; y < n; y++) {
+      for (let x = 0; x < n; x++) {
+        const p = y * n + x;
+        const q = (y >> 1) * m + (x >> 1);
+        c2[q * 3] += c[p * 3];
+        c2[q * 3 + 1] += c[p * 3 + 1];
+        c2[q * 3 + 2] += c[p * 3 + 2];
+        a2[q] += a[p];
+      }
+    }
+    n = m;
+    c = c2;
+    a = a2;
+    levels.push({ n, c, a });
+  }
+  // coarse to fine: a cell with nothing painted in it takes its parent's colour
+  for (let k = levels.length - 1; k >= 0; k--) {
+    const L = levels[k];
+    const P = levels[k + 1];
+    for (let y = 0; y < L.n; y++) {
+      for (let x = 0; x < L.n; x++) {
+        const q = y * L.n + x;
+        if (L.a[q] > 0) {
+          const w = L.a[q];
+          L.c[q * 3] /= w;
+          L.c[q * 3 + 1] /= w;
+          L.c[q * 3 + 2] /= w;
+        } else if (P) {
+          const pq = (y >> 1) * P.n + (x >> 1);
+          L.c[q * 3] = P.c[pq * 3];
+          L.c[q * 3 + 1] = P.c[pq * 3 + 1];
+          L.c[q * 3 + 2] = P.c[pq * 3 + 2];
+        }
+        L.a[q] = 1;
+      }
+    }
+  }
+  const L1 = levels[0];
+  for (let y = 0; y < img.height; y++) {
+    for (let x = 0; x < img.width; x++) {
+      const p = (y * img.width + x) * 4;
+      if (d[p + 3] !== 0) continue;
+      const q = (y >> 1) * L1.n + (x >> 1);
+      d[p] = L1.c[q * 3];
+      d[p + 1] = L1.c[q * 3 + 1];
+      d[p + 2] = L1.c[q * 3 + 2];
+    }
+  }
+}
+
+export function paintFoliage(treeLobes: Lobe[]): Texture {
   const cv = document.createElement('canvas');
   cv.width = ATLAS;
   cv.height = ATLAS;
@@ -192,7 +272,10 @@ export function paintFoliage(treeLobes: Lobe[]): CanvasTexture {
   // an opaque white block for the solid parts that share the leaf material (trunks, cores)
   c.fillStyle = '#ffffff';
   c.fillRect(ATLAS - 64, ATLAS - 64, 64, 64);
-  const tex = new CanvasTexture(cv);
+  const img = c.getImageData(0, 0, ATLAS, ATLAS);
+  bleed(img);
+  const tex = new Texture(img);
+  tex.needsUpdate = true;
   tex.colorSpace = SRGBColorSpace;
   tex.minFilter = LinearMipmapLinearFilter;
   tex.anisotropy = 4;

@@ -21,7 +21,7 @@ import {
   Quaternion,
   Vector3,
   type Camera,
-  type CanvasTexture,
+  type Texture,
 } from 'three';
 import type { TerrainGrid } from './data.ts';
 import { REGION } from './foliage.ts';
@@ -92,7 +92,7 @@ export class Grass {
   /** the highest floor over (x, z) with its footprint grown by `margin` (Surfaces.deckOver), once the island's floors are known */
   floorOver: ((x: number, z: number, margin: number) => number) | null = null;
 
-  constructor(atlas: CanvasTexture, mask: Uint8Array, res: number, terrain: Heightfield, grid: TerrainGrid) {
+  constructor(atlas: Texture, mask: Uint8Array, res: number, terrain: Heightfield, grid: TerrainGrid) {
     this.mask = mask;
     this.res = res;
     this.terrain = terrain;
