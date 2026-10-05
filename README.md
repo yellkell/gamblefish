@@ -587,7 +587,8 @@ same questions as ff2's `TELEPORT_AREAS`, `floorYAt` and `crossesWall`:
 | `tools/teleport-check.mjs` | headless teleport rules check, including no landing under a house floor |
 | `tools/fish-check.mjs` | headless check that the timed fish keep their hours and the trophy fish need their gear |
 | `tools/camps-check.mjs` | headless check that the camps are hidden from the start, level, reachable, and their chests fill properly |
-| `tools/bank-check.mjs` | headless check of the bank server in dev mode: paying credits once, claiming once, the newer save wins, and wrong LOG IN codes are throttled (`server/guards.mjs`) so nobody can guess into an account |
+| `tools/bank-check.mjs` | headless check of the bank server in dev mode: paying credits once, claiming once, pay codes (the page finds the code, pays for the pack picked there, the headset collects), the newer save wins, and wrong LOG IN and pay codes are throttled (`server/guards.mjs`) so nobody can guess into an account |
+| `site/chips.html` | yellkell.com/chips (Hostinger `public_html/chips.html`): where a pay code from the Island Bank's board is typed on a phone or computer, a pack picked and paid for with Stripe. Served from localhost it talks to the dev bank on :8792 |
 | `tools/line-check.mjs` | headless check that the fishing line lies over the pier's rails, posts and deck as drawn, not through them, and goes round a lamp post it's swung against (`src/world/lineWrap.ts`) rather than over or through it |
 
 Dev hook: `__fish.move.to(x, z, yaw)`, `__fish.move.snapTurn(±1)` and

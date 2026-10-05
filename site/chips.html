@@ -1,0 +1,351 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Island Bank</title>
+<meta name="description" content="Support Fish &amp; Chips and take coins back in your headset: type the code from the Island Bank.">
+<meta name="theme-color" content="#071410">
+<meta name="color-scheme" content="dark">
+<!-- yellkell.com/chips (public_html/chips.html): the pay page for Fish & Chips' Island Bank.
+     The board in the headset shows a six-letter code; this page sends it to the bank
+     (gamblefish/server/bank.mjs, /code/<CODE>), opens a Stripe Checkout for the pack picked
+     here, and on the way back asks the bank whether it was paid. The headset collects the
+     coins itself. Source: gamblefish repo, site/chips.html. -->
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='30' fill='%23c8243a'/%3E%3Ccircle cx='32' cy='32' r='26.5' fill='none' stroke='%23fbf4e4' stroke-width='7' stroke-dasharray='8.33 12.48'/%3E%3Ccircle cx='32' cy='32' r='20.5' fill='%23f4ecd8'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#071410; --card:#0d211a; --card2:#102a21; --line:rgba(216,176,96,.18);
+  --text:#f3efe4; --dim:#a7b3a9; --faint:#6f7d73;
+  --brass:#d8b060; --brass-hi:#ffe7a6; --gold:#ffd24a; --amber:#ffb000;
+  --teal:#3fd6c6; --ok:#3ddc97; --err:#ff8a8a; --ivory:#f4ecd8;
+  --ease:cubic-bezier(.16,1,.3,1);
+  --sans:Inter,-apple-system,BlinkMacSystemFont,"Helvetica Neue",Arial,sans-serif;
+  --display:Rajdhani,Inter,sans-serif;
+}
+*,*::before,*::after{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;min-height:100svh;display:flex;flex-direction:column;background:var(--bg);color:var(--text);font:400 16px/1.5 var(--sans);-webkit-font-smoothing:antialiased;overflow-x:clip}
+body::before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;background:
+  radial-gradient(700px 480px at 50% 30%,rgba(216,176,96,.13),transparent 70%),
+  radial-gradient(900px 600px at 50% 110%,rgba(63,214,198,.08),transparent 70%)}
+a{color:var(--teal);text-decoration:none}
+a:hover{text-decoration:underline;text-underline-offset:2px}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
+:focus-visible{outline:2px solid var(--teal);outline-offset:3px;border-radius:8px}
+
+header{width:min(600px,100% - 32px);margin-inline:auto;display:flex;align-items:center;height:72px}
+.brand{display:flex;align-items:center;gap:10px;font:700 20px/1 var(--display);letter-spacing:.04em;color:var(--text)}
+.brand:hover{text-decoration:none}
+.brand svg{width:30px;height:30px}
+
+main{flex:1;display:grid;place-items:center;padding:8px 16px 48px}
+.card{position:relative;width:min(540px,100%);padding:36px 28px 28px;border-radius:24px;background:linear-gradient(180deg,var(--card2),var(--card));box-shadow:0 30px 60px -30px rgba(0,0,0,.8),inset 0 0 0 1px var(--line);text-align:center;isolation:isolate;animation:rise .5s var(--ease)}
+.card::before{content:"";position:absolute;inset:0;border-radius:inherit;padding:1.5px;background:linear-gradient(160deg,var(--brass-hi),transparent 35%,transparent 70%,var(--brass));-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;opacity:.55;pointer-events:none}
+@keyframes rise{from{opacity:0;transform:translateY(10px) scale(.99)}}
+@media (max-width:480px){.card{padding:28px 18px 22px}}
+.chip{width:76px;height:76px;margin:0 auto 14px;filter:drop-shadow(0 12px 18px rgba(0,0,0,.55))}
+h1{margin:0;font:700 34px/1.05 var(--display);letter-spacing:.03em;text-transform:uppercase;background:linear-gradient(180deg,var(--brass-hi),var(--brass) 60%,#a9832f);-webkit-background-clip:text;background-clip:text;color:transparent}
+.sub{margin:8px 0 0;color:var(--dim)}
+
+form{margin:22px 0 0}
+.code{width:100%;padding:16px 12px 14px;border-radius:16px;border:2px solid var(--brass);background:linear-gradient(180deg,#fbf5e6,#e6d8b8);color:#1a1206;font:700 40px/1 var(--display);letter-spacing:.32em;text-indent:.32em;text-align:center;text-transform:uppercase;box-shadow:0 10px 24px -12px rgba(0,0,0,.8),inset 0 2px 0 rgba(255,255,255,.7)}
+.code::placeholder{color:rgba(26,18,6,.22)}
+.code:focus{outline:none;border-color:var(--gold);box-shadow:0 0 0 4px rgba(255,210,74,.25),0 10px 24px -12px rgba(0,0,0,.8)}
+.pill{display:inline-flex;align-items:center;justify-content:center;gap:10px;min-width:240px;margin-top:18px;padding:15px 32px;border-radius:980px;background:linear-gradient(180deg,#ffc94a,var(--amber));color:#2a1a02;font:700 21px/1 var(--display);letter-spacing:.06em;text-transform:uppercase;box-shadow:0 12px 26px -12px rgba(255,176,0,.75),inset 0 1px 0 rgba(255,255,255,.5);transition:transform .15s var(--ease),filter .2s,box-shadow .2s}
+.pill:hover{filter:brightness(1.06);box-shadow:0 16px 30px -12px rgba(255,176,0,.9),inset 0 1px 0 rgba(255,255,255,.5)}
+.pill:active{transform:scale(.97)}
+.pill[disabled]{filter:grayscale(.6) brightness(.75);cursor:default;box-shadow:none}
+.msg{min-height:1.5em;margin:12px 0 0;font-size:14px;color:var(--err)}
+.note{margin:14px 0 0;padding:10px 14px;border-radius:12px;background:rgba(63,214,198,.08);color:var(--teal);font-size:14px}
+.fine{margin:16px 0 0;color:var(--faint);font-size:13px}
+.fine b{color:var(--dim);font-weight:600;letter-spacing:.08em}
+.fine button{color:var(--dim);text-decoration:underline;text-underline-offset:2px}
+.fine button:hover{color:var(--text)}
+
+.packs{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin:24px 0 0}
+.pack{position:relative;display:flex;flex-direction:column;align-items:center;padding:20px 8px 14px;border-radius:18px;background:rgba(255,255,255,.04);box-shadow:inset 0 0 0 1.5px rgba(216,176,96,.28);transition:transform .2s var(--ease),box-shadow .2s,background .2s}
+.pack:hover{background:rgba(255,220,140,.08)}
+.pack:active{transform:scale(.97)}
+.pack[aria-checked="true"]{background:rgba(255,200,90,.13);box-shadow:inset 0 0 0 2.5px var(--amber),0 0 0 4px rgba(255,176,0,.14),0 14px 30px -16px rgba(255,176,0,.6)}
+.pack[aria-checked="true"]::after{content:"";position:absolute;top:10px;right:10px;width:22px;height:22px;border-radius:50%;background:var(--amber) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M6 12.5l4 4L18 8' fill='none' stroke='%232a1a02' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center/16px no-repeat;animation:pop .3s var(--ease)}
+@keyframes pop{from{transform:scale(0)}}
+.stack{position:relative;height:52px;display:flex;justify-content:center;align-items:flex-end}
+.stack img{width:44px;height:44px;margin:0 -10px;filter:drop-shadow(0 4px 4px rgba(0,0,0,.5))}
+.coins{margin-top:8px;font:700 30px/1 var(--display);letter-spacing:.02em}
+.coins small{display:block;margin-top:2px;font:500 13px/1.2 var(--sans);color:var(--dim);letter-spacing:0}
+.price{margin-top:8px;font:700 22px/1 var(--display);color:var(--gold)}
+.best{position:absolute;top:-11px;left:50%;transform:translateX(-50%);padding:4px 12px;border-radius:99px;background:var(--amber);color:#1a1206;font:700 12px/1.2 var(--display);letter-spacing:.1em;white-space:nowrap}
+
+.agree{display:flex;gap:12px;align-items:flex-start;margin:22px 0 0;padding:14px;border-radius:14px;background:rgba(0,0,0,.22);text-align:left;font-size:14px;color:var(--dim);cursor:pointer}
+.agree input{flex:none;width:22px;height:22px;margin:1px 0 0;accent-color:var(--amber);cursor:pointer}
+.agree b{color:var(--text);font-weight:600}
+
+.badge{display:grid;place-items:center;width:84px;height:84px;margin:0 auto 18px;border-radius:50%;background:radial-gradient(circle at 40% 35%,rgba(255,210,74,.3),rgba(255,176,0,.08));box-shadow:inset 0 0 0 1.5px rgba(255,210,74,.45),0 0 40px rgba(255,176,0,.25)}
+.badge img{width:56px;height:56px;animation:flip 1.4s var(--ease) both}
+@keyframes flip{0%{transform:rotateY(0) scale(.4);opacity:0}60%{transform:rotateY(540deg) scale(1.15);opacity:1}100%{transform:rotateY(720deg) scale(1)}}
+.won{margin:8px 0 2px;font:700 64px/1 var(--display);letter-spacing:.01em;color:var(--gold);text-shadow:0 0 30px rgba(255,176,0,.45);font-variant-numeric:tabular-nums}
+.spin{width:20px;height:20px;border-radius:50%;border:2.5px solid rgba(255,255,255,.3);border-top-color:#fff;animation:sp .8s linear infinite}
+.badge .spin{width:30px;height:30px;border-color:rgba(255,210,74,.25);border-top-color:var(--gold)}
+@keyframes sp{to{transform:rotate(360deg)}}
+.rain{position:fixed;inset:0;pointer-events:none;overflow:hidden;z-index:5}
+.rain img{position:absolute;top:-60px;width:34px;height:34px;animation:fall linear forwards}
+@keyframes fall{to{transform:translateY(calc(100vh + 120px)) rotate(var(--r))}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+[hidden]{display:none!important}
+footer{width:min(600px,100% - 32px);margin-inline:auto;padding:16px 0 32px;color:var(--faint);font-size:12px;text-align:center;line-height:1.7}
+footer a{color:var(--dim)}
+</style>
+</head>
+<body>
+<header>
+  <a class="brand" href="/fac">
+    <svg viewBox="0 0 64 64" aria-hidden="true"><use href="#chip"/></svg>
+    Fish &amp; Chips
+  </a>
+</header>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <radialGradient id="clay" cx="0.38" cy="0.32" r="0.75"><stop offset="0" stop-color="#e8394f"/><stop offset="0.6" stop-color="#c8243a"/><stop offset="1" stop-color="#8e1426"/></radialGradient>
+    <radialGradient id="face" cx="0.4" cy="0.35" r="0.7"><stop offset="0" stop-color="#fffaf0"/><stop offset="1" stop-color="#e6d9bc"/></radialGradient>
+    <linearGradient id="fish" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1fa99c"/><stop offset="0.55" stop-color="#3fd6c6"/><stop offset="1" stop-color="#d9fff9"/></linearGradient>
+    <symbol id="chip" viewBox="0 0 64 64">
+      <circle cx="32" cy="33.5" r="30" fill="#5e0b18"/>
+      <circle cx="32" cy="32" r="30" fill="url(#clay)"/>
+      <circle cx="32" cy="32" r="26.5" fill="none" stroke="#fbf4e4" stroke-width="7" stroke-dasharray="8.33 12.48" transform="rotate(-11.25 32 32)"/>
+      <circle cx="32" cy="32" r="20.5" fill="url(#face)"/>
+      <circle cx="32" cy="32" r="20.5" fill="none" stroke="#8e1426" stroke-width="1"/>
+      <g transform="translate(31 34) rotate(-24) scale(0.98)">
+        <path d="M11 -2.2 L22.5 -0.3 L11 1.9 C7 6.4 -4 7 -12 2 L-20.5 8.8 L-16.6 0 L-20.5 -8.8 L-12 -2 C-11 -3 -10 -4 -9 -4.6 L-8.5 -7 C-4 -8.5 -0.5 -13.5 2.5 -17 C5.5 -15 7.4 -10 7.6 -4.9 C9 -4.1 10.3 -3 11 -2.2 Z" fill="url(#fish)" stroke="#061820" stroke-width="2" stroke-linejoin="round" paint-order="stroke"/>
+        <path d="M-3.5 -6.2 L-2.2 -10.8 M0.2 -6 L1.8 -13.2 M3.8 -5.4 L4.8 -12" stroke="#0d6f67" stroke-width="0.9" stroke-linecap="round" opacity="0.55"/>
+        <circle cx="7.4" cy="-1" r="1.35" fill="#061820"/>
+      </g>
+    </symbol>
+  </defs>
+</svg>
+
+<main>
+  <!-- 1. The code from the board -->
+  <section class="card" id="v-code">
+    <svg class="chip" viewBox="0 0 64 64" aria-hidden="true"><use href="#chip"/></svg>
+    <h1>Island Bank</h1>
+    <p class="sub">Type the code on the board at the Island Bank in Fish &amp; Chips.</p>
+    <form id="f-code">
+      <input class="code" id="code" maxlength="7" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="K7Q4MD" aria-label="Code from the Island Bank" required>
+      <button class="pill" id="b-code">Continue</button>
+      <p class="msg" id="m-code" role="alert"></p>
+    </form>
+    <p class="fine">No code yet? In the game, walk into the bank in the village, pick a pack at the board and agree.</p>
+  </section>
+
+  <!-- 2. Pick a pack and pay -->
+  <section class="card" id="v-pay" hidden>
+    <svg class="chip" viewBox="0 0 64 64" aria-hidden="true"><use href="#chip"/></svg>
+    <h1>Support the game</h1>
+    <p class="sub">Chip in to keep the island growing, and take some coins back as a thank-you.</p>
+    <p class="note" id="cancelled" hidden>No charge: the checkout was cancelled. Pick a pack to try again.</p>
+    <div class="packs" id="packs" role="radiogroup" aria-label="Coin packs"></div>
+    <label class="agree">
+      <input type="checkbox" id="agree">
+      <span><b>I'm 18 or over.</b> Coins are for play in Fish &amp; Chips only: they have no cash value and can never be withdrawn, sold or exchanged for money or prizes.</span>
+    </label>
+    <button class="pill" id="b-pay" disabled>Pay</button>
+    <p class="msg" id="m-pay" role="alert"></p>
+    <p class="fine">Code <b id="show-code"></b> · <button id="b-other" type="button">use another code</button></p>
+  </section>
+
+  <!-- 3. Back from Stripe, asking the bank -->
+  <section class="card" id="v-wait" hidden>
+    <div class="badge"><div class="spin"></div></div>
+    <h1>Confirming</h1>
+    <p class="sub">Checking with the bank. This takes a few seconds.</p>
+  </section>
+
+  <!-- 4. Paid -->
+  <section class="card" id="v-done" hidden>
+    <div class="badge"><img class="coin" alt=""></div>
+    <h1>Thank you!</h1>
+    <p class="won" id="won">+0</p>
+    <p class="sub" id="won-sub">coins are landing in your headset</p>
+    <p class="sub" style="margin-top:16px">Put your headset back on: they drop into your wallet at the Island Bank in a few seconds. Not there after a minute? Refresh the Fish &amp; Chips page and they land as it starts.</p>
+    <p class="fine">Stripe is emailing you a receipt. Keep it: its receipt number brings these coins, and your game, to any headset (REDEEM, at the bank).</p>
+  </section>
+</main>
+
+<div class="rain" id="rain" aria-hidden="true"></div>
+
+<footer>
+  Payments by Stripe; this page never sees your card. 18+ only.<br>
+  <a href="https://gamblefish.web.app/terms.html">Terms of purchase</a> · <a href="https://gamblefish.web.app/privacy.html">Privacy</a> · <a href="/fac">Play Fish &amp; Chips</a>
+</footer>
+
+<script>
+const COIN = 'data:image/webp;base64,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';
+// The Island Bank (gamblefish/server/bank.mjs). Served from a laptop, the dev bank on :8792.
+const BANK = /^(localhost|127\.0\.0\.1)$/.test(location.hostname) ? `http://${location.hostname}:8792` : 'https://gamblefish-bank.onrender.com';
+const $ = id => document.getElementById(id);
+const views = ['v-code', 'v-pay', 'v-wait', 'v-done'];
+const show = v => views.forEach(x => $(x).hidden = x !== v);
+document.querySelectorAll('img.coin').forEach(i => i.src = COIN);
+
+let code = '';
+let packs = [];
+let currency = 'usd';
+let chosen = '';
+
+const SYM = { usd: '$', gbp: '£', eur: '€' };
+const money = m => (SYM[currency] ?? currency.toUpperCase() + ' ') + (m / 100).toFixed(2);
+const coins = n => n.toLocaleString('en-US');
+
+/** A call to the bank. The bank can be slow to answer its first call of the day: after a moment, say so. */
+async function bank(path, body, note) {
+  const slow = note && setTimeout(() => { note.textContent = 'Waking the bank: the first visit can take half a minute…'; note.style.color = 'var(--dim)'; }, 3000);
+  const ctl = new AbortController();
+  const stop = setTimeout(() => ctl.abort(), 75000);
+  try {
+    const r = await fetch(BANK + path, body ? { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body), signal: ctl.signal } : { signal: ctl.signal, cache: 'no-store' });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok && !j.error) j.error = 'Something went wrong. Try again.';
+    return j;
+  } finally {
+    clearTimeout(slow);
+    clearTimeout(stop);
+    if (note) { note.textContent = ''; note.style.color = ''; }
+  }
+}
+
+function busy(btn, on) {
+  btn.disabled = on;
+  if (on) { btn.dataset.t = btn.innerHTML; btn.innerHTML = '<span class="spin"></span>'; }
+  else if (btn.dataset.t) { btn.innerHTML = btn.dataset.t; delete btn.dataset.t; }
+}
+
+function drawPacks() {
+  const box = $('packs');
+  box.innerHTML = '';
+  packs.forEach((p, i) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'pack';
+    b.setAttribute('role', 'radio');
+    b.setAttribute('aria-checked', String(p.id === chosen));
+    b.setAttribute('aria-label', `${coins(p.coins)} coins for ${money(p.minor)}${p.best ? ', best value' : ''}`);
+    const stack = Array.from({ length: Math.min(4, i + 1) }, () => `<img src="${COIN}" alt="">`).join('');
+    b.innerHTML = (p.best ? '<span class="best">BEST VALUE</span>' : '')
+      + `<span class="stack">${stack}</span><span class="coins">${coins(p.coins)}<small>coins</small></span><span class="price">${money(p.minor)}</span>`;
+    b.addEventListener('click', () => { chosen = p.id; drawPacks(); payLabel(); });
+    box.appendChild(b);
+  });
+}
+
+function payLabel() {
+  const p = packs.find(x => x.id === chosen);
+  $('b-pay').textContent = p ? 'Pay ' + money(p.minor) : 'Pay';
+  $('b-pay').disabled = !p || !$('agree').checked;
+}
+
+/** What the bank says the code is: false if it doesn't know it. */
+async function open(c, note) {
+  code = c.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (code.length < 4) return false;
+  const j = await bank('/code/' + encodeURIComponent(code), null, note);
+  if (j.error) throw new Error(j.error);
+  if (Array.isArray(j.packs)) packs = j.packs;
+  currency = j.currency || currency;
+  if (j.state === 'paid') { done(0); return true; }
+  if (j.state !== 'waiting') return false;
+  chosen = packs.some(p => p.id === j.pack) ? j.pack : (packs.find(p => p.best) ?? packs[0])?.id;
+  $('show-code').textContent = code;
+  history.replaceState(null, '', '?c=' + code);
+  drawPacks();
+  payLabel();
+  show('v-pay');
+  return true;
+}
+
+/** Paid: the coins count up, and a few rain down. */
+function done(n) {
+  history.replaceState(null, '', location.pathname);
+  show('v-done');
+  const won = $('won');
+  if (!n) { won.hidden = true; $('won-sub').textContent = 'Your coins are landing in your headset'; return; }
+  const t0 = performance.now();
+  const step = t => {
+    const k = Math.min(1, (t - t0) / 1400);
+    won.textContent = '+' + coins(Math.round(n * (1 - Math.pow(1 - k, 3))));
+    if (k < 1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const rain = $('rain');
+  for (let i = 0; i < 26; i++) {
+    const img = document.createElement('img');
+    img.src = COIN;
+    img.style.left = (Math.random() * 100) + 'vw';
+    img.style.animationDuration = (1.6 + Math.random() * 1.4) + 's';
+    img.style.animationDelay = (Math.random() * 0.9) + 's';
+    img.style.setProperty('--r', ((Math.random() - 0.5) * 720) + 'deg');
+    rain.appendChild(img);
+  }
+  setTimeout(() => rain.innerHTML = '', 4500);
+}
+
+$('code').addEventListener('input', e => { e.target.value = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''); $('m-code').textContent = ''; });
+
+$('f-code').addEventListener('submit', async e => {
+  e.preventDefault();
+  busy($('b-code'), true);
+  try {
+    if (!await open($('code').value, $('m-code'))) $('m-code').textContent = "That code isn't right, or it has run out. Check the board at the Island Bank.";
+  } catch (err) { $('m-code').textContent = err.name === 'AbortError' || err instanceof TypeError ? 'No connection to the bank. Try again.' : err.message; }
+  busy($('b-code'), false);
+});
+
+$('agree').addEventListener('change', payLabel);
+
+$('b-pay').addEventListener('click', async () => {
+  if (!$('agree').checked) return;
+  busy($('b-pay'), true);
+  $('m-pay').textContent = '';
+  try {
+    const j = await bank('/code/' + code + '/pay', { pack: chosen }, $('m-pay'));
+    if (j.url) { location.href = j.url; return; }
+    if (j.state === 'paid') { done(0); return; }
+    $('m-pay').textContent = j.error || 'Something went wrong. Try again.';
+  } catch { $('m-pay').textContent = 'No connection to the bank. Try again.'; }
+  busy($('b-pay'), false);
+  payLabel();
+});
+
+$('b-other').addEventListener('click', () => { history.replaceState(null, '', location.pathname); $('code').value = ''; $('cancelled').hidden = true; show('v-code'); $('code').focus(); });
+
+// Arriving: ?c=CODE (from the headset's OPEN button, or back from Stripe with &session= or &cancelled=1)
+(async () => {
+  const q = new URLSearchParams(location.search);
+  const c = q.get('c'), session = q.get('session');
+  if (!c) { $('code').focus(); return; }
+  $('code').value = c.toUpperCase();
+  code = c.toUpperCase();
+  if (session) {
+    show('v-wait');
+    for (let i = 0; i < 20; i++) {
+      try {
+        const j = await bank('/code/' + encodeURIComponent(code) + '/done', { session });
+        if (j.state === 'paid') { done(j.coins || 0); return; }
+        if (j.state === 'unknown' && i > 2) break;
+      } catch {}
+      await new Promise(r => setTimeout(r, 3000));
+    }
+  }
+  $('cancelled').hidden = q.get('cancelled') !== '1';
+  try { if (await open(code, $('m-code'))) return; } catch {}
+  show('v-code');
+  $('m-code').textContent = session ? "The bank hasn't heard from Stripe yet. If you paid, your coins still land in the headset." : "That code isn't right, or it has run out. Check the board at the Island Bank.";
+})();
+</script>
+</body>
+</html>

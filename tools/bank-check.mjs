@@ -126,6 +126,44 @@ console.log('\nbuying');
   check('no more than six unpaid checkouts at once', last === 429);
 }
 
+console.log('\npaying with a code (yellkell.com/chips)');
+{
+  const anon = await req('/code', { method: 'POST', headers: { 'content-type': 'application/json' }, body: { pack: 'chest' } });
+  check('a code with nobody signed in is refused', anon.status === 401);
+  const made = await req('/code', { method: 'POST', headers: as('coder'), body: { pack: 'chest' } });
+  const code = made.json?.code ?? '';
+  check('the headset gets a six-letter code and the page to type it on', /^[A-HJKMNP-Z2-9]{6}$/.test(code) && made.json?.page === 'yellkell.com/chips', `${code} ${made.json?.page}`);
+  const st = await req(`/code/${code.toLowerCase().slice(0, 3)}-${code.toLowerCase().slice(3)}`, { headers: { 'x-forwarded-for': '10.9.0.1' } });
+  check('the page finds it however it is typed, with the pack the board chose', st.json?.state === 'waiting' && st.json?.pack === 'chest' && st.json?.packs?.length === 4, JSON.stringify(st.json));
+  check('and never learns whose it is', !JSON.stringify(st.json).includes('coder'));
+  const unknown = await req('/code/ZZZZZZ', { headers: { 'x-forwarded-for': '10.9.0.1' } });
+  check('an unknown code says so', unknown.json?.state === 'unknown');
+  const badPack = await req(`/code/${code}/pay`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: { pack: 'nope' } });
+  check('paying for a pack that does not exist is refused', badPack.status === 400);
+  const pay = await req(`/code/${code}/pay`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: { pack: 'purse' } });
+  check('the page opens a checkout for the pack picked there', pay.status === 200 && /\/dev-pay\?s=dev_/.test(pay.json?.url ?? ''), pay.json?.url);
+  const id = new URL(pay.json.url).searchParams.get('s');
+  const before = await req(`/code/${code}/done`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: { session: id } });
+  check('not paid yet', before.json?.state === 'waiting');
+  // (the dev PAY button is a form post, like a buyer's tap)
+  const paid = await fetch(`${base}/dev-pay`, { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: `s=${id}`, redirect: 'manual' });
+  const back = paid.headers.get('location') ?? '';
+  check('paying goes back to the page with the code and the session', paid.status === 303 && back.startsWith('https://yellkell.com/chips?c=') && back.includes(code) && back.includes(id), back);
+  const done = await req(`/code/${code}/done`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: { session: id } });
+  check('back on the page, it is paid', done.json?.state === 'paid' && done.json?.coins === 9000, JSON.stringify(done.json));
+  const claim = await req('/claim', { method: 'POST', headers: as('coder'), body: {} });
+  check('the headset that showed the code collects the pack', claim.json?.coins === 9000, `${claim.json?.coins}`);
+  const again = await req(`/code/${code}/pay`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: { pack: 'purse' } });
+  check('a paid code opens no second checkout', again.json?.state === 'paid' && !again.json?.url);
+
+  let last = 0;
+  for (let i = 0; i < 7; i++) last = (await req('/code', { method: 'POST', headers: as('code-hoarder'), body: { pack: 'pouch' } })).status;
+  check('no more than six codes on the go at once', last === 429);
+  let first429 = 0;
+  for (let i = 1; i <= 12 && !first429; i++) if ((await req(`/code/ZZZZ${10 + i}`, { headers: { 'x-forwarded-for': 'code-guesser' } })).status === 429) first429 = i;
+  check('fishing for codes is stopped', first429 > 0, `stopped at try ${first429}`);
+}
+
 console.log('\nthe save');
 {
   const none = await req('/save', { headers: as('saver') });
