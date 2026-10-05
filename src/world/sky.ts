@@ -95,13 +95,14 @@ const MOON_LAG = 13.2;
 
 /**
  * Where a body on the day arc stands at hour h (rising at SUNRISE, setting at SUNSET): from the
- * east (+x) round through the south (+z, the open sea) into the west (−x). Tidewater's layout:
- * the sun sets in the west. At 16:30 it's the old fixed sun: low in the south-west-by-west.
+ * east (+x) round through the south (+z, the open sea) into the west (−x). It stays over the sea
+ * all day, so the village and the beach face it (lit from the front, not silhouetted against the
+ * sky), and it goes down into the sea a little south of west, in view from the pier.
  */
 function arc(h: number, top: number, out: Vector3): Vector3 {
   const t = (h - SUNRISE) / (SUNSET - SUNRISE); // 0 rise .. 1 set (outside: below the horizon)
   const el = top * Math.sin(Math.PI * t);
-  const az = ((70 - 235 * t) * Math.PI) / 180; // from +z toward +x
+  const az = ((100 - 180 * t) * Math.PI) / 180; // from +z toward +x
   return out.set(Math.sin(az) * Math.cos(el), Math.sin(el), Math.cos(az) * Math.cos(el)).normalize();
 }
 
@@ -123,9 +124,9 @@ const KEYS: Key[] = [
   { h: 0, zenith: 0x0b1733, horizon: 0x1f2d4e, fog: 0x1a2640, sun: 0xa9b8e6, sunI: 0.75, hemiSky: 0x6c80b4, hemiGround: 0x2c2c3a, hemiI: 1.25 },
   { h: 4.8, zenith: 0x0d1a38, horizon: 0x243356, fog: 0x1c2944, sun: 0xa9b8e6, sunI: 0.72, hemiSky: 0x6c80b4, hemiGround: 0x2c2c3a, hemiI: 1.25 },
   { h: 5.8, zenith: 0x2a3f72, horizon: 0xe6a088, fog: 0xa88e98, sun: 0xffa888, sunI: 1.0, hemiSky: 0xa4acd0, hemiGround: 0x5a4c48, hemiI: 1.35 },
-  { h: 7.2, zenith: 0x4a86c8, horizon: 0xe6dcd0, fog: 0xcbd8e0, sun: 0xffe8c8, sunI: 2.5, hemiSky: 0xbcd6ee, hemiGround: 0x8a7a5a, hemiI: 1.55 },
-  { h: 12.5, zenith: 0x3478c6, horizon: 0xd2e6f2, fog: 0xcfe2ec, sun: 0xfffaf0, sunI: 2.8, hemiSky: 0xc4dcf2, hemiGround: 0x8e7e5e, hemiI: 1.3 },
-  { h: 16.5, zenith: 0x3f7fc4, horizon: 0xcfe0ea, fog: 0xc6d9e3, sun: 0xfff0d6, sunI: 2.6, hemiSky: 0xbcd6ee, hemiGround: 0x8a7a5a, hemiI: 1.25 },
+  { h: 7.2, zenith: 0x3a86d6, horizon: 0xd4e2ea, fog: 0xbcd4e4, sun: 0xffe2b8, sunI: 3.0, hemiSky: 0xa4cbee, hemiGround: 0x9a8058, hemiI: 1.35 },
+  { h: 12.5, zenith: 0x2276d8, horizon: 0xa8d4f0, fog: 0xb0d4ec, sun: 0xfff2dc, sunI: 3.5, hemiSky: 0x9ac6f0, hemiGround: 0xa48a5c, hemiI: 1.18 },
+  { h: 16.5, zenith: 0x2a78cc, horizon: 0xb4d6ea, fog: 0xb6d4e6, sun: 0xffe6c0, sunI: 3.3, hemiSky: 0xa0c8ec, hemiGround: 0x9c8258, hemiI: 1.15 },
   { h: 17.8, zenith: 0x4a70b2, horizon: 0xf2c690, fog: 0xe2bf98, sun: 0xffc47c, sunI: 2.7, hemiSky: 0xe8d4b8, hemiGround: 0x8a6a48, hemiI: 1.7 },
   { h: 18.6, zenith: 0x36487e, horizon: 0xf29a6a, fog: 0xc88a78, sun: 0xff9a5c, sunI: 1.8, hemiSky: 0xc0a8bc, hemiGround: 0x5e4a46, hemiI: 1.55 },
   { h: 19.4, zenith: 0x1b2554, horizon: 0x6c4a7e, fog: 0x3c3458, sun: 0xa9b8e6, sunI: 0.65, hemiSky: 0x7078a8, hemiGround: 0x2e2a36, hemiI: 1.3 },
