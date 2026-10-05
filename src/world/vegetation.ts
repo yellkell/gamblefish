@@ -33,7 +33,7 @@ import {
   Quaternion,
   Vector3,
   type Camera,
-  type CanvasTexture,
+  type Texture,
   type Material,
 } from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
@@ -419,7 +419,7 @@ export class Vegetation {
   private readonly treeNearMesh: InstancedMesh;
   private readonly trees: Plants;
   private readonly treeNearR = 70;
-  readonly atlas: CanvasTexture;
+  readonly atlas: Texture;
   /** the baked grass mask (2 channels at 2 m) for world/grass.ts */
   readonly grassMask: Uint8Array | null;
   readonly grassRes: number;

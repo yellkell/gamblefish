@@ -177,6 +177,9 @@ export function installHarness(world: World): void {
     const ctx = c.getContext('2d')!;
     const img = ctx.createImageData(w, h);
     for (let y = 0; y < h; y++) img.data.set(px.subarray((h - 1 - y) * w * 4, (h - y) * w * 4), y * w * 4);
+    // opaque, as the headset shows it: alpha-to-coverage leaves fractional alpha on cut-out edges
+    // (grass, leaves), which read as black specks once the image is flattened
+    for (let i = 3; i < img.data.length; i += 4) img.data[i] = 255;
     ctx.putImageData(img, 0, 0);
     let el = document.getElementById('harness-snap') as HTMLImageElement | null;
     if (!el) {
