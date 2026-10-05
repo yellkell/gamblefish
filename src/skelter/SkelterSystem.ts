@@ -28,7 +28,7 @@ import { createSystem } from '@iwsdk/core';
 import { AdditiveBlending, ConeGeometry, CylinderGeometry, DoubleSide, Group, InstancedMesh, Matrix4, Mesh, MeshBasicMaterial, MeshLambertMaterial, RingGeometry, TorusGeometry, Vector3, type Material } from 'three';
 import { logThunk, plankLay, uiDeny, winFanfare } from '../audio/sfx.ts';
 import { musicView } from '../audio/music.ts';
-import { skelterAudio } from '../audio/skelter.ts';
+import { COUNT_STEP, skelterAudio } from '../audio/skelter.ts';
 import { Celebration } from '../casino/celebrate.ts';
 import { introActive } from '../experience/introGate.ts';
 import { Toast } from '../fishing/hud.ts';
@@ -149,6 +149,10 @@ export class SkelterSystem extends createSystem({}) {
   private hudPaintT = 0;
   private bannerTimer = 0;
   private beepAt = 0;
+  /** the balcony's launch, on the song's clock (its drop): NaN while the song's starting, null when
+   * the count runs on its own (a landing, or no song) */
+  private dropAt: number | null = null;
+  private rideNo = 0;
   private winWait = 0;
   private musicTimer: number | null = null;
   private readonly head = new Vector3();
@@ -181,6 +185,10 @@ export class SkelterSystem extends createSystem({}) {
     const gate = this.gateSpot();
     skelterView.gate = { at: gate, face: [SKELTER.x, SKELTER.z] };
     skelterView.system = this;
+    // Brain Eater's outro done at the bottom: the island's songs come back in
+    skelterAudio.onEnd = () => {
+      if (game.phase === 'WIN') musicView.away = false;
+    };
     this.sign.draw();
     this.state.onChange(() => this.sign.draw(), { logs: true });
     on('slide-complete', () => this.onTierComplete());
@@ -456,6 +464,7 @@ export class SkelterSystem extends createSystem({}) {
     skelterDeps.blink?.();
     this.clearTimer();
     skelterView.onTower = true;
+    this.dropAt = null;
     musicView.away = true;
     skelterAudio.load();
     // (back up after a win, the descent's song is still going)
@@ -483,6 +492,7 @@ export class SkelterSystem extends createSystem({}) {
       teleportPlayer(this.player, x, z, Math.atan2(-(SKELTER.x - x), -(SKELTER.z - z)), skelterDeps.ground!(x, z));
     }
     this.clearTimer();
+    this.dropAt = null;
     resetGameState();
     emit('game-reset');
     game.phase = 'OFF';
@@ -761,7 +771,19 @@ export class SkelterSystem extends createSystem({}) {
     this.hudTick = 0;
     this.setHud(true);
     emit('game-start');
-    this.enterLanding(LANDING_HOLD + 0.8);
+    this.enterLanding(8 * COUNT_STEP);
+    // Brain Eater in from its top, DOWN's count on its beats, the launch on its drop
+    this.dropAt = NaN;
+    this.beepAt = 0;
+    const ride = ++this.rideNo;
+    void skelterAudio.drop().then((at) => {
+      if (ride !== this.rideNo || game.phase !== 'LANDING' || this.dropAt === null) return;
+      this.dropAt = at;
+      if (at !== null) return;
+      // no song: the count runs on its own
+      game.holdRemaining = LANDING_HOLD + 0.8;
+      this.beepAt = 3;
+    });
   }
 
   /** Standing on a landing (or the balcony): a beat, no motion, DOWN's voiced 3-2-1, then the next tier. */
@@ -776,8 +798,8 @@ export class SkelterSystem extends createSystem({}) {
   private enterSlide(): void {
     game.phase = 'SLIDE';
     game.timeInPhase = 0;
+    this.dropAt = null;
     this.slide.begin(game.tier - 1);
-    skelterAudio.go();
     this.showBanner(game.tier >= TOTAL_TIERS ? 'FINAL DROP' : 'GO!', 1.4);
   }
 
@@ -917,15 +939,17 @@ export class SkelterSystem extends createSystem({}) {
     }
 
     if (game.phase === 'LANDING') {
-      game.holdRemaining -= dt;
+      // (the balcony's hold is the song's, to its drop: the number ticks with DOWN's count, every
+      // two beats, and waits while the song's starting)
+      const onSong = this.dropAt !== null;
+      if (!onSong) game.holdRemaining -= dt;
+      else if (!Number.isNaN(this.dropAt)) game.holdRemaining = this.dropAt! - skelterAudio.now();
       const remaining = Math.max(0, game.holdRemaining);
-      this.hudSet('big', Math.ceil(remaining).toFixed(0));
+      this.hudSet('big', Math.ceil(remaining / (onSong ? COUNT_STEP : 1)).toFixed(0));
       this.hudSet('unit', ' ');
       this.hudSet('status', game.tier === 1 ? 'FACE DOWNHILL' : 'CATCH YOUR BREATH');
       if (remaining <= this.beepAt && this.beepAt > 0) {
-        // DOWN's voiced count: THREE... TWO... ONE... then the launch (the music stops for it,
-        // and picks up where it left off at the launch)
-        if (this.beepAt === 3) skelterAudio.hush();
+        // DOWN's voiced count: THREE... TWO... ONE... then the launch (the song plays on through it)
         skelterAudio.play(this.beepAt === 3 ? 'three' : this.beepAt === 2 ? 'two' : 'one', 0.9);
         this.beepAt -= 1;
       }
