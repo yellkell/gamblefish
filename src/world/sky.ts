@@ -87,8 +87,8 @@ function readAlways(): boolean {
 }
 
 /** sunrise, sunset (h) and how high the sun climbs; the moon's arc is the same, half a day on */
-const SUNRISE = 6;
-const SUNSET = 18.5;
+export const SUNRISE = 6;
+export const SUNSET = 18.5;
 const SUN_TOP = (50 * Math.PI) / 180;
 const MOON_TOP = (42 * Math.PI) / 180;
 const MOON_LAG = 13.2;

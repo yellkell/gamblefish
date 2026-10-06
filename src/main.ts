@@ -426,8 +426,19 @@ World.create(container, {
     ];
     [-1.5, 0, 1.5].forEach((x, k) => tables.push(new SlotMachine(reels, game, world, { bets: [1, 5, 25], at: [x, z, 0], ...looks[k] })));
   }
-  // the music (ff2's jukebox songs outside, the casinos' own inside) and the sea's sound
-  const music = new Music(interiors.filter((i) => i.role.role === 'casino'));
+  // the music (the day's songs, the night's, the pier's at night; the casinos' own inside) and
+  // the sea's sound
+  const PIER_FLOORS = new Set(['pierDeck', 'pierStep', 'walkDeck']);
+  const music = new Music(
+    interiors.filter((i) => i.role.role === 'casino'),
+    {
+      hour: () => sky.state.hour,
+      onPier: () => {
+        const p = world.player.position;
+        return PIER_FLOORS.has(surfaces.areaNear(p.x, p.z, p.y).tag);
+      },
+    },
+  );
   const shore = new ShoreSound(heightfield, json.layout.pier, () => interiorAt(interiors, world.player.position.x, world.player.position.z) !== null, () => sky.state.night.value);
   // now and then a hawk, circling up a thermal near you
   const hawks = new Hawks(heightfield, sky.state);
