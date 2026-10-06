@@ -14,13 +14,12 @@
  *    line in the water or not.
  * Each is dealt a new order every day (and every night): the songs you didn't hear last time
  * first, then the rest, shuffled, never the same song twice running. The very first day of a
- * session opens on Tell Me Something.
+ * session opens on Poo Song.
  *
  * Seamless: one song runs into the next, the next coming in under the last seconds of this one
  * as it fades. When night falls or day breaks, or you step on or off the pier after dark, the
- * playlist changes: if this song is nearly over it's played out and the new one comes in under
- * its end; otherwise they cross-fade there and then. Off the pier and back on, the pier's song
- * picks up where it left off.
+ * song on plays out, and the new playlist comes in under its end (step back before it's over
+ * and its own playlist just carries on).
  *
  * The next song decodes in the background while this one plays (a little after it starts), so
  * nothing decodes at a change. (Decoding at the change, then folding and measuring ~6 M samples
@@ -62,11 +61,11 @@ const PLAYLISTS = {
     '16-new-song-98.mp3',
     '17-morning.mp3',
   ],
-  night: ['19-harmony.m4a', '20-neighborhood.mp3', '09-imagine.m4a'],
-  pier: ['18-night-catch.mp3', '10-novus.mp3', '05-new-song-35.mp3'],
+  night: ['10-novus.mp3', '20-neighborhood.mp3', '09-imagine.m4a'],
+  pier: ['18-night-catch.mp3', '19-harmony.m4a', '05-new-song-35.mp3'],
 };
 /** the first day of a session opens on this */
-const OPENER = '11-tell-me-something.mp3';
+const OPENER = '02-poo-song.mp3';
 
 const songUrls = (names: string[]): string[] => names.map((n) => SONGS[`./songs/${n}`]).filter((u): u is string => !!u);
 const CASINO = Object.keys(CASINO_SONGS)
@@ -100,19 +99,11 @@ const LEAD = 2.5;
 const RISE = 1.2;
 /** how far ahead of a change it's put on the audio clock */
 const AHEAD = 0.25;
-/**
- * Playlist into playlist. Nightfall and daybreak: a song with up to a minute left plays out,
- * else an 8 s cross-fade. On or off the pier at night: up to 12 s left plays out, else 4 s.
- */
-const DAYNIGHT = { grace: 60, fade: 8 };
-const PIERSIDE = { grace: 12, fade: 4 };
 /** how long you're on the pier (or off it) before the music believes it (s) */
 const ON_PIER = 1.5;
 const OFF_PIER = 3;
 /** how long before sunset (or sunrise) the next playlist's first song decodes (island hours) */
 const READY_AHEAD = 0.5;
-/** a paused song with less than this left starts over with the next one instead */
-const NOT_WORTH = 20;
 
 const MUTE_KEY = 'gamblefish.music.muted';
 
@@ -282,7 +273,8 @@ interface Voice {
 
 /**
  * One playlist: a song on, the next decoding behind it, one into the next on the audio clock.
- * It can stop part-way through a song (fading out) and pick up there again.
+ * It can play its song out and hand over to another playlist, and take back a song that had
+ * only just come in (it's first next time).
  */
 class Station {
   private order: string[] = [];
@@ -371,24 +363,6 @@ class Station {
     return true;
   }
 
-  /** Fade out from audio time t over `fade` s, remembering where it got to. */
-  stop(t: number, fade: number): void {
-    const v = this.voice;
-    if (v) {
-      const offset = v.from + Math.max(0, t + fade / 2 - v.start);
-      if (v.loaded.tail - offset > NOT_WORTH) this.held = { loaded: v.loaded, offset };
-      else this.advance();
-      this.fadeOut(v, t, fade);
-      this.outs.push(v);
-    }
-    // one already going out goes with it
-    for (const o of this.outs) if (o !== v && o.end > t) this.fadeOut(o, t, Math.min(fade, o.end - t));
-    this.voice = null;
-    this.next = null;
-    this.live = false;
-    this.last = null;
-  }
-
   /** Let go of the decoded songs it's holding (it won't be back until it's dealt again). */
   forget(): void {
     this.ready = this.next = this.held = null;
@@ -411,11 +385,6 @@ class Station {
     this.live = false;
     this.last = null;
     return Math.max(t + 0.05, v.start);
-  }
-
-  /** a song decoded, ready to start at once */
-  get loaded(): boolean {
-    return !!(this.held || this.ready);
   }
 
   /** seconds of music left in the song on */
@@ -554,8 +523,7 @@ export class Music {
   private casino: Station | null = null;
   /** the playlist on (null while the first song is loading) */
   mood: Mood | null = null;
-  /** a change under way: waiting on its first song to decode, or on this song to play out */
-  private switching: Mood | null = null;
+  /** a change under way: this song playing out, then over to this playlist */
   private handing: Mood | null = null;
   /** counts sunrises and sunsets: a playlist dealt for an older one is dealt again */
   private period = 0;
@@ -684,7 +652,7 @@ export class Music {
     return this.dark ? (this.pier ? 'pier' : 'night') : 'day';
   }
 
-  /** a playlist dealt for this day or night (the session's first day opens on Tell Me Something) */
+  /** a playlist dealt for this day or night (the session's first day opens on Poo Song) */
   private fresh(mood: Mood, period = this.period): Station {
     const s = this.stations![mood];
     if (s.period !== period) {
@@ -718,13 +686,13 @@ export class Music {
     if (want === this.mood) {
       // nothing due (or not any more): carry on
       if (this.handing) from.last = null;
-      this.handing = this.switching = null;
+      this.handing = null;
       return;
     }
-    if (want === this.handing || want === this.switching) return;
-    // changed its mind mid-change: this song carries on until the new one's ready
+    if (want === this.handing) return;
+    // changed its mind mid-change: this song plays out into the newer choice
     if (this.handing) from.last = null;
-    this.handing = this.switching = null;
+    this.handing = null;
     this.change(want);
   }
 
@@ -734,16 +702,16 @@ export class Music {
     return (((this.dark ? SUNRISE : SUNSET) - h) % 24 + 24) % 24;
   }
 
-  /** Over to another playlist: played out, or cross-faded now (see the top of the file). */
+  /** Over to another playlist, once the song on has played out (see the top of the file). */
   private change(want: Mood): void {
     const ctx = audioContext()!;
     const t = ctx.currentTime;
     const from = this.stations![this.mood!];
     const to = this.fresh(want);
-    const how = (this.mood === 'day') !== (want === 'day') ? DAYNIGHT : PIERSIDE;
+    const daybreak = (this.mood === 'day') !== (want === 'day');
     // the new playlist comes in at `at` (or as soon after as its song's decoded)
     const over = (at: number): void => {
-      if (how === DAYNIGHT) from.forget();
+      if (daybreak) from.forget();
       this.handing = null;
       this.mood = want;
       void to.prepare().then((ok) => {
@@ -751,31 +719,14 @@ export class Music {
         this.prepareOther();
       });
     };
+    void to.prepare();
     if (!from.live) return over(t);
     // its next song only just coming in: that one's taken back, and the new playlist comes in instead
     const back = from.retract(t);
     if (back !== null) return over(back);
-    // nearly over: played out, the new playlist coming in under its end
-    if (from.remaining(t) <= how.grace) {
-      this.handing = want;
-      from.last = over;
-      return;
-    }
-    // else a cross-fade, as soon as the new song's decoded
-    if (!to.loaded) {
-      this.switching = want;
-      void to.prepare().then((ok) => {
-        if (this.switching !== want) return;
-        this.switching = null;
-        if (ok) this.change(want);
-      });
-      return;
-    }
-    from.stop(t, how.fade);
-    if (how === DAYNIGHT) from.forget();
-    to.start(t + 0.05, how.fade * 0.75);
-    this.mood = want;
-    this.prepareOther();
+    // played out, the new playlist coming in under its end
+    this.handing = want;
+    from.last = over;
   }
 
   /** at night, the other night playlist ready to come straight in (for stepping on or off the pier) */

@@ -112,12 +112,11 @@ and the vendors.
   to the foam you see running up the sand, over a distant surf roar. Water laps
   under the pier. Indoors it's all muffled.
 - **Music:** `src/audio/music.ts` plays the soundtrack board's three playlists
-  (`src/audio/songs/`): **Day** (12 songs), **Night** round the island (Harmony,
+  (`src/audio/songs/`): **Day** (12 songs), **Night** round the island (Novus,
   Neighborhood, Imagine) and **the Pier at Night**, out on the pier or its walks
-  (Night Catch, Novus, New Song 35). Every day and night deals a new order, the songs
-  not heard last time first; a session's first day opens on Tell Me Something. Songs
-  run into each other, and a change of playlist plays a nearly-finished song out or
-  cross-fades; off the pier and back, the pier's song picks up where it left off.
+  (Night Catch, Harmony, New Song 35). Every day and night deals a new order, the songs
+  not heard last time first; a session's first day opens on Poo Song. Songs run into
+  each other, and a change of playlist waits for the song on to play out.
   Inside the casinos it's Give It To Me and Fusion, round and round (`src/audio/casino/`),
   spilling muffled out of their doors as you walk up.
   The backpack's **MUSIC** button mutes it all.
