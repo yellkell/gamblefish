@@ -176,9 +176,9 @@ body { margin: 0; -webkit-font-smoothing: antialiased; }
   <header>
     <div class="eyebrow">Fish &amp; Chips · island music</div>
     <h1>Fill the three playlists</h1>
-    <p class="lede">Music plays the whole time. By day, one playlist covers everything: wandering round town and fishing. At night it splits, so night fishing gets its own sound. When night falls, day breaks, or you start or stop fishing after dark, the music fades smoothly into the next playlist. Drop a song file onto a playlist to fill its next slot. Songs play in the order shown: drag them up or down to change it. Everyone with the team link sees the same board as it changes, and you can listen back to or download anything that's in.</p>
+    <p class="lede">Music plays the whole time. By day, one playlist covers everything: wandering round town and fishing. At night it splits, so hanging out on the pier gets its own sound. Each song runs into the next. When night falls, day breaks, or you step on or off the pier after dark, the music moves into the next playlist: a song that's nearly over plays out, and anything else cross-fades. Every day and every night shuffles its playlist into a new order, starting with the songs you didn't hear last time, so the order here doesn't matter. The first day of every session opens on Tell Me Something. Drop a song file onto a playlist to fill its next slot. Everyone with the team link sees the same board as it changes, and you can listen back to or download anything that's in.</p>
     <div class="summary">
-      <div class="count" id="count"><b>0</b> of 16 songs · 0:00 of ~45:00</div>
+      <div class="count" id="count"><b>0</b> of 18 songs</div>
       <div class="ticks" id="ticks" aria-hidden="true"></div>
     </div>
     <label class="who" for="who">Your name <input id="who" maxlength="40" autocomplete="name" placeholder="So the team knows who added what"></label>
@@ -189,7 +189,7 @@ body { margin: 0; -webkit-font-smoothing: antialiased; }
 
   <section class="shelf">
     <h3>Songs already in the game</h3>
-    <p>These nine play on the island today, in one loop. Press play to hear one. Drag any of them onto a playlist, or use Add to…, and it counts toward the 16. You don't need to upload them again.</p>
+    <p>These are already in the game's files. Press play to hear one. Drag any of them onto a playlist, or use Add to…, and it counts toward the 18. You don't need to upload them again.</p>
     <ul id="shelf"></ul>
   </section>
 
@@ -212,9 +212,9 @@ body { margin: 0; -webkit-font-smoothing: antialiased; }
 
 <script type="module">
 const PLAYLISTS = [
-  { key: 'day',           time: 'Day',   act: '',          cap: 10, target: 28 * 60, night: false, wide: true, when: 'Daylight, 06:00–18:30 on the island clock, about 20 real minutes. Plays while you wander round town and while you fish.' },
-  { key: 'night-wander',  time: 'Night', act: 'Wandering & Exploring', cap: 3, target: 8 * 60,  night: true,  when: 'After dark, 18:30–06:00, about 7 real minutes, walking round town or out exploring the island.' },
-  { key: 'night-fish',    time: 'Night', act: 'Fishing',   cap: 3, target: 8 * 60,  night: true,  when: 'After dark, with a line in the water under the lamps.' },
+  { key: 'day',           time: 'Day',   act: '',          cap: 12, target: 28 * 60, night: false, wide: true, when: 'Daylight, 06:00–18:30 on the island clock, about 20 real minutes. Plays while you wander round town and while you fish, in a new order every day.' },
+  { key: 'night-wander',  time: 'Night', act: 'Around the Island', cap: 3, target: 8 * 60,  night: true,  when: 'After dark, 18:30–06:00, about 7 real minutes, anywhere off the pier: round town, out exploring, fishing from the beach.' },
+  { key: 'night-fish',    time: 'Night', act: 'On the Pier', cap: 3, target: 8 * 60,  night: true,  when: 'After dark, out on the pier or the walks off its head under the lamps, line in the water or not.' },
 ];
 const BY_KEY = Object.fromEntries(PLAYLISTS.map(p => [p.key, p]));
 const label = p => (p.act ? `${p.time} · ${p.act}` : p.time);
@@ -229,6 +229,9 @@ const GAME_SONGS = [
   { path: 'src/audio/songs/08-like-that.mp3', name: 'Like That', dur: 135 },
   { path: 'src/audio/songs/09-imagine.m4a', name: 'Imagine', dur: 273 },
   { path: 'src/audio/songs/10-novus.mp3', name: 'Novus', dur: 240 },
+  { path: 'src/audio/songs/15-disco-ball.mp3', name: 'Disco Ball', dur: 127 },
+  { path: 'src/audio/songs/16-new-song-98.mp3', name: 'New Song 98', dur: 121 },
+  { path: 'src/audio/songs/17-morning.mp3', name: 'Morning', dur: 113 },
 ];
 
 const TYPES = { mp3: 'audio/mpeg', m4a: 'audio/mp4', aac: 'audio/aac', wav: 'audio/wav', ogg: 'audio/ogg', oga: 'audio/ogg', flac: 'audio/flac', opus: 'audio/ogg' };
@@ -304,7 +307,7 @@ function render() {
 
   const filledTotal = PLAYLISTS.reduce((n, p) => n + Math.min(p.cap, inList(p.key).length), 0);
   const secs = state.songs.reduce((t, s) => t + (s.duration || 0), 0);
-  $('count').replaceChildren(el('b', { text: String(filledTotal) }), ` of 16 songs · ${fmt(secs)} of ~45:00`);
+  $('count').replaceChildren(el('b', { text: String(filledTotal) }), ` of ${PLAYLISTS.reduce((n, p) => n + p.cap, 0)} songs · ${fmt(secs)}`);
   $('ticks').replaceChildren(...PLAYLISTS.map(p => {
     const n = inList(p.key).length;
     return el('div', { class: 'tickgroup', title: label(p) }, ...Array.from({ length: p.cap }, (_, i) => el('span', { class: 'tick' + (i < n ? ' on' : '') })));

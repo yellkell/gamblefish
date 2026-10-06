@@ -111,10 +111,14 @@ and the vendors.
   same Tidewater recordings. Surf breaks and washes up the beaches around you, timed
   to the foam you see running up the sand, over a distant surf roar. Water laps
   under the pier. Indoors it's all muffled.
-- **Music:** `src/audio/music.ts` plays songs off ff2's jukebox. Outside, the
-  rotation plays: Paradise, Poo Song, Experimental Song, New Song 35, Mist,
-  By the River, Like That, Imagine, Novus (`src/audio/songs/`, in filename order).
-  Inside the casinos it's Give It To Me then Fusion, round and round (`src/audio/casino/`),
+- **Music:** `src/audio/music.ts` plays the soundtrack board's three playlists
+  (`src/audio/songs/`): **Day** (12 songs), **Night** round the island (Harmony,
+  Neighborhood, Imagine) and **the Pier at Night**, out on the pier or its walks
+  (Night Catch, Novus, New Song 35). Every day and night deals a new order, the songs
+  not heard last time first; a session's first day opens on Tell Me Something. Songs
+  run into each other, and a change of playlist plays a nearly-finished song out or
+  cross-fades; off the pier and back, the pier's song picks up where it left off.
+  Inside the casinos it's Give It To Me and Fusion, round and round (`src/audio/casino/`),
   spilling muffled out of their doors as you walk up.
   The backpack's **MUSIC** button mutes it all.
 - **The day:** `src/world/sky.ts` runs a whole day in about 40 minutes, with the
@@ -495,8 +499,8 @@ and the vendors.
 ## Soundtrack board
 
 `public/soundtrack.html` is where the music team fills the island's playlists:
-**Day** (10 songs, wandering and fishing), **Night · Wandering & Exploring** (3)
-and **Night · Fishing** (3). They drop audio files onto a playlist, listen back,
+**Day** (12 songs, wandering and fishing), **Night · Around the Island** (3)
+and **Night · On the Pier** (3). They drop audio files onto a playlist, listen back,
 download, rename and move songs, and everyone with the team link sees the same
 board live. It's one self-contained page (Firebase from gstatic), so it works
 from the deployed site or any other host.
