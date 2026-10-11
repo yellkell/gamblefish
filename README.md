@@ -115,7 +115,7 @@ and the vendors.
   (`src/audio/songs/`): **Day** (12 songs), **Night** round the island (Novus,
   Neighborhood, Imagine) and **the Pier at Night**, out on the pier or its walks
   (Night Catch, Harmony, New Song 35). Every day and night deals a new order, the songs
-  not heard last time first; a session's first day opens on Poo Song. Songs run into
+  not heard last time first; a session's first day opens on Paradise. Songs run into
   each other, and a change of playlist waits for the song on to play out.
   Inside the casinos it's Give It To Me and Fusion, round and round (`src/audio/casino/`),
   spilling muffled out of their doors as you walk up.
