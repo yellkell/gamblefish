@@ -7,7 +7,7 @@
  *  - decoded lo-fi, 24 kHz mono, so a whole song is a few MB of PCM rather than ~100;
  *  - the silent head and tail of the file skipped, so nothing opens or closes on a gap.
  *
- * Outside, three playlists (the music team's soundtrack board, public/soundtrack.html):
+ * Outside, three playlists:
  *  - DAY (sunrise to sunset), wherever you are;
  *  - NIGHT, round the island after dark;
  *  - THE PIER AT NIGHT: standing out on the pier (or the walks off its head) after dark,
@@ -43,8 +43,8 @@ const SONGS = import.meta.glob('./songs/*.{mp3,m4a}', { eager: true, query: '?ur
 const CASINO_SONGS = import.meta.glob('./casino/*.{mp3,m4a}', { eager: true, query: '?url', import: 'default' }) as Record<string, string>;
 
 /**
- * The playlists, as the soundtrack board has them (./songs; By the River is on the board's
- * shelf, not in a playlist). Their order here doesn't matter: each day deals its own.
+ * The playlists (./songs; By the River isn't in one). Their order here doesn't matter: each
+ * day deals its own.
  */
 const PLAYLISTS = {
   day: [
