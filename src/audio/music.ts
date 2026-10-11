@@ -14,7 +14,7 @@
  *    line in the water or not.
  * Each is dealt a new order every day (and every night): the songs you didn't hear last time
  * first, then the rest, shuffled, never the same song twice running. The very first day of a
- * session opens on Poo Song.
+ * session opens on Paradise.
  *
  * Seamless: one song runs into the next, the next coming in under the last seconds of this one
  * as it fades. When night falls or day breaks, or you step on or off the pier after dark, the
@@ -65,7 +65,7 @@ const PLAYLISTS = {
   pier: ['18-night-catch.mp3', '19-harmony.m4a', '05-new-song-35.mp3'],
 };
 /** the first day of a session opens on this */
-const OPENER = '02-poo-song.mp3';
+const OPENER = '01-paradise.m4a';
 
 const songUrls = (names: string[]): string[] => names.map((n) => SONGS[`./songs/${n}`]).filter((u): u is string => !!u);
 const CASINO = Object.keys(CASINO_SONGS)
@@ -652,7 +652,7 @@ export class Music {
     return this.dark ? (this.pier ? 'pier' : 'night') : 'day';
   }
 
-  /** a playlist dealt for this day or night (the session's first day opens on Poo Song) */
+  /** a playlist dealt for this day or night (the session's first day opens on Paradise) */
   private fresh(mood: Mood, period = this.period): Station {
     const s = this.stations![mood];
     if (s.period !== period) {
