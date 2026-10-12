@@ -35,7 +35,9 @@
  *  THE FISH MARKET TIP: the first time the backpack's half full you're told you can sell your fish
  *  at the fish market to empty it, and the field guide opens at its chart (or does the next time
  *  you open the backpack, if it was shut); the chart's fish market, and the FIELD GUIDE tab, glow and
- *  pulse till you've sold a fish or gone there off the chart (backpack/marketTip.ts).
+ *  pulse till you've sold a fish or gone there off the chart (backpack/marketTip.ts). Ignore it,
+ *  and the first time the backpack fills past 70% the view fades gently to black and you're
+ *  taken there, the backpack shut behind you.
  *
  * The rules (shapes, fitting, merging, value) are backpack/logic.ts; the pieces live on the
  * save's own fish entries, so layout and tiers persist and the market sells at tier value.
@@ -74,10 +76,10 @@ import { font } from '../ui/fonts.ts';
 import { INK, Panel, roundRect } from '../ui/panel.ts';
 import { bounds, cellsOf, fill, findSpot, fits, GRID_SIZES, merge, MERGE_BONUS, mergePartners, rotate, shapeFor, TIERS, type Piece, type Rot } from './logic.ts';
 import { beat, FieldGuide, glowFrame } from './fieldGuide.ts';
-import { TIP_FILL } from './marketTip.ts';
+import { HAUL_FILL, TIP_FILL } from './marketTip.ts';
 import { Toast } from '../fishing/hud.ts';
 import { Stash } from './stash.ts';
-import type { ChartSource, Place } from './chart.ts';
+import { KEY, placeAt, type ChartSource, type Place } from './chart.ts';
 import { CELL, Tray } from './tray.ts';
 import { introActive } from '../experience/introGate.ts';
 
@@ -96,8 +98,11 @@ export const backpackDeps: {
   chart: ChartSource | null;
   where: (() => { x: number; z: number }) | null;
   walks: (() => Record<string, number>) | null;
-  /** go to a place on the chart; false if you can't just now (a fish on the line) */
-  travel: ((p: Place) => boolean) | null;
+  /**
+   * go to a place on the chart; false if you can't just now (a fish on the line). With `arrived`,
+   * you're taken there in a gentle fade, and it's called once you're there (the view still dark).
+   */
+  travel: ((p: Place, arrived?: () => void) => boolean) | null;
   /** where you stand to get on the helter skelter, and what you face (the chart's marker for it) */
   skelter?: (() => { at: [number, number]; face: [number, number] } | null) | null;
   /** the backpack stays shut (up the helter skelter) */
@@ -722,10 +727,14 @@ export class BackpackSystem extends createSystem({}) {
    */
   private marketTip(time: number): void {
     const st = this.state;
-    if (st.marketTip === 'waiting' && !this.anims.some((a) => a.kind === 'drop' || a.kind === 'fuse')) {
+    if (st.marketTip !== 'done' && !this.anims.some((a) => a.kind === 'drop' || a.kind === 'fuse')) {
       const [C, R] = this.grid;
       const { used, total } = fill(this.pieces, C, R);
-      if (used >= total * TIP_FILL) {
+      // (told, then a fish takes it past 70%: not a save that was that full already)
+      const before = this.lastUsed;
+      this.lastUsed = used;
+      if (st.marketTip === 'beckoning' && before >= 0 && before < total * HAUL_FILL && used >= total * HAUL_FILL) this.haulDue = true;
+      if (st.marketTip === 'waiting' && used >= total * TIP_FILL) {
         st.marketTip = 'beckoning';
         st.save();
         this.toast.show('Backpack half full! Sell at the fish market', 7, INK.amber);
@@ -738,6 +747,7 @@ export class BackpackSystem extends createSystem({}) {
         } else this.chartNext = true;
       }
     }
+    if (this.haulDue && st.marketTip === 'beckoning') this.haul();
     const on = st.marketTip === 'beckoning' && backpackView.open && this.tab === 'pack';
     this.tabGlow.visible = on;
     if (on) {
@@ -745,6 +755,40 @@ export class BackpackSystem extends createSystem({}) {
       this.tabGlow.material.opacity = 0.35 + 0.65 * k;
       this.tabGlow.scale.setScalar(1 + 0.05 * k);
     }
+  }
+
+  /** fish in the backpack (cells) last frame, -1 till it's been counted; and a haul to the fish market waiting to go */
+  private lastUsed = -1;
+  private haulDue = false;
+
+  /**
+   * Told of the fish market and the backpack's past 70%: you're taken there, in a gentle fade (or,
+   * if you're there already, just told). Not up the helter skelter, nor with a fish on the line:
+   * it waits till you can go.
+   */
+  private haul(): void {
+    const st = this.state;
+    const market = KEY.find((p) => p.building === 'stall')!;
+    const done = (): void => {
+      this.haulDue = false;
+      st.marketTip = 'done';
+      st.save();
+    };
+    const at = backpackDeps.chart ? placeAt(market, backpackDeps.chart.buildings) : null;
+    const me = backpackDeps.where?.();
+    if (at && me && Math.hypot(at[0] - me.x, at[1] - me.z) < 10) {
+      done();
+      this.toast.show('Backpack 70% full! Sell your fish here', 7, INK.amber);
+      return;
+    }
+    if (backpackDeps.blocked?.()) return;
+    const going = backpackDeps.travel?.(market, () => {
+      this.close();
+      this.toast.show('Backpack 70% full! Here’s the fish market', 7, INK.amber);
+    });
+    if (!going) return;
+    done();
+    this.buzz(this.held?.hand ?? 'right', 0.3, 60);
   }
 
   /** Where's the fish hand relative to the tray: over it (and which slot), or away. */

@@ -287,16 +287,25 @@ World.create(container, {
   backpackDeps.skelter = () => skelterView.gate;
   // no backpack up the helter skelter
   backpackDeps.blocked = () => skelterView.onTower;
-  // the chart's places: point at one in the field guide and you're there
-  backpackDeps.travel = (p) => {
+  // the chart's places: point at one in the field guide and you're there (or, taken there, a
+  // gentle fade: dark, moved, `arrived`, and back up)
+  backpackDeps.travel = (p, arrived) => {
     const st = fishingView.state?.();
-    const spot = st === 'fighting' || st === 'landing' ? null : spotFor(p);
+    const spot = st === 'fighting' || st === 'landing' || blink.fading ? null : spotFor(p);
     if (!spot || !teleportView.travel) {
-      uiDeny();
+      if (!arrived) uiDeny();
       return false;
     }
-    blink.fire();
-    teleportView.travel(spot.x, spot.z, Math.atan2(-(spot.face[0] - spot.x), -(spot.face[1] - spot.z)), spot.y);
+    const go = (): void => teleportView.travel!(spot.x, spot.z, Math.atan2(-(spot.face[0] - spot.x), -(spot.face[1] - spot.z)), spot.y);
+    if (arrived)
+      blink.fade(() => {
+        go();
+        arrived();
+      });
+    else {
+      blink.fire();
+      go();
+    }
     return true;
   };
   /**

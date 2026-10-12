@@ -2,18 +2,25 @@
  * The fish market tip (GameState.marketTip): the first time your backpack's half full, you're
  * told you can sell your fish at the fish market to empty it, and the fish market's marker and its
  * line of the key on the field guide's chart pulse (backpack/fieldGuide.ts) until you've made a
- * sale (fishing/tidewater.ts sell) or gone there off the chart (backpack/BackpackSystem.ts).
+ * sale (fishing/tidewater.ts sell) or gone there off the chart (backpack/BackpackSystem.ts). Ignore
+ * it, and the first time the backpack fills past 70% you're taken there.
  * Plain data, so Node reads it as it is.
  *
  *   waiting    not half full yet
  *   beckoning  told: the chart's fish market pulses
- *   done       sold, or gone to the market off the chart: never again
+ *   done       sold, gone to the market off the chart, or taken there: never again
  */
 
 export type MarketTip = 'waiting' | 'beckoning' | 'done';
 
 /** how full the backpack (its cells) is when you're told */
 export const TIP_FILL = 0.5;
+
+/**
+ * Told and still not been: the first time it fills past this, you're taken to the fish market
+ * (a gentle fade: backpack/BackpackSystem.ts), and that's the end of the tip.
+ */
+export const HAUL_FILL = 0.7;
 
 /**
  * Read it back from a save. A save from before the tip has none: if it's earned money or bought
